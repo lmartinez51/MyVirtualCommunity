@@ -1,0 +1,573 @@
+import { createServer, IncomingMessage, ServerResponse, Server as NodeServer } from 'node:http';
+import { readFileSync, existsSync, statSync } from 'node:fs';
+import { resolve, extname } from 'node:path';
+import { WorldSessionController, SessionControllerOptions } from './session-controller.js';
+import { DEFAULT_SERVER_PORT, DEFAULT_SERVER_HOST } from './config.js';
+
+const STATIC_MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+};
+
+export interface WorldServerOptions {
+  controller?: WorldSessionController;
+  controllerOptions?: SessionControllerOptions;
+  port?: number;
+  host?: string;
+  silent?: boolean;
+}
+
+export interface ServerInfo {
+  port: number;
+  host: string;
+  url: string;
+}
+
+interface CommandValidator {
+  validate: (body: Record<string, unknown>) => { valid: boolean; error?: string };
+}
+
+const ALLOWED_COMMANDS: Record<string, CommandValidator> = {
+  enterBuilding: {
+    validate: (body) => {
+      if (typeof body.buildingId !== 'string' || body.buildingId.trim() === '') {
+        return { valid: false, error: 'Command "enterBuilding" requires a non-empty string "buildingId"' };
+      }
+      return { valid: true };
+    },
+  },
+  leaveBuilding: {
+    validate: () => ({ valid: true }),
+  },
+  enterRestaurant: {
+    validate: (body) => {
+      if (typeof body.restaurantId !== 'string' || body.restaurantId.trim() === '') {
+        return { valid: false, error: 'Command "enterRestaurant" requires a non-empty string "restaurantId"' };
+      }
+      return { valid: true };
+    },
+  },
+  exitRestaurant: {
+    validate: () => ({ valid: true }),
+  },
+  traverseStreet: {
+    validate: (body) => {
+      if (typeof body.targetStreetId !== 'string' || body.targetStreetId.trim() === '') {
+        return { valid: false, error: 'Command "traverseStreet" requires a non-empty string "targetStreetId"' };
+      }
+      return { valid: true };
+    },
+  },
+  purchaseOffering: {
+    validate: (body) => {
+      if (typeof body.offeringId !== 'string' || body.offeringId.trim() === '') {
+        return { valid: false, error: 'Command "purchaseOffering" requires a non-empty string "offeringId"' };
+      }
+      if (
+        body.restaurantId !== undefined &&
+        (typeof body.restaurantId !== 'string' || (body.restaurantId as string).trim() === '')
+      ) {
+        return {
+          valid: false,
+          error: 'Command "purchaseOffering" restaurantId must be a non-empty string if provided',
+        };
+      }
+      return { valid: true };
+    },
+  },
+  startCoffee: {
+    validate: (body) => {
+      const forbiddenKeys = [
+        'purchaseId',
+        'amountMinor',
+        'currency',
+        'offeringId',
+        'restaurantId',
+        'consumedAt',
+      ];
+      for (const key of forbiddenKeys) {
+        if (key in body) {
+          return {
+            valid: false,
+            error: `Command "startCoffee" forbids client-supplied economic fact "${key}"`,
+          };
+        }
+      }
+      return { valid: true };
+    },
+  },
+  greetAgent: {
+    validate: (body) => {
+      if (typeof body.targetAgentId !== 'string' || body.targetAgentId.trim() === '') {
+        return { valid: false, error: 'Command "greetAgent" requires a non-empty string "targetAgentId"' };
+      }
+      return { valid: true };
+    },
+  },
+  introduceAgent: {
+    validate: (body) => {
+      if (typeof body.targetAgentId !== 'string' || body.targetAgentId.trim() === '') {
+        return { valid: false, error: 'Command "introduceAgent" requires a non-empty string "targetAgentId"' };
+      }
+      return { valid: true };
+    },
+  },
+};
+
+const MAX_BODY_BYTES = 64 * 1024; // 64 KB limit
+
+/**
+ * Minimal authoritative HTTP server hosting the WorldSessionController (Milestone 29).
+ *
+ * Implements:
+ * - Status query (GET /api/status)
+ * - Read-only perception queries (GET /api/location, GET /api/history)
+ * - Sequential command dispatch (POST /api/commands/:commandName)
+ * - Controlled simulation step (POST /api/simulation/step)
+ * - Structured JSON responses and strict error boundaries
+ * - Zero runtime dependencies (uses native node:http)
+ */
+export class WorldHttpServer {
+  private readonly controller: WorldSessionController;
+  private readonly server: NodeServer;
+  private readonly silent: boolean;
+  private isListening: boolean = false;
+  private isStopping: boolean = false;
+  private serverInfo: ServerInfo | null = null;
+
+  constructor(options: WorldServerOptions = {}) {
+    this.silent = options.silent ?? false;
+    this.controller =
+      options.controller ?? new WorldSessionController(options.controllerOptions ?? { silent: this.silent });
+
+    this.server = createServer((req, res) => this.handleRequest(req, res));
+  }
+
+  public getController(): WorldSessionController {
+    return this.controller;
+  }
+
+  public getServerInfo(): ServerInfo | null {
+    return this.serverInfo;
+  }
+
+  /**
+   * Starts listening on the specified host and port.
+   * If port 0 is given, the OS assigns an ephemeral port.
+   */
+  public start(port: number = DEFAULT_SERVER_PORT, host: string = DEFAULT_SERVER_HOST): Promise<ServerInfo> {
+    return new Promise((resolve, reject) => {
+      if (this.isListening) {
+        return resolve(this.serverInfo!);
+      }
+
+      this.server.once('error', (err) => {
+        reject(err);
+      });
+
+      this.server.listen(port, host, () => {
+        this.isListening = true;
+        const address = this.server.address();
+        let boundPort = port;
+        if (address && typeof address === 'object') {
+          boundPort = address.port;
+        }
+
+        this.serverInfo = {
+          port: boundPort,
+          host,
+          url: `http://${host}:${boundPort}`,
+        };
+
+        if (!this.silent) {
+          console.log(`WORLD SERVER READY: listening on ${this.serverInfo.url}`);
+        }
+
+        resolve(this.serverInfo);
+      });
+    });
+  }
+
+  /**
+   * Gracefully stops the HTTP server and session controller.
+   */
+  public async stop(): Promise<void> {
+    if (this.isStopping) {
+      return;
+    }
+    this.isStopping = true;
+
+    // Shutdown session controller first to reject incoming operations
+    await this.controller.shutdown();
+
+    if (!this.isListening) {
+      return;
+    }
+
+    return new Promise((resolve) => {
+      this.server.close(() => {
+        this.isListening = false;
+        this.serverInfo = null;
+        if (!this.silent) {
+          console.log('WORLD SERVER STOPPED');
+        }
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Internal request dispatcher.
+   */
+  private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (this.isStopping) {
+      this.sendJson(res, 503, {
+        success: false,
+        committed: false,
+        error: {
+          code: 'server-shutting-down',
+          message: 'Server is currently shutting down',
+        },
+      });
+      return;
+    }
+
+    const host = req.headers.host ?? `${DEFAULT_SERVER_HOST}:${DEFAULT_SERVER_PORT}`;
+    const url = new URL(req.url ?? '/', `http://${host}`);
+    const pathname = url.pathname;
+    const method = (req.method ?? 'GET').toUpperCase();
+
+    try {
+      // 1. GET /api/status
+      if (method === 'GET' && pathname === '/api/status') {
+        const status = this.controller.getStatus();
+        this.sendJson(res, 200, {
+          success: true,
+          result: status,
+        });
+        return;
+      }
+
+      // 2. GET /api/location
+      if (method === 'GET' && pathname === '/api/location') {
+        const locationResult = this.controller.getLocationView();
+        this.sendJson(res, 200, {
+          success: locationResult.success,
+          result: locationResult,
+        });
+        return;
+      }
+
+      // 3. GET /api/history
+      if (method === 'GET' && pathname === '/api/history') {
+        const historyResult = this.controller.getHistoryView();
+        this.sendJson(res, 200, {
+          success: historyResult.success,
+          result: historyResult,
+        });
+        return;
+      }
+
+      // 4. GET /api/schedule (Read-only schedule inquiry)
+      if (method === 'GET' && (pathname === '/api/schedule' || pathname.startsWith('/api/schedule/'))) {
+        let targetAgentId = url.searchParams.get('targetAgentId');
+        if (!targetAgentId && pathname.startsWith('/api/schedule/')) {
+          targetAgentId = pathname.slice('/api/schedule/'.length);
+        }
+
+        if (!targetAgentId || targetAgentId.trim() === '') {
+          this.sendJson(res, 400, {
+            success: false,
+            error: {
+              code: 'invalid-query-input',
+              message: 'Query requires parameter "targetAgentId"',
+            },
+          });
+          return;
+        }
+
+        const scheduleResult = this.controller.getScheduleView(targetAgentId.trim());
+        this.sendJson(res, 200, {
+          success: scheduleResult.success,
+          result: scheduleResult,
+        });
+        return;
+      }
+
+      // 5. POST /api/commands/:commandName
+      if (method === 'POST' && pathname.startsWith('/api/commands/')) {
+        const commandName = pathname.slice('/api/commands/'.length);
+
+        if (!(commandName in ALLOWED_COMMANDS)) {
+          this.sendJson(res, 404, {
+            success: false,
+            committed: false,
+            error: {
+              code: 'unknown-command',
+              message: `Unknown command "${commandName}"`,
+            },
+          });
+          return;
+        }
+
+        const body = await this.readJsonBody(req);
+        if (body === null) {
+          this.sendJson(res, 400, {
+            success: false,
+            committed: false,
+            error: {
+              code: 'malformed-json',
+              message: 'Invalid JSON in request body',
+            },
+          });
+          return;
+        }
+
+        // Check for disallowed player identity override attempts
+        if ('playerId' in body || 'agentId' in body) {
+          this.sendJson(res, 400, {
+            success: false,
+            committed: false,
+            error: {
+              code: 'identity-override-forbidden',
+              message: 'Client-supplied player identity override is forbidden',
+            },
+          });
+          return;
+        }
+
+        // Validate command parameters
+        const validator = ALLOWED_COMMANDS[commandName];
+        const validation = validator.validate(body);
+        if (!validation.valid) {
+          this.sendJson(res, 400, {
+            success: false,
+            committed: false,
+            error: {
+              code: 'invalid-command-input',
+              message: validation.error ?? 'Invalid command input',
+            },
+          });
+          return;
+        }
+
+        // Dispatch command sequentially via controller
+        const dispatchResult = await this.controller.dispatchCommand(commandName, body);
+
+        if (dispatchResult.success) {
+          this.sendJson(res, 200, {
+            success: true,
+            committed: true,
+            result: dispatchResult.result,
+          });
+        } else if (dispatchResult.error?.code === 'persistence-failure') {
+          this.sendJson(res, 500, {
+            success: false,
+            committed: false,
+            error: dispatchResult.error,
+          });
+        } else if (dispatchResult.error?.code === 'server-shutting-down') {
+          this.sendJson(res, 503, {
+            success: false,
+            committed: false,
+            error: dispatchResult.error,
+          });
+        } else {
+          // Domain validation failure: HTTP 422 Unprocessable Entity
+          this.sendJson(res, 422, {
+            success: false,
+            committed: false,
+            result: dispatchResult.result,
+            error: dispatchResult.error,
+          });
+        }
+        return;
+      }
+
+      // 5. POST /api/simulation/step
+      if (method === 'POST' && pathname === '/api/simulation/step') {
+        const body = await this.readJsonBody(req);
+        if (body === null) {
+          this.sendJson(res, 400, {
+            success: false,
+            committed: false,
+            error: {
+              code: 'malformed-json',
+              message: 'Invalid JSON in request body',
+            },
+          });
+          return;
+        }
+
+        const advanceDurationMs = body.advanceDurationMs;
+        if (typeof advanceDurationMs !== 'number' || !Number.isFinite(advanceDurationMs) || advanceDurationMs < 0) {
+          this.sendJson(res, 400, {
+            success: false,
+            committed: false,
+            error: {
+              code: 'invalid-simulation-input',
+              message: 'advanceDurationMs must be a non-negative finite number',
+            },
+          });
+          return;
+        }
+
+        const simResult = await this.controller.stepSimulation(advanceDurationMs);
+        if (simResult.success) {
+          this.sendJson(res, 200, {
+            success: true,
+            committed: true,
+            result: simResult.result,
+          });
+        } else if (simResult.error?.code === 'persistence-failure') {
+          this.sendJson(res, 500, {
+            success: false,
+            committed: false,
+            error: simResult.error,
+          });
+        } else {
+          this.sendJson(res, 400, {
+            success: false,
+            committed: false,
+            error: simResult.error,
+          });
+        }
+        return;
+      }
+
+      // 6. Static asset delivery for browser client (Milestone 30)
+      if (method === 'GET' && !pathname.startsWith('/api/')) {
+        if (this.serveStaticFile(res, pathname)) {
+          return;
+        }
+      }
+
+      // Unmatched route
+      this.sendJson(res, 404, {
+        success: false,
+        error: {
+          code: 'route-not-found',
+          message: `Route not found: ${method} ${pathname}`,
+        },
+      });
+    } catch (err) {
+      this.sendJson(res, 500, {
+        success: false,
+        error: {
+          code: 'internal-server-error',
+          message: 'An unexpected internal error occurred',
+        },
+      });
+    }
+  }
+
+  /**
+   * Helper to parse JSON request body with size limit.
+   */
+  private readJsonBody(req: IncomingMessage): Promise<Record<string, unknown> | null> {
+    return new Promise((resolve) => {
+      let data = '';
+      let bytes = 0;
+      let aborted = false;
+
+      req.on('data', (chunk: Buffer) => {
+        if (aborted) return;
+        bytes += chunk.length;
+        if (bytes > MAX_BODY_BYTES) {
+          aborted = true;
+          resolve(null);
+          return;
+        }
+        data += chunk.toString('utf-8');
+      });
+
+      req.on('end', () => {
+        if (aborted) return;
+        if (data.trim() === '') {
+          resolve({});
+          return;
+        }
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            resolve(parsed as Record<string, unknown>);
+          } else {
+            resolve(null);
+          }
+        } catch {
+          resolve(null);
+        }
+      });
+
+      req.on('error', () => {
+        resolve(null);
+      });
+    });
+  }
+
+  /**
+   * Helper to send JSON responses with consistent headers.
+   */
+  private sendJson(res: ServerResponse, statusCode: number, payload: unknown): void {
+    const json = JSON.stringify(payload);
+    res.writeHead(statusCode, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Content-Length': Buffer.byteLength(json),
+    });
+    res.end(json);
+  }
+
+  /**
+   * Serves static client assets (HTML, CSS, JS) from dist/client or src/client.
+   */
+  private serveStaticFile(res: ServerResponse, pathname: string): boolean {
+    let relativePath = pathname === '/' ? 'index.html' : pathname;
+    if (relativePath.startsWith('/client/')) {
+      relativePath = relativePath.slice('/client/'.length);
+    } else if (relativePath.startsWith('/')) {
+      relativePath = relativePath.slice(1);
+    }
+
+    const baseDir = resolve(process.cwd(), 'dist', 'client');
+    const fullPath = resolve(baseDir, relativePath);
+
+    // Path traversal check
+    if (!fullPath.startsWith(baseDir)) {
+      return false;
+    }
+
+    if (existsSync(fullPath) && statSync(fullPath).isFile()) {
+      const ext = extname(fullPath).toLowerCase();
+      const contentType = STATIC_MIME_TYPES[ext];
+      if (!contentType) {
+        return false;
+      }
+      const content = readFileSync(fullPath);
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Length': Buffer.byteLength(content),
+        'Cache-Control': 'no-cache',
+      });
+      res.end(content);
+      return true;
+    }
+
+    return false;
+  }
+}
+
+/**
+ * Factory helper to create and configure a WorldHttpServer.
+ */
+export function createWorldServer(options: WorldServerOptions = {}): WorldHttpServer {
+  return new WorldHttpServer(options);
+}

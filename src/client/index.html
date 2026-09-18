@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyVirtualCommunity — World Presentation Shell</title>
+  <link rel="stylesheet" href="/client/style.css">
+</head>
+<body>
+  <div id="app-container">
+    <header id="app-header">
+      <div class="brand">
+        <h1>MyVirtualCommunity</h1>
+        <span class="subtitle">Ciudad Juárez &amp; El Paso — World Presentation Shell</span>
+      </div>
+      <div id="hud-status" class="status-badge status-connecting">CONNECTING</div>
+    </header>
+
+    <div id="hud-bar">
+      <div class="hud-item">
+        <span class="hud-label">WORLD TIME (UTC)</span>
+        <span id="hud-time" class="hud-value">---</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">CURRENT LOCATION</span>
+        <span id="hud-location" class="hud-value">---</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">CONTEXT</span>
+        <span id="hud-context" class="context-badge">---</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">PLAYER</span>
+        <span id="hud-player" class="hud-value">---</span>
+      </div>
+    </div>
+
+    <div id="notification-message" class="banner hidden"></div>
+    <div id="feedback-message" class="banner hidden"></div>
+
+    <main id="viewport">
+      <div id="canvas-container">
+        <canvas id="world-canvas" width="800" height="420"></canvas>
+      </div>
+    </main>
+
+    <!-- Perception and Inspection Panels (Milestone 32) -->
+    <div id="perception-layout">
+      <section id="perception-panel" class="info-card">
+        <div class="panel-header">
+          <h2>World Perception</h2>
+          <span class="panel-hint">Authoritative local projection</span>
+        </div>
+        <div class="perception-sections">
+          <div class="perception-block">
+            <span class="perception-label">WHERE AM I?</span>
+            <div id="perception-location" class="perception-content">---</div>
+          </div>
+          <div class="perception-block">
+            <span class="perception-label">WHAT IS HERE?</span>
+            <div id="perception-entities" class="perception-chips">None</div>
+          </div>
+          <div class="perception-block">
+            <span class="perception-label">WHO IS HERE?</span>
+            <div id="perception-agents" class="perception-chips">None</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="inspection-panel" class="info-card">
+        <div class="panel-header">
+          <h2>Entity Inspection</h2>
+          <button id="inspection-close-btn" class="close-btn" title="Close inspection">&times;</button>
+        </div>
+        <div id="inspection-content" class="inspection-body">
+          <p class="inspection-empty">Select any observable entity or avatar to inspect its authoritative facts.</p>
+        </div>
+      </section>
+    </div>
+
+    <section id="action-panel">
+      <div class="panel-header">
+        <h2>Contextual Affordances</h2>
+        <span class="panel-hint">Grouped presentation of available authoritative commands</span>
+      </div>
+      <div id="action-buttons" class="action-grid"></div>
+    </section>
+
+    <footer id="app-footer">
+      <p>Authoritative Node.js World Core &bull; Schema Version 11 &bull; Browser is strictly a non-authoritative presentation client.</p>
+    </footer>
+  </div>
+
+  <script type="module" src="/client/index.js"></script>
+</body>
+</html>
