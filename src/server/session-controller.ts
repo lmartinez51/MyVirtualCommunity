@@ -14,6 +14,7 @@ import {
   traverseToStreet,
   purchaseOffering,
   startHavingCoffee,
+  startEatingPastry,
   greetAgent,
   introduceToAgent,
   inquireAgentSchedule,
@@ -407,6 +408,10 @@ export class WorldSessionController {
 
       case 'startCoffee': {
         return startHavingCoffee(candidateState, this.activePlayerId);
+      }
+
+      case 'startEatingPastry': {
+        return startEatingPastry(candidateState, this.activePlayerId);
       }
 
       case 'greetAgent': {

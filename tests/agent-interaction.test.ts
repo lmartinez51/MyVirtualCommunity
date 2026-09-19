@@ -295,7 +295,7 @@ describe('Milestone 11: First Agent-to-Agent Interaction (greetAgent)', () => {
         const loadedState = persistence.load();
         assert.ok(loadedState !== null);
         assert.doesNotThrow(() => validateWorldState(loadedState));
-        assert.equal(loadedState.version, 12);
+        assert.equal(loadedState.version, 13);
 
         const loadedPlayer = loadedState.agents.find((a) => a.id === 'agent:dev-player')!;
         const loadedNpc = loadedState.agents.find((a) => a.id === 'agent:dev-npc')!;

@@ -27,7 +27,7 @@ describe('bootstrapWorld', () => {
     assert.equal(result.ready, true);
     assert.equal(result.isNewWorld, true);
     assert.equal(result.state.worldId, 'juarez-el-paso');
-    assert.equal(result.state.version, 12);
+    assert.equal(result.state.version, 13);
     assert.equal(result.clock.getTime(), result.state.worldTime);
     assert.equal(result.state.places.length, 8);
     assert.equal(result.state.restaurants.length, 1);
@@ -48,7 +48,7 @@ describe('bootstrapWorld', () => {
     assert.equal(result.state.offerings.length, 1);
     assert.equal(result.state.offerings[0].id, 'offering:development-coffee');
     assert.equal(result.state.purchases.length, 0);
-    assert.equal(result.state.coffeeCompletions.length, 0);
+    assert.equal(result.state.activityCompletions.length, 0);
     assert.equal(result.state.acquaintances.length, 0);
     assert.equal(result.state.items.length, 0);
 
@@ -65,14 +65,14 @@ describe('bootstrapWorld', () => {
     const persistence = new LocalFilePersistence(testFilePath);
     persistence.save({
       worldId: 'juarez-el-paso',
-      version: 12,
+      version: 13,
       worldTime: fixedTime,
       places: seed.places,
       restaurants: seed.restaurants,
       agents: seed.agents,
       offerings: seed.offerings,
       purchases: [],
-      coffeeCompletions: [],
+      activityCompletions: [],
       acquaintances: [],
       items: [],
     });
@@ -83,7 +83,7 @@ describe('bootstrapWorld', () => {
     assert.equal(result.status, 'READY');
     assert.equal(result.ready, true);
     assert.equal(result.isNewWorld, false);
-    assert.equal(result.state.version, 12);
+    assert.equal(result.state.version, 13);
     assert.equal(result.state.worldTime, fixedTime);
     assert.equal(result.clock.getTime(), fixedTime);
     assert.deepEqual(result.state.places, seed.places);
@@ -91,7 +91,7 @@ describe('bootstrapWorld', () => {
     assert.deepEqual(result.state.agents, seed.agents);
     assert.deepEqual(result.state.offerings, seed.offerings);
     assert.deepEqual(result.state.purchases, []);
-    assert.deepEqual(result.state.coffeeCompletions, []);
+    assert.deepEqual(result.state.activityCompletions, []);
     assert.deepEqual(result.state.acquaintances, []);
     assert.deepEqual(result.state.items, []);
   });
@@ -109,7 +109,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 1\. Expected version 12/
+      /Unsupported WorldState version: 1\. Expected version 13/
     );
   });
 
@@ -140,7 +140,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 2\. Expected version 12/
+      /Unsupported WorldState version: 2\. Expected version 13/
     );
   });
 
@@ -173,7 +173,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 3\. Expected version 12/
+      /Unsupported WorldState version: 3\. Expected version 13/
     );
   });
 
@@ -199,7 +199,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 4\. Expected version 12/
+      /Unsupported WorldState version: 4\. Expected version 13/
     );
   });
 
@@ -220,7 +220,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 5\. Expected version 12/
+      /Unsupported WorldState version: 5\. Expected version 13/
     );
   });
 
@@ -242,7 +242,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 6\. Expected version 12/
+      /Unsupported WorldState version: 6\. Expected version 13/
     );
   });
 
@@ -264,7 +264,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 7\. Expected version 12/
+      /Unsupported WorldState version: 7\. Expected version 13/
     );
   });
 
@@ -286,7 +286,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 8\. Expected version 12/
+      /Unsupported WorldState version: 8\. Expected version 13/
     );
   });
 
@@ -309,7 +309,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 9\. Expected version 12/
+      /Unsupported WorldState version: 9\. Expected version 13/
     );
   });
 
@@ -333,7 +333,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 10\. Expected version 12/
+      /Unsupported WorldState version: 10\. Expected version 13/
     );
   });
 });

@@ -421,7 +421,7 @@ describe('Purchase Offering Interaction (Milestone 8)', () => {
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
 
-        assert.equal(stateB.version, 12);
+        assert.equal(stateB.version, 13);
         const playerB = stateB.agents.find((a) => a.id === 'agent:dev-player')!;
         const restaurantB = stateB.restaurants.find(
           (r) => r.id === 'restaurant:development-restaurant'

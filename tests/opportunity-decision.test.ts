@@ -284,8 +284,8 @@ describe('Milestone 24: First Opportunity-Driven Player Decision', () => {
         const restoredState = await persistence.load();
         assert.ok(restoredState);
 
-        // Scenario 19: Verify schema remains v10
-        assert.equal(restoredState.version, 12);
+        // Scenario 19: Verify schema remains v13
+        assert.equal(restoredState.version, 13);
         assert.doesNotThrow(() => validateWorldState(restoredState));
 
         // Scenario 17: Verify persistence preserves purchase records and balances

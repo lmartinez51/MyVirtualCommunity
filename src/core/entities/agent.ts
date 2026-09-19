@@ -10,11 +10,18 @@ export type ActivityState = 'idle' | 'active';
  * NOTE: This represents the concrete player activity lifecycle without expanding
  * the general/NPC activityState or creating a generic Activity framework.
  */
+export type ConsumableActivityType =
+  | 'having-coffee'
+  | 'eating-pastry';
+
 export interface PlayerActivityState {
-  activity: 'having-coffee';
+  activity: ConsumableActivityType;
   startedAt: string;
   completedAt: string | null;
+  durationMs: number;
   restaurantId: string;
+  offeringId: string;
+  itemId: string | null;
 }
 
 /**
@@ -142,9 +149,9 @@ export function validateAgents(
 
       const pa = agent.playerActivity as Record<string, unknown>;
 
-      if (pa.activity !== 'having-coffee') {
+      if (pa.activity !== 'having-coffee' && pa.activity !== 'eating-pastry') {
         throw new Error(
-          `Invalid playerActivity activity: "${pa.activity}" for agent "${agent.id}". Expected 'having-coffee'.`
+          `Invalid playerActivity activity: "${pa.activity}" for agent "${agent.id}". Expected 'having-coffee' or 'eating-pastry'.`
         );
       }
 
@@ -160,6 +167,27 @@ export function validateAgents(
         );
       }
 
+      if (
+        pa.durationMs !== undefined &&
+        (typeof pa.durationMs !== 'number' || !Number.isInteger(pa.durationMs) || pa.durationMs <= 0)
+      ) {
+        throw new Error(
+          `Invalid playerActivity durationMs: must be a positive integer for agent "${agent.id}". Received: ${JSON.stringify(pa.durationMs)}`
+        );
+      }
+
+      if (pa.offeringId !== undefined && (typeof pa.offeringId !== 'string' || pa.offeringId.trim() === '')) {
+        throw new Error(
+          `Invalid playerActivity offeringId: must be a non-empty string for agent "${agent.id}"`
+        );
+      }
+
+      if (pa.itemId !== undefined && pa.itemId !== null && (typeof pa.itemId !== 'string' || pa.itemId.trim() === '')) {
+        throw new Error(
+          `Invalid playerActivity itemId: must be null or a non-empty string for agent "${agent.id}"`
+        );
+      }
+
       if (pa.completedAt !== null) {
         if (typeof pa.completedAt !== 'string' || pa.completedAt.trim() === '' || Number.isNaN(Date.parse(pa.completedAt))) {
           throw new Error(
@@ -167,7 +195,8 @@ export function validateAgents(
           );
         }
 
-        const expectedCompletion = Date.parse(pa.startedAt) + HAVING_COFFEE_DURATION_MS;
+        const duration = typeof pa.durationMs === 'number' ? pa.durationMs : HAVING_COFFEE_DURATION_MS;
+        const expectedCompletion = Date.parse(pa.startedAt) + duration;
         if (Date.parse(pa.completedAt) !== expectedCompletion) {
           throw new Error(
             `Invalid playerActivity completedAt: "${pa.completedAt}" does not match exact 15-minute duration from startedAt "${pa.startedAt}" for agent "${agent.id}"`

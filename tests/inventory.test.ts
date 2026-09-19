@@ -508,7 +508,7 @@ describe('Milestone 33: Authoritative Inventory, Ownership & Consumable Lifecycl
       assert.equal(tickResult.playerActivityTransitions?.length, 1);
 
       // Simulation completed coffee activity
-      assert.equal(state.coffeeCompletions.length, 1);
+      assert.equal(state.activityCompletions.length, 1);
       const agent = state.agents.find((a) => a.id === 'agent:dev-player')!;
       assert.notEqual(agent.playerActivity?.completedAt, null);
 

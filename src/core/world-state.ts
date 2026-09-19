@@ -5,7 +5,7 @@ import {
   RestaurantOperationalState,
   validateRestaurants,
 } from './entities/restaurant.js';
-import { Agent, AgentType, validateAgents } from './entities/agent.js';
+import { Agent, AgentType, validateAgents, ConsumableActivityType, PlayerActivityState } from './entities/agent.js';
 import { Offering, validateOfferings } from './entities/offering.js';
 import { createDevelopmentSeedWorld } from './seed.js';
 import { HAVING_COFFEE_DURATION_MS } from './activities/having-coffee.js';
@@ -22,7 +22,12 @@ import {
 } from './development-npc-schedule.js';
 
 export const DEFAULT_WORLD_ID = 'juarez-el-paso';
-export const CURRENT_WORLD_STATE_VERSION = 12;
+export const CURRENT_WORLD_STATE_VERSION = 13;
+
+export const EATING_PASTRY_DURATION_MINUTES = 15;
+export const EATING_PASTRY_DURATION_MS = 15 * 60 * 1000;
+
+export type { ConsumableActivityType, PlayerActivityState };
 
 export const QUALIFYING_ITEM_OFFERING_IDS = [
   'offering:development-coffee',
@@ -122,22 +127,57 @@ export interface CoffeeCompletionRecord {
 }
 
 /**
- * Authoritative WorldState schema for Milestone 33.
+ * Concrete historical fact recording a completed consumable player activity (Milestone 34).
+ *
+ * Captures immutable evidence that a player completed a consumable activity associated with
+ * a specific restaurant, offering, and optional source item at a specific world clock time.
+ */
+export interface ActivityCompletionRecord {
+  readonly id: string;
+  readonly playerId: string;
+  readonly activity: ConsumableActivityType;
+  readonly offeringId: string;
+  readonly restaurantId: string;
+  readonly itemId: string | null;
+  readonly startedAt: string;
+  readonly completedAt: string;
+}
+
+/**
+ * Authoritative WorldState schema for Milestone 34.
  *
  * Contains:
  * - worldId: Identity of the regional world.
- * - version: Schema version (12 for Milestone 33).
+ * - version: Schema version (13 for Milestone 34).
  * - worldTime: Authoritative ISO-8601 string from WorldClock.
  * - places: Geographic containment hierarchy.
  * - restaurants: Spatial entities contained within Buildings with operationalState, operationalSince, balanceMinor, and currency.
  * - agents: Persistent agent identities with dynamic activityState, activitySince, locationId, balanceMinor, currency, and optional playerActivity.
  * - offerings: Commercial offerings made available by restaurants with deterministic pricing.
  * - purchases: Persistent append-only historical facts of completed purchases.
- * - coffeeCompletions: Persistent append-only historical facts of completed Having Coffee player activities.
+ * - activityCompletions: Persistent append-only historical facts of completed consumable player activities.
  * - acquaintances: Persistent social acquaintance facts.
  * - items: Authoritative append-only physical possession entities.
  */
 export interface WorldState {
+  worldId: string;
+  version: 13;
+  worldTime: string;
+  places: Place[];
+  restaurants: Restaurant[];
+  agents: Agent[];
+  offerings: Offering[];
+  purchases: PurchaseRecord[];
+  activityCompletions: ActivityCompletionRecord[];
+  acquaintances: Acquaintance[];
+  items: OwnedItem[];
+}
+
+/**
+ * Historical WorldState schema for Milestone 33 (Version 12).
+ * Preserved for strict pre-validation prior to v12 -> v13 migration.
+ */
+export interface WorldStateV12 {
   worldId: string;
   version: 12;
   worldTime: string;
@@ -187,7 +227,7 @@ export function createInitialWorldState(
     agents: seed.agents,
     offerings: seed.offerings,
     purchases: [],
-    coffeeCompletions: [],
+    activityCompletions: [],
     acquaintances: [],
     items: [],
   };
@@ -202,14 +242,14 @@ export function snapshotWorldState(
 ): WorldState {
   return {
     worldId: state.worldId,
-    version: state.version as 12,
+    version: state.version as 13,
     worldTime: clock.getTime(),
     places: state.places,
     restaurants: state.restaurants,
     agents: state.agents,
     offerings: state.offerings,
     purchases: [...state.purchases],
-    coffeeCompletions: [...state.coffeeCompletions],
+    activityCompletions: [...state.activityCompletions],
     acquaintances: [...state.acquaintances],
     items: [...state.items],
   };
@@ -1343,7 +1383,7 @@ export function purchaseOffering(
   return result;
 }
 
-export type StartHavingCoffeeResultCode =
+export type StartConsumableActivityResultCode =
   | 'success'
   | 'agent-not-found'
   | 'agent-not-player'
@@ -1353,51 +1393,46 @@ export type StartHavingCoffeeResultCode =
   | 'purchase-required'
   | 'activity-already-active';
 
-export interface StartHavingCoffeeResult {
+export interface StartConsumableActivityResult {
   success: boolean;
-  code: StartHavingCoffeeResultCode;
+  code: StartConsumableActivityResultCode;
   message: string;
   playerId: string;
   restaurantId?: string;
-  activity?: 'having-coffee';
+  activity?: ConsumableActivityType;
   startedAt?: string;
   completedAt?: string | null;
   purchaseId?: string;
   itemId?: string;
 }
 
+export type StartHavingCoffeeResultCode = StartConsumableActivityResultCode;
+export type StartHavingCoffeeResult = StartConsumableActivityResult;
+
+export type StartEatingPastryResultCode = StartConsumableActivityResultCode;
+export type StartEatingPastryResult = StartConsumableActivityResult;
+
+export interface ConsumableActivityConfig {
+  activity: ConsumableActivityType;
+  offeringId: string;
+  durationMs: number;
+  name: string;
+}
+
 /**
- * Authoritative interaction: A Player starts the "Having Coffee" activity.
+ * Shared bounded consumable-activity execution kernel (Milestone 34).
  *
- * Implements the concrete time-bound player activity for Milestone 9, with authoritative
- * purchase ledger verification and deterministic single-use consumption (Milestone 29 Correction).
- *
- * Preconditions (evaluated in deterministic order):
- * 1. Agent exists in WorldState.agents (code: 'agent-not-found')
- * 2. Agent is a player: agent.agentType === 'player' (code: 'agent-not-player')
- * 3. Target restaurant exists in WorldState.restaurants (code: 'restaurant-not-found')
- * 4. Player is located inside the restaurant: agent.locationId === restaurant.id (code: 'not-inside-restaurant')
- * 5. Restaurant is currently open: restaurant.operationalState === 'open' (code: 'restaurant-closed')
- * 6. Restaurant offers coffee offering: 'offering:development-coffee' (code: 'purchase-required')
- * 7. An eligible unconsumed purchase exists in state.purchases for this player, restaurant, and offering (code: 'purchase-required')
- * 8. Player is not already performing having-coffee: playerActivity.activity !== 'having-coffee' || completedAt !== null (code: 'activity-already-active')
- *
- * State transition on success:
- * - chosenPurchase.consumedAt = state.worldTime (atomically marked consumed; replay prevented)
- * - agent.playerActivity = { activity: 'having-coffee', startedAt: state.worldTime, completedAt: null, restaurantId: restaurant.id }
- *
- * Invariants:
- * - Guarantees zero state mutation on any failure.
- * - Does NOT advance WorldClock or alter state.worldTime.
- * - Does NOT alter agent.activityState ('idle' | 'active') or agent.activitySince.
- * - Does NOT alter balances, offerings, or geography.
- * - Is NOT invoked by the simulation tick.
+ * Implements authoritative validation, deterministic FIFO OwnedItem selection,
+ * atomic consumption state transition, and PlayerActivityState creation for
+ * concrete consumable activities (having-coffee, eating-pastry).
  */
-export function startHavingCoffee(
+export function executeConsumableActivity(
   state: WorldState,
   playerId: string,
-  _legacyReceipt?: unknown
-): StartHavingCoffeeResult {
+  config: ConsumableActivityConfig,
+  hasReceiptArg?: boolean,
+  legacyReceipt?: unknown
+): StartConsumableActivityResult {
   // 1. Resolve agent
   const agent = state.agents.find((a) => a.id === playerId);
   if (!agent) {
@@ -1452,68 +1487,68 @@ export function startHavingCoffee(
     };
   }
 
-  // Confirm restaurant offers coffee
+  // 5. Confirm restaurant offers the consumable offering
   const offering = state.offerings.find(
-    (o) => o.id === 'offering:development-coffee' && o.restaurantId === restaurant.id
+    (o) => o.id === config.offeringId && o.restaurantId === restaurant.id
   );
   if (!offering) {
     return {
       success: false,
       code: 'purchase-required',
-      message: `Restaurant "${restaurant.id}" does not offer "offering:development-coffee"`,
+      message: `Restaurant "${restaurant.id}" does not offer "${config.offeringId}"`,
       playerId,
       restaurantId: restaurant.id,
     };
   }
 
   // Legacy receipt check: if explicitly provided as an argument (legacy callers/tests)
-  if (arguments.length >= 3) {
-    if (_legacyReceipt === undefined || _legacyReceipt === null || typeof _legacyReceipt !== 'object') {
+  if (hasReceiptArg) {
+    if (legacyReceipt === undefined || legacyReceipt === null || typeof legacyReceipt !== 'object') {
       return {
         success: false,
         code: 'purchase-required',
-        message: `Purchase required: player "${playerId}" must provide a valid purchase receipt for Coffee at "${restaurant.id}"`,
+        message: `Purchase required: player "${playerId}" must provide a valid purchase receipt for ${config.name} at "${restaurant.id}"`,
         playerId,
         restaurantId: restaurant.id,
       };
     }
-    const r = _legacyReceipt as Record<string, unknown>;
+    const r = legacyReceipt as Record<string, unknown>;
     if (
       r.success === false ||
       r.code !== 'success' ||
       (typeof r.playerId === 'string' && r.playerId !== playerId) ||
-      (typeof r.offeringId === 'string' && r.offeringId !== 'offering:development-coffee') ||
+      (typeof r.offeringId === 'string' && r.offeringId !== config.offeringId) ||
       (typeof r.restaurantId === 'string' && r.restaurantId !== restaurant.id)
     ) {
       return {
         success: false,
         code: 'purchase-required',
-        message: `Purchase required: player "${playerId}" must provide a valid successful purchase receipt for Coffee at "${restaurant.id}"`,
+        message: `Purchase required: player "${playerId}" must provide a valid successful purchase receipt for ${config.name} at "${restaurant.id}"`,
         playerId,
         restaurantId: restaurant.id,
       };
     }
   }
 
-  // 5. Confirm player is not already performing having-coffee
-  if (agent.playerActivity?.activity === 'having-coffee' && agent.playerActivity.completedAt === null) {
+  // 6. Confirm player does not already have an active uncompleted activity
+  if (agent.playerActivity && agent.playerActivity.completedAt === null) {
     return {
       success: false,
       code: 'activity-already-active',
-      message: `Player "${playerId}" is already performing activity "having-coffee"`,
+      message: `Player "${playerId}" is already performing activity "${agent.playerActivity.activity}"`,
       playerId,
       restaurantId: restaurant.id,
-      activity: 'having-coffee',
+      activity: agent.playerActivity.activity,
       startedAt: agent.playerActivity.startedAt,
       completedAt: null,
     };
   }
 
-  // 6. Authoritative possession lookup in state.items: find eligible available coffee items (Milestone 33)
+  // 7. Authoritative possession lookup in state.items: find eligible available items
   const eligibleItems = (state.items ?? []).filter(
     (item) =>
       item.ownerAgentId === playerId &&
-      item.offeringId === 'offering:development-coffee' &&
+      item.offeringId === config.offeringId &&
       item.status === 'available' &&
       item.restaurantId === restaurant.id
   );
@@ -1522,7 +1557,7 @@ export function startHavingCoffee(
     return {
       success: false,
       code: 'purchase-required',
-      message: `Purchase required: player "${playerId}" does not possess an available Coffee purchased at restaurant "${restaurant.id}"`,
+      message: `Purchase required: player "${playerId}" does not possess an available ${config.name} purchased at restaurant "${restaurant.id}"`,
       playerId,
       restaurantId: restaurant.id,
     };
@@ -1532,39 +1567,90 @@ export function startHavingCoffee(
   eligibleItems.sort((a, b) => {
     const timeDiff = Date.parse(a.acquiredAt) - Date.parse(b.acquiredAt);
     if (timeDiff !== 0) return timeDiff;
-    const idA = parseInt(a.id.slice(5), 10) || 0;
-    const idB = parseInt(b.id.slice(5), 10) || 0;
+    const matchA = a.id.match(/^item:(\d+)$/);
+    const matchB = b.id.match(/^item:(\d+)$/);
+    const idA = matchA ? parseInt(matchA[1], 10) : 0;
+    const idB = matchB ? parseInt(matchB[1], 10) : 0;
     return idA - idB;
   });
   const chosenItem = eligibleItems[0];
 
-  // 7. Commit state transition atomically
+  // 8. Commit state transition atomically
   const startedAt = state.worldTime;
   chosenItem.status = 'consumed';
   chosenItem.consumedAt = startedAt;
   agent.playerActivity = {
-    activity: 'having-coffee',
+    activity: config.activity,
     startedAt,
     completedAt: null,
+    durationMs: config.durationMs,
     restaurantId: restaurant.id,
+    offeringId: config.offeringId,
+    itemId: chosenItem.id,
   };
 
   console.log(
-    `[activity] player=${playerId} activity=having-coffee started=${startedAt} duration=15m itemId=${chosenItem.id} purchaseId=${chosenItem.sourcePurchaseId}`
+    `[activity] player=${playerId} activity=${config.activity} started=${startedAt} duration=${config.durationMs / 60000}m itemId=${chosenItem.id} purchaseId=${chosenItem.sourcePurchaseId}`
   );
 
   return {
     success: true,
     code: 'success',
-    message: `Player "${playerId}" started activity "having-coffee" at ${startedAt}`,
+    message: `Player "${playerId}" started activity "${config.activity}" at ${startedAt}`,
     playerId,
     restaurantId: restaurant.id,
-    activity: 'having-coffee',
+    activity: config.activity,
     startedAt,
     completedAt: null,
     purchaseId: chosenItem.sourcePurchaseId,
     itemId: chosenItem.id,
   };
+}
+
+/**
+ * Authoritative interaction: A Player starts the "Having Coffee" activity.
+ * Concrete public domain entrypoint delegating to executeConsumableActivity.
+ */
+export function startHavingCoffee(
+  state: WorldState,
+  playerId: string,
+  _legacyReceipt?: unknown
+): StartHavingCoffeeResult {
+  return executeConsumableActivity(
+    state,
+    playerId,
+    {
+      activity: 'having-coffee',
+      offeringId: 'offering:development-coffee',
+      durationMs: HAVING_COFFEE_DURATION_MS,
+      name: 'Coffee',
+    },
+    arguments.length >= 3,
+    _legacyReceipt
+  );
+}
+
+/**
+ * Authoritative interaction: A Player starts the "Eating Pastry" activity (Milestone 34).
+ * Concrete public domain entrypoint delegating to executeConsumableActivity.
+ */
+export function startEatingPastry(
+  state: WorldState,
+  playerId: string,
+  _legacyReceipt?: unknown
+): StartEatingPastryResult {
+  return executeConsumableActivity(
+    state,
+    playerId,
+    {
+      activity: 'eating-pastry',
+      offeringId: DEVELOPMENT_PASTRY_OFFERING_ID,
+      durationMs: EATING_PASTRY_DURATION_MS,
+      name: 'Pan Dulce',
+    },
+    arguments.length >= 3,
+    _legacyReceipt
+  );
 }
 
 /**
@@ -2469,7 +2555,8 @@ export type InspectPlayerHistoryResultCode =
 export interface ObservablePlayerHistory {
   playerId: string;
   purchases: PurchaseRecord[];
-  coffeeCompletions: CoffeeCompletionRecord[];
+  activityCompletions: ActivityCompletionRecord[];
+  coffeeCompletions?: CoffeeCompletionRecord[];
 }
 
 export interface InspectPlayerHistoryResult {
@@ -2484,7 +2571,7 @@ export interface InspectPlayerHistoryResult {
  * Authoritative perception: A Player inspects their own persistent historical records (Milestone 17-A).
  *
  * Exposes a safe, read-only projection of the player's completed purchases and completed
- * Having Coffee activities recorded in WorldState.
+ * consumable activities recorded in WorldState.
  *
  * Preconditions (evaluated in deterministic order):
  * 1. Player exists in WorldState.agents (code: 'player-not-found')
@@ -2534,9 +2621,19 @@ export function inspectPlayerHistory(
     .filter((p) => p.playerId === playerId)
     .map((p) => ({ ...p }));
 
-  const coffeeCompletions: CoffeeCompletionRecord[] = state.coffeeCompletions
+  const activityCompletions: ActivityCompletionRecord[] = (state.activityCompletions || [])
     .filter((c) => c.playerId === playerId)
     .map((c) => ({ ...c }));
+
+  const coffeeCompletions: CoffeeCompletionRecord[] = activityCompletions
+    .filter((c) => c.activity === 'having-coffee')
+    .map((c) => ({
+      id: c.id,
+      playerId: c.playerId,
+      restaurantId: c.restaurantId,
+      startedAt: c.startedAt,
+      completedAt: c.completedAt,
+    }));
 
   return {
     success: true,
@@ -2546,6 +2643,7 @@ export function inspectPlayerHistory(
     history: {
       playerId,
       purchases,
+      activityCompletions,
       coffeeCompletions,
     },
   };
@@ -2919,6 +3017,31 @@ export function validateWorldState(data: unknown): asserts data is WorldState {
           `Invalid playerActivity for agent "${agent.id}": restaurantId "${agent.playerActivity.restaurantId}" references non-existent restaurant`
         );
       }
+      if (
+        typeof agent.playerActivity.durationMs !== 'number' ||
+        !Number.isInteger(agent.playerActivity.durationMs) ||
+        agent.playerActivity.durationMs <= 0
+      ) {
+        throw new Error(
+          `Invalid playerActivity durationMs for agent "${agent.id}": must be a positive integer`
+        );
+      }
+      if (
+        typeof agent.playerActivity.offeringId !== 'string' ||
+        agent.playerActivity.offeringId.trim() === ''
+      ) {
+        throw new Error(
+          `Invalid playerActivity offeringId for agent "${agent.id}": must be a non-empty string`
+        );
+      }
+      if (
+        agent.playerActivity.itemId !== null &&
+        (typeof agent.playerActivity.itemId !== 'string' || agent.playerActivity.itemId.trim() === '')
+      ) {
+        throw new Error(
+          `Invalid playerActivity itemId for agent "${agent.id}": must be null or a non-empty string`
+        );
+      }
     }
   }
 
@@ -3076,18 +3199,18 @@ export function validateWorldState(data: unknown): asserts data is WorldState {
     }
   }
 
-  // Validate Coffee Completions (Milestone 14: persistent historical facts)
-  if (!Array.isArray(candidate.coffeeCompletions)) {
-    throw new Error('Invalid WorldState: coffeeCompletions must be an array');
+  // Validate Activity Completions (Milestone 34: unified historical ledger)
+  if (!Array.isArray(candidate.activityCompletions)) {
+    throw new Error('Invalid WorldState: activityCompletions must be an array');
   }
 
-  const coffeeCompletionIdSet = new Set<string>();
+  const activityCompletionIdSet = new Set<string>();
 
-  for (let i = 0; i < candidate.coffeeCompletions.length; i++) {
-    const c = candidate.coffeeCompletions[i];
+  for (let i = 0; i < candidate.activityCompletions.length; i++) {
+    const c = candidate.activityCompletions[i];
     if (typeof c !== 'object' || c === null) {
       throw new Error(
-        `Invalid CoffeeCompletionRecord at index ${i}: record must be a non-null object`
+        `Invalid ActivityCompletionRecord at index ${i}: record must be a non-null object`
       );
     }
 
@@ -3095,84 +3218,101 @@ export function validateWorldState(data: unknown): asserts data is WorldState {
 
     if (typeof rec.id !== 'string' || rec.id.trim() === '') {
       throw new Error(
-        `Invalid CoffeeCompletionRecord at index ${i}: id must be a non-empty string`
+        `Invalid ActivityCompletionRecord at index ${i}: id must be a non-empty string`
       );
     }
 
-    if (coffeeCompletionIdSet.has(rec.id)) {
-      throw new Error(`Duplicate coffee completion record id found: "${rec.id}"`);
+    if (activityCompletionIdSet.has(rec.id)) {
+      throw new Error(`Duplicate activity completion record id found: "${rec.id}"`);
     }
     if (globalIdSet.has(rec.id)) {
       throw new Error(`Duplicate entity id found across collections: "${rec.id}"`);
     }
-    coffeeCompletionIdSet.add(rec.id);
+    activityCompletionIdSet.add(rec.id);
+    globalIdSet.add(rec.id);
 
     if (typeof rec.playerId !== 'string' || rec.playerId.trim() === '') {
       throw new Error(
-        `Invalid CoffeeCompletionRecord "${rec.id}": playerId must be a non-empty string`
+        `Invalid ActivityCompletionRecord "${rec.id}": playerId must be a non-empty string`
       );
     }
     const playerAgent = agentMap.get(rec.playerId);
     if (!playerAgent) {
       throw new Error(
-        `Invalid CoffeeCompletionRecord "${rec.id}": playerId "${rec.playerId}" references non-existent agent`
+        `Invalid ActivityCompletionRecord "${rec.id}": playerId "${rec.playerId}" references non-existent agent`
       );
     }
     if (playerAgent.agentType !== 'player') {
       throw new Error(
-        `Invalid CoffeeCompletionRecord "${rec.id}": agent "${rec.playerId}" is not a player (agentType: "${playerAgent.agentType}")`
+        `Invalid ActivityCompletionRecord "${rec.id}": agent "${rec.playerId}" is not a player (agentType: "${playerAgent.agentType}")`
+      );
+    }
+
+    if (rec.activity !== 'having-coffee' && rec.activity !== 'eating-pastry') {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": activity must be "having-coffee" or "eating-pastry". Received: ${JSON.stringify(rec.activity)}`
+      );
+    }
+
+    if (typeof rec.offeringId !== 'string' || rec.offeringId.trim() === '') {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": offeringId must be a non-empty string`
       );
     }
 
     if (typeof rec.restaurantId !== 'string' || rec.restaurantId.trim() === '') {
       throw new Error(
-        `Invalid CoffeeCompletionRecord "${rec.id}": restaurantId must be a non-empty string`
+        `Invalid ActivityCompletionRecord "${rec.id}": restaurantId must be a non-empty string`
       );
     }
     if (!restaurantMap.has(rec.restaurantId)) {
       throw new Error(
-        `Invalid CoffeeCompletionRecord "${rec.id}": restaurantId "${rec.restaurantId}" references non-existent restaurant`
+        `Invalid ActivityCompletionRecord "${rec.id}": restaurantId "${rec.restaurantId}" references non-existent restaurant`
+      );
+    }
+
+    if (rec.itemId !== null && (typeof rec.itemId !== 'string' || rec.itemId.trim() === '')) {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": itemId must be null or a non-empty string`
       );
     }
 
     if (typeof rec.startedAt !== 'string' || rec.startedAt.trim() === '') {
       throw new Error(
-        `Invalid CoffeeCompletionRecord "${rec.id}": startedAt must be a non-empty string`
+        `Invalid ActivityCompletionRecord "${rec.id}": startedAt must be a non-empty string`
       );
     }
     const startedMs = Date.parse(rec.startedAt);
     if (Number.isNaN(startedMs)) {
       throw new Error(
-        `Invalid CoffeeCompletionRecord "${rec.id}": startedAt must be a valid ISO-8601 timestamp. Received: "${rec.startedAt}"`
+        `Invalid ActivityCompletionRecord "${rec.id}": startedAt must be a valid ISO-8601 timestamp. Received: "${rec.startedAt}"`
       );
     }
 
     if (typeof rec.completedAt !== 'string' || rec.completedAt.trim() === '') {
       throw new Error(
-        `Invalid CoffeeCompletionRecord "${rec.id}": completedAt must be a non-empty string`
+        `Invalid ActivityCompletionRecord "${rec.id}": completedAt must be a non-empty string`
       );
     }
     const completedMs = Date.parse(rec.completedAt);
     if (Number.isNaN(completedMs)) {
       throw new Error(
-        `Invalid CoffeeCompletionRecord "${rec.id}": completedAt must be a valid ISO-8601 timestamp. Received: "${rec.completedAt}"`
+        `Invalid ActivityCompletionRecord "${rec.id}": completedAt must be a valid ISO-8601 timestamp. Received: "${rec.completedAt}"`
       );
     }
 
     if (completedMs < startedMs) {
       throw new Error(
-        `Invalid CoffeeCompletionRecord "${rec.id}": completedAt ("${rec.completedAt}") must be greater than or equal to startedAt ("${rec.startedAt}")`
+        `Invalid ActivityCompletionRecord "${rec.id}": completedAt ("${rec.completedAt}") must be greater than or equal to startedAt ("${rec.startedAt}")`
       );
     }
 
-    if (completedMs - startedMs !== HAVING_COFFEE_DURATION_MS) {
+    const expectedDurationMs = 15 * 60 * 1000;
+    if (completedMs - startedMs !== expectedDurationMs) {
       throw new Error(
-        `Invalid CoffeeCompletionRecord "${rec.id}": completedAt ("${rec.completedAt}") does not match exact 15-minute duration from startedAt ("${rec.startedAt}")`
+        `Invalid ActivityCompletionRecord "${rec.id}": completedAt ("${rec.completedAt}") does not match exact 15-minute duration from startedAt ("${rec.startedAt}")`
       );
     }
-    // NOTE: record.restaurantId === playerAgent.locationId is deliberately NOT enforced
-    // because M10 allows the player to exit the restaurant while having coffee.
-    // NOTE: A corresponding PurchaseRecord is deliberately NOT required.
   }
 
   // Validate Acquaintances (Milestone 25: persistent social facts)
@@ -3741,7 +3881,7 @@ export function resolveMigrationItemName(offeringId: string, offerings: Offering
  * Migrates a valid Version 11 WorldState to Version 12.
  * Instantiates authoritative OwnedItem entities for qualifying historical purchases.
  */
-export function migrateWorldStateV11ToV12(v11: WorldStateV11): WorldState {
+export function migrateWorldStateV11ToV12(v11: WorldStateV11): WorldStateV12 {
   const qualifyingOfferingIds = new Set<string>(QUALIFYING_ITEM_OFFERING_IDS);
   const migratedItems: OwnedItem[] = [];
 
@@ -3782,5 +3922,602 @@ export function migrateWorldStateV11ToV12(v11: WorldStateV11): WorldState {
     coffeeCompletions: v11.coffeeCompletions,
     acquaintances: v11.acquaintances,
     items: migratedItems,
+  };
+}
+
+/**
+ * Validates that an arbitrary object conforms to the strict Milestone 33 (Version 12) WorldState contract.
+ * Preserved for pre-migration integrity checking.
+ */
+export function validateWorldStateV12(data: unknown): asserts data is WorldStateV12 {
+  if (typeof data !== 'object' || data === null) {
+    throw new Error('Invalid WorldState: state must be a non-null object');
+  }
+
+  const candidate = data as Record<string, unknown>;
+
+  if (typeof candidate.worldId !== 'string' || candidate.worldId.trim() === '') {
+    throw new Error(
+      `Invalid WorldState: worldId must be a non-empty string. Received: ${JSON.stringify(candidate.worldId)}`
+    );
+  }
+
+  if (candidate.worldId !== DEFAULT_WORLD_ID) {
+    throw new Error(
+      `Invalid WorldState: worldId must be "${DEFAULT_WORLD_ID}". Received: ${JSON.stringify(candidate.worldId)}`
+    );
+  }
+
+  if (
+    typeof candidate.version !== 'number' ||
+    !Number.isInteger(candidate.version) ||
+    candidate.version <= 0
+  ) {
+    throw new Error(
+      `Invalid WorldState: version must be a positive integer. Received: ${JSON.stringify(candidate.version)}`
+    );
+  }
+
+  if (candidate.version !== 12) {
+    throw new Error(
+      `Unsupported WorldState version: ${candidate.version}. Expected version 12. Incompatible schemas must be rejected explicitly.`
+    );
+  }
+
+  if (typeof candidate.worldTime !== 'string' || candidate.worldTime.trim() === '') {
+    throw new Error(
+      `Invalid WorldState: worldTime must be a non-empty string. Received: ${JSON.stringify(candidate.worldTime)}`
+    );
+  }
+
+  const parsedTime = Date.parse(candidate.worldTime);
+  if (Number.isNaN(parsedTime)) {
+    throw new Error(
+      `Invalid WorldState: worldTime must be a valid ISO-8601 timestamp. Received: "${candidate.worldTime}"`
+    );
+  }
+
+  // Validate Places
+  validatePlaces(candidate.places as unknown[]);
+  const places = candidate.places as Place[];
+
+  // Validate Restaurants referencing Buildings
+  const buildingIds = new Set<string>(
+    places.filter((p) => p.type === 'building').map((p) => p.id)
+  );
+  validateRestaurants(candidate.restaurants as unknown[], buildingIds);
+  const restaurants = candidate.restaurants as Restaurant[];
+
+  // Validate Agents with Place + Restaurant spatial referential integrity
+  const validLocationIds = new Set<string>([
+    ...places.map((p) => p.id),
+    ...restaurants.map((r) => r.id),
+  ]);
+  validateAgents(candidate.agents as unknown[], validLocationIds);
+  const agents = candidate.agents as Agent[];
+
+  // Validate Offerings referencing Restaurants
+  const validRestaurantIds = new Set<string>(restaurants.map((r) => r.id));
+  validateOfferings(candidate.offerings as unknown[], validRestaurantIds);
+  const offerings = candidate.offerings as Offering[];
+
+  for (const agent of agents) {
+    if (agent.playerActivity) {
+      if (!validRestaurantIds.has(agent.playerActivity.restaurantId)) {
+        throw new Error(
+          `Invalid playerActivity for agent "${agent.id}": restaurantId "${agent.playerActivity.restaurantId}" references non-existent restaurant`
+        );
+      }
+    }
+  }
+
+  // Global ID uniqueness across all entity collections
+  const globalIdSet = new Set<string>();
+  for (const place of places) {
+    globalIdSet.add(place.id);
+  }
+  for (const restaurant of restaurants) {
+    if (globalIdSet.has(restaurant.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${restaurant.id}"`);
+    }
+    globalIdSet.add(restaurant.id);
+  }
+  for (const agent of agents) {
+    if (globalIdSet.has(agent.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${agent.id}"`);
+    }
+    globalIdSet.add(agent.id);
+  }
+  for (const offering of offerings) {
+    if (globalIdSet.has(offering.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${offering.id}"`);
+    }
+    globalIdSet.add(offering.id);
+  }
+
+  // Validate Purchases
+  if (!Array.isArray(candidate.purchases)) {
+    throw new Error('Invalid WorldState: purchases must be an array');
+  }
+
+  const agentMap = new Map<string, Agent>(agents.map((a) => [a.id, a]));
+  const restaurantMap = new Map<string, Restaurant>(restaurants.map((r) => [r.id, r]));
+  const offeringMap = new Map<string, Offering>(offerings.map((o) => [o.id, o]));
+  const purchaseIdSet = new Set<string>();
+
+  for (let i = 0; i < candidate.purchases.length; i++) {
+    const p = candidate.purchases[i];
+    if (typeof p !== 'object' || p === null) {
+      throw new Error(`Invalid PurchaseRecord at index ${i}: record must be a non-null object`);
+    }
+
+    const rec = p as Record<string, unknown>;
+
+    if (typeof rec.id !== 'string' || rec.id.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord at index ${i}: id must be a non-empty string`);
+    }
+
+    if (purchaseIdSet.has(rec.id)) {
+      throw new Error(`Duplicate purchase record id found: "${rec.id}"`);
+    }
+    if (globalIdSet.has(rec.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${rec.id}"`);
+    }
+    purchaseIdSet.add(rec.id);
+
+    if (typeof rec.worldTime !== 'string' || rec.worldTime.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord "${rec.id}": worldTime must be a non-empty string`);
+    }
+    if (Number.isNaN(Date.parse(rec.worldTime))) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": worldTime must be a valid ISO-8601 timestamp. Received: "${rec.worldTime}"`
+      );
+    }
+
+    if (typeof rec.playerId !== 'string' || rec.playerId.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord "${rec.id}": playerId must be a non-empty string`);
+    }
+    const playerAgent = agentMap.get(rec.playerId);
+    if (!playerAgent) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": playerId "${rec.playerId}" references non-existent agent`
+      );
+    }
+    if (playerAgent.agentType !== 'player') {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": agent "${rec.playerId}" is not a player (agentType: "${playerAgent.agentType}")`
+      );
+    }
+
+    if (typeof rec.restaurantId !== 'string' || rec.restaurantId.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord "${rec.id}": restaurantId must be a non-empty string`);
+    }
+    if (!restaurantMap.has(rec.restaurantId)) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": restaurantId "${rec.restaurantId}" references non-existent restaurant`
+      );
+    }
+
+    if (typeof rec.offeringId !== 'string' || rec.offeringId.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord "${rec.id}": offeringId must be a non-empty string`);
+    }
+    const offeringEntity = offeringMap.get(rec.offeringId);
+    if (!offeringEntity) {
+      if (rec.offeringId === DEVELOPMENT_PASTRY_OFFERING_ID) {
+        if (rec.restaurantId !== 'restaurant:development-restaurant') {
+          throw new Error(
+            `Invalid PurchaseRecord "${rec.id}": offering "${rec.offeringId}" belongs to restaurant "restaurant:development-restaurant", not "${rec.restaurantId}"`
+          );
+        }
+      } else {
+        throw new Error(
+          `Invalid PurchaseRecord "${rec.id}": offeringId "${rec.offeringId}" references non-existent offering`
+        );
+      }
+    } else {
+      if (offeringEntity.restaurantId !== rec.restaurantId) {
+        throw new Error(
+          `Invalid PurchaseRecord "${rec.id}": offering "${rec.offeringId}" belongs to restaurant "${offeringEntity.restaurantId}", not "${rec.restaurantId}"`
+        );
+      }
+    }
+
+    if (
+      typeof rec.amountMinor !== 'number' ||
+      !Number.isInteger(rec.amountMinor) ||
+      rec.amountMinor < 0
+    ) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": amountMinor must be a non-negative integer`
+      );
+    }
+
+    if (typeof rec.currency !== 'string' || rec.currency.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord "${rec.id}": currency must be a non-empty string`);
+    }
+    const expectedCurrency = offeringEntity
+      ? offeringEntity.currency
+      : rec.offeringId === DEVELOPMENT_PASTRY_OFFERING_ID
+        ? 'USD'
+        : undefined;
+    if (expectedCurrency && rec.currency !== expectedCurrency) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": currency "${rec.currency}" does not match offering currency "${expectedCurrency}"`
+      );
+    }
+    if (rec.consumedAt !== undefined && rec.consumedAt !== null) {
+      if (typeof rec.consumedAt !== 'string' || rec.consumedAt.trim() === '') {
+        throw new Error(
+          `Invalid PurchaseRecord "${rec.id}": consumedAt must be a non-empty string or null`
+        );
+      }
+      if (Number.isNaN(Date.parse(rec.consumedAt))) {
+        throw new Error(
+          `Invalid PurchaseRecord "${rec.id}": consumedAt must be a valid ISO-8601 timestamp string or null. Received: "${rec.consumedAt}"`
+        );
+      }
+    } else {
+      rec.consumedAt = null;
+    }
+  }
+
+  // Validate Coffee Completions
+  if (!Array.isArray(candidate.coffeeCompletions)) {
+    throw new Error('Invalid WorldState: coffeeCompletions must be an array');
+  }
+
+  const coffeeCompletionIdSet = new Set<string>();
+
+  for (let i = 0; i < candidate.coffeeCompletions.length; i++) {
+    const c = candidate.coffeeCompletions[i];
+    if (typeof c !== 'object' || c === null) {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord at index ${i}: record must be a non-null object`
+      );
+    }
+
+    const rec = c as Record<string, unknown>;
+
+    if (typeof rec.id !== 'string' || rec.id.trim() === '') {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord at index ${i}: id must be a non-empty string`
+      );
+    }
+
+    if (coffeeCompletionIdSet.has(rec.id)) {
+      throw new Error(`Duplicate coffee completion record id found: "${rec.id}"`);
+    }
+    if (globalIdSet.has(rec.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${rec.id}"`);
+    }
+    coffeeCompletionIdSet.add(rec.id);
+
+    if (typeof rec.playerId !== 'string' || rec.playerId.trim() === '') {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord "${rec.id}": playerId must be a non-empty string`
+      );
+    }
+    const playerAgent = agentMap.get(rec.playerId);
+    if (!playerAgent) {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord "${rec.id}": playerId "${rec.playerId}" references non-existent agent`
+      );
+    }
+    if (playerAgent.agentType !== 'player') {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord "${rec.id}": agent "${rec.playerId}" is not a player (agentType: "${playerAgent.agentType}")`
+      );
+    }
+
+    if (typeof rec.restaurantId !== 'string' || rec.restaurantId.trim() === '') {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord "${rec.id}": restaurantId must be a non-empty string`
+      );
+    }
+    if (!restaurantMap.has(rec.restaurantId)) {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord "${rec.id}": restaurantId "${rec.restaurantId}" references non-existent restaurant`
+      );
+    }
+
+    if (typeof rec.startedAt !== 'string' || rec.startedAt.trim() === '') {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord "${rec.id}": startedAt must be a non-empty string`
+      );
+    }
+    const startedMs = Date.parse(rec.startedAt);
+    if (Number.isNaN(startedMs)) {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord "${rec.id}": startedAt must be a valid ISO-8601 timestamp. Received: "${rec.startedAt}"`
+      );
+    }
+
+    if (typeof rec.completedAt !== 'string' || rec.completedAt.trim() === '') {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord "${rec.id}": completedAt must be a non-empty string`
+      );
+    }
+    const completedMs = Date.parse(rec.completedAt);
+    if (Number.isNaN(completedMs)) {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord "${rec.id}": completedAt must be a valid ISO-8601 timestamp. Received: "${rec.completedAt}"`
+      );
+    }
+
+    if (completedMs < startedMs) {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord "${rec.id}": completedAt ("${rec.completedAt}") must be greater than or equal to startedAt ("${rec.startedAt}")`
+      );
+    }
+
+    if (completedMs - startedMs !== HAVING_COFFEE_DURATION_MS) {
+      throw new Error(
+        `Invalid CoffeeCompletionRecord "${rec.id}": completedAt ("${rec.completedAt}") does not match exact 15-minute duration from startedAt ("${rec.startedAt}")`
+      );
+    }
+  }
+
+  // Validate Acquaintances
+  if (!Array.isArray(candidate.acquaintances)) {
+    throw new Error('Invalid WorldState: acquaintances must be an array');
+  }
+
+  const agentIdSet = new Set<string>(agents.map((a) => a.id));
+  validateAcquaintances(candidate.acquaintances as unknown[], agentIdSet);
+  const acquaintances = candidate.acquaintances as Acquaintance[];
+
+  for (const acq of acquaintances) {
+    if (globalIdSet.has(acq.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${acq.id}"`);
+    }
+    globalIdSet.add(acq.id);
+  }
+
+  // Validate Items
+  if (!Array.isArray(candidate.items)) {
+    throw new Error('Invalid WorldState: items must be an array');
+  }
+
+  const itemIdSet = new Set<string>();
+  const seenSourcePurchaseIds = new Set<string>();
+  const itemBySourcePurchaseId = new Map<string, Record<string, unknown>>();
+  const qualifyingOfferingIds = new Set<string>(QUALIFYING_ITEM_OFFERING_IDS);
+
+  for (let i = 0; i < candidate.items.length; i++) {
+    const itemRaw = candidate.items[i];
+    if (typeof itemRaw !== 'object' || itemRaw === null) {
+      throw new Error(`Invalid OwnedItem at index ${i}: item must be a non-null object`);
+    }
+
+    const item = itemRaw as Record<string, unknown>;
+
+    if (typeof item.id !== 'string' || !/^item:\d+$/.test(item.id)) {
+      throw new Error(
+        `Invalid OwnedItem at index ${i}: id must match format "item:<number>". Received: ${JSON.stringify(item.id)}`
+      );
+    }
+
+    if (itemIdSet.has(item.id)) {
+      throw new Error(`Duplicate item id found: "${item.id}"`);
+    }
+    if (globalIdSet.has(item.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${item.id}"`);
+    }
+    itemIdSet.add(item.id);
+    globalIdSet.add(item.id);
+
+    if (item.type !== 'item') {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": type must be "item". Received: ${JSON.stringify(item.type)}`
+      );
+    }
+
+    if (typeof item.offeringId !== 'string' || !qualifyingOfferingIds.has(item.offeringId)) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": offeringId must be a qualifying item offering. Received: ${JSON.stringify(item.offeringId)}`
+      );
+    }
+
+    if (typeof item.name !== 'string' || item.name.trim() === '') {
+      throw new Error(`Invalid OwnedItem "${item.id}": name must be a non-empty string`);
+    }
+
+    if (typeof item.ownerAgentId !== 'string' || item.ownerAgentId.trim() === '') {
+      throw new Error(`Invalid OwnedItem "${item.id}": ownerAgentId must be a non-empty string`);
+    }
+    const ownerAgent = agentMap.get(item.ownerAgentId);
+    if (!ownerAgent) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": ownerAgentId "${item.ownerAgentId}" references non-existent agent`
+      );
+    }
+    if (ownerAgent.agentType !== 'player') {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": ownerAgentId "${item.ownerAgentId}" is not a player (agentType: "${ownerAgent.agentType}")`
+      );
+    }
+
+    if (typeof item.restaurantId !== 'string' || item.restaurantId.trim() === '') {
+      throw new Error(`Invalid OwnedItem "${item.id}": restaurantId must be a non-empty string`);
+    }
+    if (!restaurantMap.has(item.restaurantId)) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": restaurantId "${item.restaurantId}" references non-existent restaurant`
+      );
+    }
+
+    if (typeof item.acquiredAt !== 'string' || item.acquiredAt.trim() === '') {
+      throw new Error(`Invalid OwnedItem "${item.id}": acquiredAt must be a non-empty string`);
+    }
+    const acquiredMs = Date.parse(item.acquiredAt);
+    if (Number.isNaN(acquiredMs)) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": acquiredAt must be a valid ISO-8601 timestamp string. Received: "${item.acquiredAt}"`
+      );
+    }
+
+    if (item.status !== 'available' && item.status !== 'consumed') {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": status must be "available" or "consumed". Received: ${JSON.stringify(item.status)}`
+      );
+    }
+
+    if (item.status === 'available') {
+      if (item.consumedAt !== null) {
+        throw new Error(
+          `Invalid OwnedItem "${item.id}": consumedAt must be null when status is "available". Received: ${JSON.stringify(item.consumedAt)}`
+        );
+      }
+    } else {
+      if (typeof item.consumedAt !== 'string' || item.consumedAt.trim() === '') {
+        throw new Error(
+          `Invalid OwnedItem "${item.id}": consumedAt must be a non-empty ISO-8601 timestamp when status is "consumed"`
+        );
+      }
+      const consumedMs = Date.parse(item.consumedAt);
+      if (Number.isNaN(consumedMs)) {
+        throw new Error(
+          `Invalid OwnedItem "${item.id}": consumedAt must be a valid ISO-8601 timestamp string. Received: "${item.consumedAt}"`
+        );
+      }
+      if (consumedMs < acquiredMs) {
+        throw new Error(
+          `Invalid OwnedItem "${item.id}": consumedAt ("${item.consumedAt}") must be greater than or equal to acquiredAt ("${item.acquiredAt}")`
+        );
+      }
+    }
+
+    if (typeof item.sourcePurchaseId !== 'string' || item.sourcePurchaseId.trim() === '') {
+      throw new Error(`Invalid OwnedItem "${item.id}": sourcePurchaseId must be a non-empty string`);
+    }
+
+    if (seenSourcePurchaseIds.has(item.sourcePurchaseId)) {
+      throw new Error(
+        `Duplicate sourcePurchaseId "${item.sourcePurchaseId}" found across items (violation of 1:1 cardinality)`
+      );
+    }
+    seenSourcePurchaseIds.add(item.sourcePurchaseId);
+    itemBySourcePurchaseId.set(item.sourcePurchaseId, item);
+
+    const sourcePurchase = purchaseIdSet.has(item.sourcePurchaseId)
+      ? (candidate.purchases as PurchaseRecord[]).find((p) => p.id === item.sourcePurchaseId)
+      : undefined;
+
+    if (!sourcePurchase) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": sourcePurchaseId "${item.sourcePurchaseId}" references non-existent purchase`
+      );
+    }
+
+    if (sourcePurchase.playerId !== item.ownerAgentId) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": ownerAgentId "${item.ownerAgentId}" does not match purchase playerId "${sourcePurchase.playerId}"`
+      );
+    }
+    if (sourcePurchase.offeringId !== item.offeringId) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": offeringId "${item.offeringId}" does not match purchase offeringId "${sourcePurchase.offeringId}"`
+      );
+    }
+    if (sourcePurchase.restaurantId !== item.restaurantId) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": restaurantId "${item.restaurantId}" does not match purchase restaurantId "${sourcePurchase.restaurantId}"`
+      );
+    }
+    if (sourcePurchase.worldTime !== item.acquiredAt) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": acquiredAt "${item.acquiredAt}" does not match purchase worldTime "${sourcePurchase.worldTime}"`
+      );
+    }
+  }
+
+  for (const p of candidate.purchases as PurchaseRecord[]) {
+    if (qualifyingOfferingIds.has(p.offeringId)) {
+      if (!itemBySourcePurchaseId.has(p.id)) {
+        throw new Error(
+          `Missing OwnedItem for qualifying purchase "${p.id}" (offering: "${p.offeringId}")`
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Migrates a valid Version 12 WorldState to Version 13.
+ * Unifies coffeeCompletions into activityCompletions and populates
+ * durationMs, offeringId, and truthfully resolved itemId on active player activities.
+ */
+export function migrateWorldStateV12ToV13(v12: WorldStateV12): WorldState {
+  // 1. Map coffeeCompletions -> activityCompletions preserving legacy IDs verbatim
+  const migratedCompletions: ActivityCompletionRecord[] = (v12.coffeeCompletions || []).map((c) => ({
+    id: c.id,
+    playerId: c.playerId,
+    activity: 'having-coffee' as const,
+    offeringId: 'offering:development-coffee',
+    restaurantId: c.restaurantId,
+    itemId: null,
+    startedAt: c.startedAt,
+    completedAt: c.completedAt,
+  }));
+
+  // 2. Map agents with active legacy coffee activity
+  const migratedAgents: Agent[] = v12.agents.map((agent) => {
+    if (!agent.playerActivity) {
+      return { ...agent };
+    }
+
+    const pa = agent.playerActivity;
+    let itemId: string | null = null;
+
+    if (pa.activity === 'having-coffee') {
+      const matchingItems = (v12.items || []).filter(
+        (i) =>
+          i.ownerAgentId === agent.id &&
+          i.restaurantId === pa.restaurantId &&
+          i.offeringId === 'offering:development-coffee' &&
+          i.status === 'consumed' &&
+          i.consumedAt === pa.startedAt
+      );
+
+      // Section 14 rule:
+      // 0 matches -> itemId = null
+      // 1 match   -> itemId = matchingItem.id
+      // >1 matches -> itemId = null
+      if (matchingItems.length === 1) {
+        itemId = matchingItems[0].id;
+      }
+    }
+
+    const migratedActivity: PlayerActivityState = {
+      activity: pa.activity as ConsumableActivityType,
+      startedAt: pa.startedAt,
+      completedAt: pa.completedAt,
+      durationMs: (pa as { durationMs?: number }).durationMs ?? 900000,
+      restaurantId: pa.restaurantId,
+      offeringId: (pa as { offeringId?: string }).offeringId ?? 'offering:development-coffee',
+      itemId:
+        (pa as { itemId?: string | null }).itemId !== undefined
+          ? (pa as { itemId?: string | null }).itemId!
+          : itemId,
+    };
+
+    return {
+      ...agent,
+      playerActivity: migratedActivity,
+    };
+  });
+
+  return {
+    worldId: v12.worldId,
+    version: 13,
+    worldTime: v12.worldTime,
+    places: v12.places,
+    restaurants: v12.restaurants,
+    agents: migratedAgents,
+    offerings: v12.offerings,
+    purchases: v12.purchases,
+    activityCompletions: migratedCompletions,
+    acquaintances: v12.acquaintances,
+    items: v12.items,
   };
 }

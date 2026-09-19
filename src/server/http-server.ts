@@ -87,17 +87,48 @@ const ALLOWED_COMMANDS: Record<string, CommandValidator> = {
     validate: (body) => {
       const forbiddenKeys = [
         'purchaseId',
+        'itemId',
         'amountMinor',
         'currency',
         'offeringId',
         'restaurantId',
         'consumedAt',
+        'startedAt',
+        'completedAt',
+        'durationMs',
+        'playerId',
       ];
       for (const key of forbiddenKeys) {
         if (key in body) {
           return {
             valid: false,
             error: `Command "startCoffee" forbids client-supplied economic fact "${key}"`,
+          };
+        }
+      }
+      return { valid: true };
+    },
+  },
+  startEatingPastry: {
+    validate: (body) => {
+      const forbiddenKeys = [
+        'purchaseId',
+        'itemId',
+        'amountMinor',
+        'currency',
+        'offeringId',
+        'restaurantId',
+        'consumedAt',
+        'startedAt',
+        'completedAt',
+        'durationMs',
+        'playerId',
+      ];
+      for (const key of forbiddenKeys) {
+        if (key in body) {
+          return {
+            valid: false,
+            error: `Command "startEatingPastry" forbids client-supplied economic fact "${key}"`,
           };
         }
       }

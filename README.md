@@ -824,6 +824,65 @@ export interface OwnedItem {
 - Schema version: `12` (`CURRENT_WORLD_STATE_VERSION = 12`).
 - **Automated Migration (`migrateWorldStateV11ToV12`)**: Safely updates schema version 11 files on load by synthesizing `OwnedItem` records for historical purchases and retroactively reconciling consumed items against historic coffee completion records.
 
+## Milestone 34: Unified Consumable Activity Lifecycle
+
+Milestone 34 establishes the authoritative consumable activity lifecycle for both Coffee and Pan Dulce without creating a generic activity engine or duplicating activity subsystems:
+
+### 1. Unified Consumable Action Pattern (`src/core/world-state.ts`)
+```text
+Concrete public command (startHavingCoffee / startEatingPastry)
+        ↓
+Shared bounded consumable-activity kernel (executeConsumableActivity)
+        ↓
+Precondition validation (agent, player, venue, operationalState, availability)
+        ↓
+Deterministic FIFO OwnedItem selection (oldest acquiredAt, numeric tie-breaker)
+        ↓
+State transition (item marked 'consumed', playerActivity initialized)
+        ↓
+Discrete Simulation evaluation (durationMs check, theoretical boundary)
+        ↓
+Append-only historical ledger (activityCompletions)
+```
+
+- **Colocated Activity Configurations**:
+  - `having-coffee`: `15 minutes = 900,000 ms`, offering `offering:development-coffee`, duration constant `HAVING_COFFEE_DURATION_MS = 900_000`
+  - `eating-pastry`: `15 minutes = 900,000 ms`, offering `offering:development-pastry`, duration constant `EATING_PASTRY_DURATION_MS = 900_000`
+- **Zero Architecture Sprawl**: Consumable definitions colocated in `src/core/world-state.ts`. No auxiliary `src/core/activities/eating-pastry.ts` module created.
+- **Deterministic FIFO Item Selection**: When consuming an item, the kernel scans `state.items` for eligible items (`status === 'available'`, matching `ownerAgentId`, `offeringId`, and `restaurantId`), selects the oldest by `acquiredAt` ascending (with numeric `item:<N>` tie-breaking), transitions `item.status = 'consumed'`, and records `item.consumedAt = startedAt`.
+- **Precondition Rigor & Zero Mutation**: Enforces that player exists, is located in an open restaurant offering the consumable item, possesses an eligible available item, and is not already engaged in an active uncompleted activity. Any failure aborts with zero state mutation.
+
+### 2. Generic Simulation Progression & Unified Completion Ledger
+- **Duration-Driven Completion**: `Simulation.tick()` evaluates completion generically via `agent.playerActivity.durationMs` against discrete logical World Time without hardcoded activity type switches.
+- **Theoretical Boundary Timestamping**: On completion, `completedAt` is stamped at the exact theoretical boundary (`startedAt + durationMs`), preserving mathematical invariance regardless of when ticks occur.
+- **Unified Ledger (`state.activityCompletions`)**: Replaces legacy `coffeeCompletions` with a unified historical collection:
+  ```ts
+  export interface ActivityCompletionRecord {
+    id: string; // "activity-completion:1", "activity-completion:2", ... (or legacy "coffee-completion:N")
+    playerId: string;
+    restaurantId: string;
+    startedAt: string;
+    completedAt: string;
+    activity: ConsumableActivityType;
+    offeringId: string;
+    itemId: string | null;
+  }
+  ```
+- **Historical Perception (`inspectPlayerHistory`)**: Returns unified `activityCompletions` along with a backward-compatible `coffeeCompletions` alias.
+
+### 3. Client Affordance Projection & Non-Authoritative Command Routing
+- **Projection Boundary (`src/client/projections.ts`)**: Projects `startEatingPastry` affordance (`ACT` group, `'Eat Pan Dulce (Pan Dulce)'`) when player possesses an available Pan Dulce inside an open restaurant and has no active activity in progress.
+- **Session Controller & HTTP API**: Authoritative command endpoint `POST /api/commands/startEatingPastry` routes through `SessionController.startEatingPastry`, strictly forbidding client overrides of authoritative identity or item selection fields.
+
+### 4. Schema Version 13 & Non-Fabrication Migration
+- **Schema Version**: `13` (`CURRENT_WORLD_STATE_VERSION = 13`).
+- **Non-Fabrication Migration (`migrateWorldStateV12ToV13`)**:
+  - Legacy `coffeeCompletions` are migrated to `activityCompletions` with original `coffee-completion:N` IDs preserved verbatim and `itemId: null`.
+  - Active `playerActivity` with 0 matching consumed items in `v12.items` -> sets `itemId: null`.
+  - Active `playerActivity` with exactly 1 matching consumed item in `v12.items` -> truthfully resolves `itemId: match.id`.
+  - Active `playerActivity` with >1 ambiguous matching consumed items in `v12.items` -> sets `itemId: null` (never guessing or fabricating).
+  - Subsequent runtime completion events sequence monotonically without ID collisions.
+
 ## Getting Started
 
 ### 1. Install Dependencies
@@ -834,7 +893,7 @@ npm install
 
 ### 2. Run Tests
 
-Executes all **606 automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, and inventory lifecycle tests across 37 test suites**:
+Executes all **632 automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, inventory, and activity lifecycle tests across 39 test suites**:
 
 ```bash
 npm test

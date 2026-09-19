@@ -11,13 +11,13 @@ import {
 import { createDevelopmentSeedWorld } from '../src/core/seed.js';
 
 describe('WorldState', () => {
-  test('creates initial WorldState with seed entities, version 12, and clock time', () => {
+  test('creates initial WorldState with seed entities, version 13, and clock time', () => {
     const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
     const state = createInitialWorldState(clock);
 
     assert.equal(state.worldId, DEFAULT_WORLD_ID);
     assert.equal(state.version, CURRENT_WORLD_STATE_VERSION);
-    assert.equal(state.version, 12);
+    assert.equal(state.version, 13);
     assert.equal(state.worldTime, '2026-09-14T08:00:00.000Z');
     assert.equal(state.places.length, 8);
     assert.equal(state.restaurants.length, 1);
@@ -40,7 +40,7 @@ describe('WorldState', () => {
     assert.equal(state.offerings[0].priceMinor, 500);
     assert.equal(state.offerings[0].currency, 'USD');
     assert.equal(state.purchases.length, 0);
-    assert.equal(state.coffeeCompletions.length, 0);
+    assert.equal(state.activityCompletions.length, 0);
     assert.equal(state.acquaintances.length, 0);
     assert.equal(state.items.length, 0);
   });
@@ -53,13 +53,13 @@ describe('WorldState', () => {
     const snapshot = snapshotWorldState(clock, initial);
 
     assert.equal(snapshot.worldTime, '2026-09-14T08:00:05.000Z');
-    assert.equal(snapshot.version, 12);
+    assert.equal(snapshot.version, 13);
     assert.deepEqual(snapshot.places, initial.places);
     assert.deepEqual(snapshot.restaurants, initial.restaurants);
     assert.deepEqual(snapshot.agents, initial.agents);
     assert.deepEqual(snapshot.offerings, initial.offerings);
     assert.deepEqual(snapshot.purchases, initial.purchases);
-    assert.deepEqual(snapshot.coffeeCompletions, initial.coffeeCompletions);
+    assert.deepEqual(snapshot.activityCompletions, initial.activityCompletions);
     assert.deepEqual(snapshot.acquaintances, initial.acquaintances);
     assert.deepEqual(snapshot.items, initial.items);
   });
@@ -75,7 +75,7 @@ describe('WorldState', () => {
     assert.deepEqual(parsed, state);
   });
 
-  test('validateWorldState succeeds for valid version 12 seed state', () => {
+  test('validateWorldState succeeds for valid version 13 seed state', () => {
     const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
     const state = createInitialWorldState(clock);
 
@@ -91,7 +91,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v1State),
-      /Unsupported WorldState version: 1\. Expected version 12/
+      /Unsupported WorldState version: 1\. Expected version 13/
     );
   });
 
@@ -118,7 +118,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v2State),
-      /Unsupported WorldState version: 2\. Expected version 12/
+      /Unsupported WorldState version: 2\. Expected version 13/
     );
   });
 
@@ -147,7 +147,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v3State),
-      /Unsupported WorldState version: 3\. Expected version 12/
+      /Unsupported WorldState version: 3\. Expected version 13/
     );
   });
 
@@ -169,7 +169,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v4State),
-      /Unsupported WorldState version: 4\. Expected version 12/
+      /Unsupported WorldState version: 4\. Expected version 13/
     );
   });
 
@@ -186,7 +186,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v5State),
-      /Unsupported WorldState version: 5\. Expected version 12/
+      /Unsupported WorldState version: 5\. Expected version 13/
     );
   });
 
@@ -219,7 +219,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v6State),
-      /Unsupported WorldState version: 6\. Expected version 12/
+      /Unsupported WorldState version: 6\. Expected version 13/
     );
   });
 
@@ -247,7 +247,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v7State),
-      /Unsupported WorldState version: 7\. Expected version 12/
+      /Unsupported WorldState version: 7\. Expected version 13/
     );
   });
 
@@ -265,7 +265,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v8State),
-      /Unsupported WorldState version: 8\. Expected version 12/
+      /Unsupported WorldState version: 8\. Expected version 13/
     );
   });
 
@@ -284,7 +284,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v9State),
-      /Unsupported WorldState version: 9\. Expected version 12/
+      /Unsupported WorldState version: 9\. Expected version 13/
     );
   });
 
@@ -304,7 +304,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v10State),
-      /Unsupported WorldState version: 10\. Expected version 12/
+      /Unsupported WorldState version: 10\. Expected version 13/
     );
   });
 
@@ -325,7 +325,29 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v11State),
-      /Unsupported WorldState version: 11\. Expected version 12/
+      /Unsupported WorldState version: 11\. Expected version 13/
+    );
+  });
+
+  test('validateWorldState explicitly rejects version 12 persisted state', () => {
+    const seed = createDevelopmentSeedWorld();
+    const v12State = {
+      worldId: 'juarez-el-paso',
+      version: 12,
+      worldTime: '2026-09-14T08:00:00.000Z',
+      places: seed.places,
+      restaurants: seed.restaurants,
+      agents: seed.agents,
+      offerings: seed.offerings,
+      purchases: [],
+      coffeeCompletions: [],
+      acquaintances: [],
+      items: [],
+    };
+
+    assert.throws(
+      () => validateWorldState(v12State),
+      /Unsupported WorldState version: 12\. Expected version 13/
     );
   });
 
@@ -337,14 +359,14 @@ describe('WorldState', () => {
       () =>
         validateWorldState({
           worldId: 'other-region',
-          version: 12,
+          version: 13,
           worldTime: '2026-09-14T08:00:00.000Z',
           places: [],
           restaurants: [],
           agents: [],
           offerings: [],
           purchases: [],
-          coffeeCompletions: [],
+          activityCompletions: [],
           acquaintances: [],
           items: [],
         }),
@@ -367,14 +389,14 @@ describe('WorldState', () => {
 
     const invalidState = {
       worldId: 'juarez-el-paso',
-      version: 12,
+      version: 13,
       worldTime: '2026-09-14T08:00:00.000Z',
       places: seed.places,
       restaurants: [collidingRestaurant],
       agents: seed.agents,
       offerings: [],
       purchases: [],
-      coffeeCompletions: [],
+      activityCompletions: [],
       acquaintances: [],
       items: [],
     };

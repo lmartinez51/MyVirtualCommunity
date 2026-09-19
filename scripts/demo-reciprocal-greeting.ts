@@ -38,7 +38,7 @@ console.log(`Initial World Time: ${state.worldTime}`);
 console.log(`Player Location:    ${player.locationId}`);
 console.log(`NPC Location:       ${npc.locationId} (${npc.activityState})`);
 
-assert.equal(state.version, 12);
+assert.equal(state.version, 13);
 assert.equal(player.locationId, 'building:development-building');
 assert.equal(npc.locationId, 'building:development-residence');
 assert.equal(npc.activityState, 'idle');
@@ -135,7 +135,7 @@ const loadedState = persistence.load()!;
 assert.ok(loadedState !== null);
 assert.doesNotThrow(() => validateWorldState(loadedState));
 console.log(`Restored Version:   ${loadedState.version}`);
-assert.equal(loadedState.version, 12);
+assert.equal(loadedState.version, 13);
 
 if (existsSync(demoPath)) {
   unlinkSync(demoPath);

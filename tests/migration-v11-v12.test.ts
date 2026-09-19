@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { writeFileSync, readFileSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
 import {
   WorldStateV11,
-  validateWorldState,
+  validateWorldStateV12,
   validateWorldStateV11,
   migrateWorldStateV11ToV12,
   DEVELOPMENT_PASTRY_OFFERING_ID,
@@ -55,7 +55,7 @@ describe('Milestone 33: Schema Version 11 -> 12 Migration & Persistence Safety',
       const v12 = migrateWorldStateV11ToV12(v11);
       assert.equal(v12.version, 12);
       assert.deepEqual(v12.items, []);
-      assert.doesNotThrow(() => validateWorldState(v12));
+      assert.doesNotThrow(() => validateWorldStateV12(v12));
     });
 
     test('preserves unconsumed purchases with null or undefined consumedAt as available items', () => {
@@ -96,7 +96,7 @@ describe('Milestone 33: Schema Version 11 -> 12 Migration & Persistence Safety',
       assert.equal(v12.items[1].status, 'available');
       assert.equal(v12.items[1].consumedAt, null);
 
-      assert.doesNotThrow(() => validateWorldState(v12));
+      assert.doesNotThrow(() => validateWorldStateV12(v12));
     });
 
     test('migrates consumed legacy purchases to consumed items preserving timestamp', () => {
@@ -118,7 +118,7 @@ describe('Milestone 33: Schema Version 11 -> 12 Migration & Persistence Safety',
       assert.equal(v12.items[0].status, 'consumed');
       assert.equal(v12.items[0].consumedAt, consumedTime);
 
-      assert.doesNotThrow(() => validateWorldState(v12));
+      assert.doesNotThrow(() => validateWorldStateV12(v12));
     });
 
     test('allocates dense item IDs when qualifying and non-qualifying purchases are interleaved', () => {
@@ -172,7 +172,7 @@ describe('Milestone 33: Schema Version 11 -> 12 Migration & Persistence Safety',
       assert.equal(v12.items[1].id, 'item:2'); // Dense ID: item:2, not item:3!
       assert.equal(v12.items[1].sourcePurchaseId, 'purchase:3');
 
-      assert.doesNotThrow(() => validateWorldState(v12));
+      assert.doesNotThrow(() => validateWorldStateV12(v12));
     });
 
     test('reconstructs retired Pan Dulce purchase with name "Pan Dulce"', () => {
@@ -193,7 +193,7 @@ describe('Milestone 33: Schema Version 11 -> 12 Migration & Persistence Safety',
       assert.equal(v12.items[0].name, 'Pan Dulce');
       assert.equal(v12.items[0].offeringId, DEVELOPMENT_PASTRY_OFFERING_ID);
 
-      assert.doesNotThrow(() => validateWorldState(v12));
+      assert.doesNotThrow(() => validateWorldStateV12(v12));
     });
   });
 
@@ -218,19 +218,19 @@ describe('Milestone 33: Schema Version 11 -> 12 Migration & Persistence Safety',
       // Load via persistence
       const loaded = persistence.load();
       assert.notEqual(loaded, null);
-      assert.equal(loaded?.version, 12);
+      assert.equal(loaded?.version, 13);
       assert.equal(loaded?.items.length, 1);
       assert.equal(loaded?.items[0].id, 'item:1');
 
-      // Verify file on disk is now upgraded to version 12
+      // Verify file on disk is now upgraded to version 13
       const onDiskRaw = readFileSync(testFilePath, 'utf-8');
       const onDisk = JSON.parse(onDiskRaw);
-      assert.equal(onDisk.version, 12);
+      assert.equal(onDisk.version, 13);
       assert.equal(onDisk.items.length, 1);
 
-      // Repeat load is idempotent and directly loads v12 without re-migration
+      // Repeat load is idempotent and directly loads v13 without re-migration
       const repeatLoaded = persistence.load();
-      assert.equal(repeatLoaded?.version, 12);
+      assert.equal(repeatLoaded?.version, 13);
       assert.deepEqual(repeatLoaded, loaded);
     });
 

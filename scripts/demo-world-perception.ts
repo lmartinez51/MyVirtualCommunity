@@ -42,7 +42,7 @@ console.log(`World Version:      ${state.version}`);
 console.log(`Initial World Time: ${state.worldTime}`);
 console.log(`Player Location:    ${player.locationId}`);
 console.log(`NPC Location:       ${npc.locationId} (seeded independently)`);
-assert.equal(state.version, 12);
+assert.equal(state.version, 13);
 assert.equal(player.locationId, 'building:development-building');
 assert.equal(npc.locationId, 'building:development-residence');
 
@@ -253,7 +253,7 @@ const persistenceB = new LocalFilePersistence(demoPath);
 const stateB = persistenceB.load()!;
 assert.ok(stateB !== null);
 assert.doesNotThrow(() => validateWorldState(stateB));
-assert.equal(stateB.version, 12);
+assert.equal(stateB.version, 13);
 
 const playerB = stateB.agents.find((a) => a.id === 'agent:dev-player')!;
 const npcB = stateB.agents.find((a) => a.id === 'agent:dev-npc')!;

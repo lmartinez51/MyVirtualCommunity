@@ -81,7 +81,7 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
       // Verify coffee completion record
       assert.equal(result.history.coffeeCompletions.length, 1);
       const completion = result.history.coffeeCompletions[0];
-      assert.equal(completion.id, 'coffee-completion:1');
+      assert.equal(completion.id, 'activity-completion:1');
       assert.equal(completion.playerId, 'agent:dev-player');
       assert.equal(completion.restaurantId, 'restaurant:development-restaurant');
       assert.equal(completion.startedAt, OPEN_TIME);
@@ -198,9 +198,12 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
       );
 
       // Add coffee completions for both players
-      state.coffeeCompletions.push(
+      state.activityCompletions.push(
         {
           id: 'coffee-completion:1',
+          activity: 'having-coffee',
+          offeringId: 'offering:development-coffee',
+          itemId: null,
           playerId: 'agent:dev-player',
           restaurantId: 'restaurant:development-restaurant',
           startedAt: OPEN_TIME,
@@ -208,6 +211,9 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
         },
         {
           id: 'coffee-completion:2',
+          activity: 'having-coffee',
+          offeringId: 'offering:development-coffee',
+          itemId: null,
           playerId: 'agent:other-player',
           restaurantId: 'restaurant:development-restaurant',
           startedAt: OPEN_TIME,
@@ -276,10 +282,10 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
       state.purchases.push(...records);
 
       const completions: CoffeeCompletionRecord[] = [
-        { id: 'coffee-completion:1', playerId: 'agent:dev-player', restaurantId: 'restaurant:development-restaurant', startedAt: '2026-09-14T09:00:00.000Z', completedAt: '2026-09-14T09:15:00.000Z' },
-        { id: 'coffee-completion:2', playerId: 'agent:dev-player', restaurantId: 'restaurant:development-restaurant', startedAt: '2026-09-14T10:00:00.000Z', completedAt: '2026-09-14T10:15:00.000Z' },
+        { id: 'coffee-completion:1', activity: 'having-coffee', offeringId: 'offering:development-coffee', itemId: null, playerId: 'agent:dev-player', restaurantId: 'restaurant:development-restaurant', startedAt: '2026-09-14T09:00:00.000Z', completedAt: '2026-09-14T09:15:00.000Z' },
+        { id: 'coffee-completion:2', activity: 'having-coffee', offeringId: 'offering:development-coffee', itemId: null, playerId: 'agent:dev-player', restaurantId: 'restaurant:development-restaurant', startedAt: '2026-09-14T10:00:00.000Z', completedAt: '2026-09-14T10:15:00.000Z' },
       ];
-      state.coffeeCompletions.push(...completions);
+      state.activityCompletions.push(...completions);
 
       const result = inspectPlayerHistory(state, 'agent:dev-player');
       assert.equal(result.success, true);
@@ -319,6 +325,9 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
       });
       result.history.coffeeCompletions.push({
         id: 'coffee-completion:tampered',
+        activity: 'having-coffee',
+        offeringId: 'offering:development-coffee',
+        itemId: null,
         playerId: 'agent:dev-player',
         restaurantId: 'restaurant:development-restaurant',
         startedAt: '2099-01-01T00:00:00.000Z',
@@ -334,9 +343,9 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
       assert.equal(state.purchases[0].id, 'purchase:1');
       assert.equal(state.purchases[0].amountMinor, 500);
 
-      assert.equal(state.coffeeCompletions.length, 1);
-      assert.equal(state.coffeeCompletions[0].id, 'coffee-completion:1');
-      assert.equal(state.coffeeCompletions[0].completedAt, '2026-09-14T09:15:00.000Z');
+      assert.equal(state.activityCompletions.length, 1);
+      assert.equal(state.activityCompletions[0].id, 'activity-completion:1');
+      assert.equal(state.activityCompletions[0].completedAt, '2026-09-14T09:15:00.000Z');
     });
   });
 
@@ -365,7 +374,7 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
         const stateB = persistenceB.load();
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
-        assert.equal(stateB.version, 12);
+        assert.equal(stateB.version, 13);
 
         // Inspect Session B
         const resultB = inspectPlayerHistory(stateB, 'agent:dev-player');

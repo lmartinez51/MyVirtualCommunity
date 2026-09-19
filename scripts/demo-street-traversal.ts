@@ -31,7 +31,7 @@ console.log('=== STEP 1: Bootstrapping development world at 09:00:00 UTC ===');
 const clock = WorldClock.create('2026-09-14T09:00:00.000Z');
 const state = createInitialWorldState(clock);
 validateWorldState(state);
-assert.equal(state.version, 12);
+assert.equal(state.version, 13);
 assert.equal(state.places.length, 8);
 
 const sim = new Simulation(clock, state, { silent: true });
@@ -159,7 +159,7 @@ console.log(`Saved world state snapshot to ${demoPath}`);
 const restoredState = persistence.load();
 assert.ok(restoredState !== null);
 validateWorldState(restoredState);
-assert.equal(restoredState.version, 12);
+assert.equal(restoredState.version, 13);
 assert.equal(restoredState.places.length, 8);
 
 const restoredPlayer = restoredState.agents.find((a) => a.id === 'agent:dev-player')!;

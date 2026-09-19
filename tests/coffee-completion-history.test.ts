@@ -59,10 +59,10 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
   // 1. Single Completion Creation
   // =========================================================================
   describe('1. Single Completion Creation', () => {
-    test('completed activity creates exactly one CoffeeCompletionRecord in state.coffeeCompletions', () => {
+    test('completed activity creates exactly one CoffeeCompletionRecord in state.activityCompletions', () => {
       const { clock, state, sim } = setupStartedCoffeeWorld();
 
-      assert.equal(state.coffeeCompletions.length, 0);
+      assert.equal(state.activityCompletions.length, 0);
 
       // Advance clock to exact 15m boundary
       clock.advance(15 * 60_000);
@@ -72,10 +72,10 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
       assert.equal(tickResult.playerActivityTransitions![0].completedAt, '2026-09-14T09:15:00.000Z');
 
       // Exactly one historical fact recorded
-      assert.equal(state.coffeeCompletions.length, 1);
-      const record = state.coffeeCompletions[0];
+      assert.equal(state.activityCompletions.length, 1);
+      const record = state.activityCompletions[0];
 
-      assert.equal(record.id, 'coffee-completion:1');
+      assert.equal(record.id, 'activity-completion:1');
       assert.equal(record.playerId, 'agent:dev-player');
       assert.equal(record.restaurantId, 'restaurant:development-restaurant');
       assert.equal(record.startedAt, '2026-09-14T09:00:00.000Z');
@@ -96,15 +96,15 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
       // Advance 14m 59s: still active, 0 records
       clock.advance(14 * 60_000 + 59_000);
       sim.tick();
-      assert.equal(state.coffeeCompletions.length, 0);
+      assert.equal(state.activityCompletions.length, 0);
 
       // Advance remaining 1 second to reach exact boundary
       clock.advance(1000);
       assert.equal(clock.getTime(), '2026-09-14T09:15:00.000Z');
       sim.tick();
 
-      assert.equal(state.coffeeCompletions.length, 1);
-      const record = state.coffeeCompletions[0];
+      assert.equal(state.activityCompletions.length, 1);
+      const record = state.activityCompletions[0];
       assert.equal(record.startedAt, '2026-09-14T09:00:00.000Z');
       assert.equal(record.completedAt, '2026-09-14T09:15:00.000Z');
       assert.equal(
@@ -127,8 +127,8 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
 
       sim.tick();
 
-      assert.equal(state.coffeeCompletions.length, 1);
-      const record = state.coffeeCompletions[0];
+      assert.equal(state.activityCompletions.length, 1);
+      const record = state.activityCompletions[0];
       assert.equal(record.startedAt, '2026-09-14T09:00:00.000Z');
       assert.equal(
         record.completedAt,
@@ -147,46 +147,43 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
 
       clock.advance(15 * 60_000); // 09:15:00
       sim.tick();
-      assert.equal(state.coffeeCompletions.length, 1);
+      assert.equal(state.activityCompletions.length, 1);
 
       // Tick at 09:16:00
       clock.advance(60_000);
       sim.tick();
-      assert.equal(state.coffeeCompletions.length, 1);
+      assert.equal(state.activityCompletions.length, 1);
 
       // Tick at 09:30:00
       clock.advance(14 * 60_000);
       sim.tick();
-      assert.equal(state.coffeeCompletions.length, 1);
+      assert.equal(state.activityCompletions.length, 1);
 
       // Tick at 10:00:00
       clock.advance(30 * 60_000);
       sim.tick();
-      assert.equal(state.coffeeCompletions.length, 1);
-      assert.equal(state.coffeeCompletions[0].id, 'coffee-completion:1');
+      assert.equal(state.activityCompletions.length, 1);
+      assert.equal(state.activityCompletions[0].id, 'activity-completion:1');
     });
   });
 
   // =========================================================================
-  // 5. Sequential Activities
+  // 5. Monotonic Continuity Across Sequential Completions
   // =========================================================================
-  describe('5. Sequential Activities', () => {
-    test('sequential coffee activities create separate historical records with monotonic IDs', () => {
+  describe('5. Monotonic Continuity Across Sequential Completions', () => {
+    test('sequential coffee completions produce strictly monotonic IDs', () => {
       const { clock, state, sim } = setupStartedCoffeeWorld();
 
       // Complete Coffee #1 at 09:15:00
       clock.advance(15 * 60_000);
       sim.tick();
-      assert.equal(state.coffeeCompletions.length, 1);
-      assert.equal(state.coffeeCompletions[0].id, 'coffee-completion:1');
-      assert.equal(state.coffeeCompletions[0].completedAt, '2026-09-14T09:15:00.000Z');
+      assert.equal(state.activityCompletions.length, 1);
+      assert.equal(state.activityCompletions[0].id, 'activity-completion:1');
+      assert.equal(state.activityCompletions[0].completedAt, '2026-09-14T09:15:00.000Z');
 
       // Advance to 10:00:00 and start Coffee #2
       clock.advance(45 * 60_000);
       sim.tick();
-      assert.equal(clock.getTime(), '2026-09-14T10:00:00.000Z');
-      assert.equal(state.worldTime, '2026-09-14T10:00:00.000Z');
-
       const receipt2 = purchaseOffering(
         state,
         'agent:dev-player',
@@ -196,21 +193,21 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
       );
       assert.equal(receipt2.success, true);
 
-      const startResult2 = startHavingCoffee(state, 'agent:dev-player', receipt2);
-      assert.equal(startResult2.success, true);
+      const start2 = startHavingCoffee(state, 'agent:dev-player', receipt2);
+      assert.equal(start2.success, true);
 
-      // Advance 15 minutes to 10:15:00 and tick
+      // Complete Coffee #2 at 10:15:00
       clock.advance(15 * 60_000);
       sim.tick();
 
-      assert.equal(state.coffeeCompletions.length, 2);
-      assert.equal(state.coffeeCompletions[0].id, 'coffee-completion:1');
-      assert.equal(state.coffeeCompletions[0].startedAt, '2026-09-14T09:00:00.000Z');
-      assert.equal(state.coffeeCompletions[0].completedAt, '2026-09-14T09:15:00.000Z');
+      assert.equal(state.activityCompletions.length, 2);
+      assert.equal(state.activityCompletions[0].id, 'activity-completion:1');
+      assert.equal(state.activityCompletions[0].startedAt, '2026-09-14T09:00:00.000Z');
+      assert.equal(state.activityCompletions[0].completedAt, '2026-09-14T09:15:00.000Z');
 
-      assert.equal(state.coffeeCompletions[1].id, 'coffee-completion:2');
-      assert.equal(state.coffeeCompletions[1].startedAt, '2026-09-14T10:00:00.000Z');
-      assert.equal(state.coffeeCompletions[1].completedAt, '2026-09-14T10:15:00.000Z');
+      assert.equal(state.activityCompletions[1].id, 'activity-completion:2');
+      assert.equal(state.activityCompletions[1].startedAt, '2026-09-14T10:00:00.000Z');
+      assert.equal(state.activityCompletions[1].completedAt, '2026-09-14T10:15:00.000Z');
 
       assert.doesNotThrow(() => validateWorldState(state));
     });
@@ -223,15 +220,15 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
     test('active coffee creates zero completion records prior to completion boundary', () => {
       const { clock, state, sim } = setupStartedCoffeeWorld();
 
-      assert.equal(state.coffeeCompletions.length, 0);
+      assert.equal(state.activityCompletions.length, 0);
 
       clock.advance(5 * 60_000);
       sim.tick();
-      assert.equal(state.coffeeCompletions.length, 0);
+      assert.equal(state.activityCompletions.length, 0);
 
       clock.advance(5 * 60_000);
       sim.tick();
-      assert.equal(state.coffeeCompletions.length, 0);
+      assert.equal(state.activityCompletions.length, 0);
     });
   });
 
@@ -261,8 +258,8 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
       assert.equal(clock.getTime(), '2026-09-14T09:15:00.000Z');
       sim.tick();
 
-      assert.equal(state.coffeeCompletions.length, 1);
-      const record = state.coffeeCompletions[0];
+      assert.equal(state.activityCompletions.length, 1);
+      const record = state.activityCompletions[0];
 
       // Crucial assertion: restaurantId reflects the restaurant where coffee was started
       assert.equal(record.restaurantId, 'restaurant:development-restaurant');
@@ -284,8 +281,8 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
       clock.advance(15 * 60_000);
       sim.tick();
 
-      assert.equal(state.coffeeCompletions.length, 1);
-      const originalRecord = { ...state.coffeeCompletions[0] };
+      assert.equal(state.activityCompletions.length, 1);
+      const originalRecord = { ...state.activityCompletions[0] };
 
       // 1. Restaurant closes at 17:00 UTC
       clock.advance(8 * 3600_000); // 17:15 UTC
@@ -301,7 +298,7 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
       transitionAgentLocation(state, 'agent:dev-player', 'neighborhood:development-neighborhood');
 
       // 4. Verify historical record is strictly identical
-      assert.deepEqual(state.coffeeCompletions[0], originalRecord);
+      assert.deepEqual(state.activityCompletions[0], originalRecord);
       assert.doesNotThrow(() => validateWorldState(state));
     });
   });
@@ -310,29 +307,32 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
   // 10. Snapshot Isolation
   // =========================================================================
   describe('10. Snapshot Isolation', () => {
-    test('mutating snapshot coffeeCompletions does NOT alter original state', () => {
+    test('mutating snapshot activityCompletions does NOT alter original state', () => {
       const { clock, state, sim } = setupStartedCoffeeWorld();
 
       clock.advance(15 * 60_000);
       sim.tick();
-      assert.equal(state.coffeeCompletions.length, 1);
+      assert.equal(state.activityCompletions.length, 1);
 
       const snapshot = snapshotWorldState(clock, state);
-      assert.equal(snapshot.coffeeCompletions.length, 1);
+      assert.equal(snapshot.activityCompletions.length, 1);
 
       // Mutate snapshot's array
-      snapshot.coffeeCompletions.push({
+      snapshot.activityCompletions.push({
         id: 'coffee-completion:999',
+        activity: 'having-coffee',
+        offeringId: 'offering:development-coffee',
+        itemId: null,
         playerId: 'agent:dev-player',
         restaurantId: 'restaurant:development-restaurant',
         startedAt: clock.getTime(),
         completedAt: clock.getTime(),
       });
 
-      assert.equal(snapshot.coffeeCompletions.length, 2);
+      assert.equal(snapshot.activityCompletions.length, 2);
       // Original state array remains isolated
-      assert.equal(state.coffeeCompletions.length, 1);
-      assert.equal(state.coffeeCompletions[0].id, 'coffee-completion:1');
+      assert.equal(state.activityCompletions.length, 1);
+      assert.equal(state.activityCompletions[0].id, 'activity-completion:1');
     });
   });
 
@@ -349,7 +349,7 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
 
         clock.advance(15 * 60_000);
         sim.tick();
-        assert.equal(state.coffeeCompletions.length, 1);
+        assert.equal(state.activityCompletions.length, 1);
 
         // Save Session A
         const persistenceA = new LocalFilePersistence(testFile);
@@ -361,10 +361,10 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
         assert.equal(stateB.version, CURRENT_WORLD_STATE_VERSION);
-        assert.equal(stateB.coffeeCompletions.length, 1);
+        assert.equal(stateB.activityCompletions.length, 1);
 
-        const restoredRecord = stateB.coffeeCompletions[0];
-        assert.equal(restoredRecord.id, 'coffee-completion:1');
+        const restoredRecord = stateB.activityCompletions[0];
+        assert.equal(restoredRecord.id, 'activity-completion:1');
         assert.equal(restoredRecord.playerId, 'agent:dev-player');
         assert.equal(restoredRecord.restaurantId, 'restaurant:development-restaurant');
         assert.equal(restoredRecord.completedAt, '2026-09-14T09:15:00.000Z');
@@ -394,8 +394,8 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
         simB.tick();
 
         // Sequence continued to coffee-completion:2
-        assert.equal(stateB.coffeeCompletions.length, 2);
-        assert.equal(stateB.coffeeCompletions[1].id, 'coffee-completion:2');
+        assert.equal(stateB.activityCompletions.length, 2);
+        assert.equal(stateB.activityCompletions[1].id, 'activity-completion:2');
       } finally {
         if (existsSync(tmpDir)) {
           rmSync(tmpDir, { recursive: true, force: true });
@@ -410,8 +410,11 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
   describe('12. Referential Integrity & Validation Rules', () => {
     test('validateWorldState rejects record referencing non-existent agent', () => {
       const { state } = setupOpenWorld();
-      state.coffeeCompletions.push({
+      state.activityCompletions.push({
         id: 'coffee-completion:1',
+        activity: 'having-coffee',
+        offeringId: 'offering:development-coffee',
+        itemId: null,
         playerId: 'agent:ghost',
         restaurantId: 'restaurant:development-restaurant',
         startedAt: '2026-09-14T09:00:00.000Z',
@@ -426,8 +429,11 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
 
     test('validateWorldState rejects record referencing NPC as player', () => {
       const { state } = setupOpenWorld();
-      state.coffeeCompletions.push({
+      state.activityCompletions.push({
         id: 'coffee-completion:1',
+        activity: 'having-coffee',
+        offeringId: 'offering:development-coffee',
+        itemId: null,
         playerId: 'agent:dev-npc',
         restaurantId: 'restaurant:development-restaurant',
         startedAt: '2026-09-14T09:00:00.000Z',
@@ -442,8 +448,11 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
 
     test('validateWorldState rejects record referencing non-existent restaurant', () => {
       const { state } = setupOpenWorld();
-      state.coffeeCompletions.push({
+      state.activityCompletions.push({
         id: 'coffee-completion:1',
+        activity: 'having-coffee',
+        offeringId: 'offering:development-coffee',
+        itemId: null,
         playerId: 'agent:dev-player',
         restaurantId: 'restaurant:ghost',
         startedAt: '2026-09-14T09:00:00.000Z',
@@ -460,17 +469,20 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
       const { state } = setupOpenWorld();
       const rec: CoffeeCompletionRecord = {
         id: 'coffee-completion:1',
+        activity: 'having-coffee',
+        offeringId: 'offering:development-coffee',
+        itemId: null,
         playerId: 'agent:dev-player',
         restaurantId: 'restaurant:development-restaurant',
         startedAt: '2026-09-14T09:00:00.000Z',
         completedAt: '2026-09-14T09:15:00.000Z',
       };
-      state.coffeeCompletions.push(rec);
-      state.coffeeCompletions.push({ ...rec });
+      state.activityCompletions.push(rec);
+      state.activityCompletions.push({ ...rec });
 
       assert.throws(
         () => validateWorldState(state),
-        /Duplicate coffee completion record id found: "coffee-completion:1"/
+        /Duplicate activity completion record id found: "coffee-completion:1"/
       );
     });
   });
@@ -481,8 +493,11 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
   describe('13 & 14. Timestamps & Duration Invariants', () => {
     test('validateWorldState rejects invalid startedAt or completedAt timestamp formats', () => {
       const { state } = setupOpenWorld();
-      state.coffeeCompletions.push({
+      state.activityCompletions.push({
         id: 'coffee-completion:1',
+        activity: 'having-coffee',
+        offeringId: 'offering:development-coffee',
+        itemId: null,
         playerId: 'agent:dev-player',
         restaurantId: 'restaurant:development-restaurant',
         startedAt: 'not-a-timestamp',
@@ -494,8 +509,8 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
         /startedAt must be a valid ISO-8601 timestamp/
       );
 
-      state.coffeeCompletions[0].startedAt = '2026-09-14T09:00:00.000Z';
-      state.coffeeCompletions[0].completedAt = 'garbage';
+      state.activityCompletions[0].startedAt = '2026-09-14T09:00:00.000Z';
+      state.activityCompletions[0].completedAt = 'garbage';
 
       assert.throws(
         () => validateWorldState(state),
@@ -505,8 +520,11 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
 
     test('validateWorldState rejects completedAt earlier than startedAt', () => {
       const { state } = setupOpenWorld();
-      state.coffeeCompletions.push({
+      state.activityCompletions.push({
         id: 'coffee-completion:1',
+        activity: 'having-coffee',
+        offeringId: 'offering:development-coffee',
+        itemId: null,
         playerId: 'agent:dev-player',
         restaurantId: 'restaurant:development-restaurant',
         startedAt: '2026-09-14T09:15:00.000Z',
@@ -521,8 +539,11 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
 
     test('validateWorldState rejects duration not exactly 15 minutes', () => {
       const { state } = setupOpenWorld();
-      state.coffeeCompletions.push({
+      state.activityCompletions.push({
         id: 'coffee-completion:1',
+        activity: 'having-coffee',
+        offeringId: 'offering:development-coffee',
+        itemId: null,
         playerId: 'agent:dev-player',
         restaurantId: 'restaurant:development-restaurant',
         startedAt: '2026-09-14T09:00:00.000Z',
@@ -540,39 +561,44 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
   // 15 & 16. Schema Strictness
   // =========================================================================
   describe('15 & 16. Schema Version Strictness', () => {
-    test('validateWorldState accepts valid version 12 state and rejects version 11 and 10', () => {
+    test('validateWorldState accepts valid version 13 state and rejects version 12, 11 and 10', () => {
       const { state } = setupOpenWorld();
 
-      assert.equal(state.version, 12);
+      assert.equal(state.version, 13);
       assert.doesNotThrow(() => validateWorldState(state));
 
       const v10Candidate = { ...state, version: 10 };
       assert.throws(
         () => validateWorldState(v10Candidate),
-        /Unsupported WorldState version: 10\. Expected version 12/
+        /Unsupported WorldState version: 10\. Expected version 13/
       );
       const v11Candidate = { ...state, version: 11 };
       assert.throws(
         () => validateWorldState(v11Candidate),
-        /Unsupported WorldState version: 11\. Expected version 12/
+        /Unsupported WorldState version: 11\. Expected version 13/
+      );
+      const v12Candidate = { ...state, version: 12 };
+      assert.throws(
+        () => validateWorldState(v12Candidate),
+        /Unsupported WorldState version: 12\. Expected version 13/
       );
     });
 
-    test('validateWorldState rejects missing or non-array coffeeCompletions', () => {
+    test('validateWorldState rejects missing or non-array activityCompletions', () => {
       const { state } = setupOpenWorld();
 
       const missingCompletions = { ...state } as Record<string, unknown>;
-      delete missingCompletions.coffeeCompletions;
+      delete missingCompletions.activityCompletions;
 
       assert.throws(
         () => validateWorldState(missingCompletions),
-        /Invalid WorldState: coffeeCompletions must be an array/
+        /Invalid WorldState: activityCompletions must be an array/
       );
 
-      const nonArrayCompletions = { ...state, coffeeCompletions: 'not-an-array' };
+      const nonArrayCompletions = { ...state, activityCompletions: 'not-an-array' };
       assert.throws(
         () => validateWorldState(nonArrayCompletions),
-        /Invalid WorldState: coffeeCompletions must be an array/
+        /Invalid WorldState: activityCompletions must be an array/
       );
     });
   });
@@ -592,7 +618,7 @@ describe('Milestone 14: Completed Player Activity as Persistent Historical Fact 
 
       const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
       assert.equal(player.locationId, 'neighborhood:development-neighborhood');
-      assert.equal(state.coffeeCompletions[0].restaurantId, 'restaurant:development-restaurant');
+      assert.equal(state.activityCompletions[0].restaurantId, 'restaurant:development-restaurant');
 
       assert.doesNotThrow(() => validateWorldState(state));
     });

@@ -1,7 +1,7 @@
 import { WorldClock } from './clock.js';
 import {
   WorldState,
-  CoffeeCompletionRecord,
+  ActivityCompletionRecord,
   DEVELOPMENT_PASTRY_OFFERING_ID,
   makeDevelopmentOfferingAvailable,
   retireDevelopmentOffering,
@@ -11,10 +11,6 @@ import {
   RestaurantOperationalState,
   evaluateDevelopmentRestaurantOperationalRule,
 } from './entities/restaurant.js';
-import {
-  calculateHavingCoffeeCompletionTime,
-  isHavingCoffeeCompleted,
-} from './activities/having-coffee.js';
 import { DEVELOPMENT_NPC_WORK_SCHEDULE } from './development-npc-schedule.js';
 
 export { evaluateDevelopmentRestaurantOperationalRule };
@@ -431,31 +427,38 @@ export class Simulation {
       }
 
       const activity = agent.playerActivity;
-      if (activity?.activity === 'having-coffee' && activity.completedAt === null) {
-        if (isHavingCoffeeCompleted(activity.startedAt, worldTime)) {
-          const exactCompletionTime = calculateHavingCoffeeCompletionTime(activity.startedAt);
-          activity.completedAt = exactCompletionTime;
+      if (activity && activity.completedAt === null) {
+        const startedAtMs = Date.parse(activity.startedAt);
+        const completionTimeMs = startedAtMs + activity.durationMs;
+        const currentWorldTimeMs = Date.parse(worldTime);
 
-          const completionRecord: CoffeeCompletionRecord = {
-            id: `coffee-completion:${this.state.coffeeCompletions.length + 1}`,
+        if (currentWorldTimeMs >= completionTimeMs) {
+          const theoreticalCompletedAt = new Date(completionTimeMs).toISOString();
+          activity.completedAt = theoreticalCompletedAt;
+
+          const completionRecord: ActivityCompletionRecord = {
+            id: `activity-completion:${this.state.activityCompletions.length + 1}`,
             playerId: agent.id,
+            activity: activity.activity,
+            offeringId: activity.offeringId,
             restaurantId: activity.restaurantId,
+            itemId: activity.itemId,
             startedAt: activity.startedAt,
-            completedAt: exactCompletionTime,
+            completedAt: theoreticalCompletedAt,
           };
-          this.state.coffeeCompletions.push(completionRecord);
+          this.state.activityCompletions.push(completionRecord);
 
           playerActivityTransitions.push({
             agentId: agent.id,
-            activity: 'having-coffee',
+            activity: activity.activity,
             startedAt: activity.startedAt,
-            completedAt: exactCompletionTime,
+            completedAt: theoreticalCompletedAt,
             changed: true,
           });
 
           if (!this.options.silent) {
             console.log(
-              `[activity] player=${agent.id} activity=having-coffee completed=${exactCompletionTime} record=${completionRecord.id}`
+              `[activity] player=${agent.id} activity=${activity.activity} completed=${theoreticalCompletedAt} record=${completionRecord.id}`
             );
           }
         }

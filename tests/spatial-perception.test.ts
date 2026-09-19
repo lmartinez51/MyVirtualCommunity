@@ -377,7 +377,7 @@ describe('Milestone 21-A: Local Spatial Affordance Perception', () => {
 
         const loaded = persistence.load();
         assert.ok(loaded !== null);
-        assert.equal(loaded.version, 12);
+        assert.equal(loaded.version, 13);
         validateWorldState(loaded);
 
         // Reconstructed state produces identical perception

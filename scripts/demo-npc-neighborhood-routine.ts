@@ -34,7 +34,7 @@ console.log('=== STEP 1: Bootstrapping development world at 08:00:00 UTC ===');
 const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
 const state = createInitialWorldState(clock);
 validateWorldState(state);
-assert.equal(state.version, 12);
+assert.equal(state.version, 13);
 
 const sim = new Simulation(clock, state);
 
@@ -291,15 +291,15 @@ console.log(`Restored Time:      ${stateB.worldTime}`);
 console.log(`Restored Player:    ${playerB.locationId}`);
 console.log(`Restored NPC:       ${npcB.locationId} (${npcB.activityState})`);
 console.log(`Purchase Records:   ${stateB.purchases?.length ?? 0}`);
-console.log(`Coffee Records:     ${stateB.coffeeCompletions?.length ?? 0}`);
+console.log(`Activity Records:   ${stateB.activityCompletions?.length ?? 0}`);
 
-assert.equal(stateB.version, 12);
+assert.equal(stateB.version, 13);
 assert.equal(playerB.locationId, 'building:development-residence');
 assert.equal(npcB.locationId, 'building:development-residence');
 assert.equal(npcB.activityState, 'idle');
 assert.equal(npcB.activitySince, walkActivitySince);
 assert.equal((stateB.purchases?.length ?? 0) >= 2, true);
-assert.equal((stateB.coffeeCompletions?.length ?? 0) >= 1, true);
+assert.equal((stateB.activityCompletions?.length ?? 0) >= 1, true);
 
 // === STEP 10: Cleanup & Summary ===
 console.log('\n=== STEP 10: Cleaning up temporary artifacts ===');

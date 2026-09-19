@@ -30,7 +30,7 @@ console.log('=== STEP 1: Bootstrapping development world at 09:00:00 UTC ===');
 const clock = WorldClock.create('2026-09-14T09:00:00.000Z');
 const state = createInitialWorldState(clock);
 validateWorldState(state);
-assert.equal(state.version, 12);
+assert.equal(state.version, 13);
 
 const sim = new Simulation(clock, state, { silent: true });
 sim.tick(); // Restaurant opens at 09:00
@@ -160,7 +160,7 @@ console.log(`Saved world state snapshot to ${demoPath}`);
 const restored = persistence.load();
 assert.ok(restored !== null);
 validateWorldState(restored);
-assert.equal(restored.version, 12);
+assert.equal(restored.version, 13);
 
 const restoredInspect = inspectCurrentLocation(restored, player.id);
 assert.equal(restoredInspect.success, true);

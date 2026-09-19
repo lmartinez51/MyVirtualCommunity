@@ -28,7 +28,7 @@ const clockA = WorldClock.create('2026-09-14T09:00:00.000Z');
 const stateA = createInitialWorldState(clockA);
 const persistenceA = new LocalFilePersistence(DEMO_PERSISTENCE_PATH);
 persistenceA.save(stateA);
-assert.equal(stateA.version, 12);
+assert.equal(stateA.version, 13);
 console.log(`World ID:      ${stateA.worldId}`);
 console.log(`World Version: ${stateA.version}`);
 console.log(`World Time:    ${clockA.getTime()}`);
@@ -151,7 +151,7 @@ const persistenceB = new LocalFilePersistence(demoPath);
 const stateB = persistenceB.load()!;
 assert.ok(stateB !== null);
 validateWorldState(stateB);
-assert.equal(stateB.version, 12);
+assert.equal(stateB.version, 13);
 console.log(`Session B Restored World Version: ${stateB.version}`);
 console.log(`Session B Restored World Time:    ${stateB.worldTime}`);
 

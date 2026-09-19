@@ -253,7 +253,7 @@ describe('enterRestaurant Interaction', () => {
 
       const restoredPlayer = restoredState.agents.find((a) => a.id === 'agent:dev-player')!;
       assert.equal(restoredPlayer.locationId, 'restaurant:development-restaurant');
-      assert.equal(restoredState.version, 12);
+      assert.equal(restoredState.version, 13);
     } finally {
       if (existsSync(testFile)) {
         unlinkSync(testFile);

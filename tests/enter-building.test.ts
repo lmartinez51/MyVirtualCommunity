@@ -255,7 +255,7 @@ describe('Milestone 16: Bidirectional Building Traversal (enterBuilding)', () =>
       const npcStateBefore = npc.activityState;
       const restaurantOperationalBefore = restaurant.operationalState;
       const purchasesCountBefore = state.purchases.length;
-      const completionsCountBefore = state.coffeeCompletions.length;
+      const completionsCountBefore = state.activityCompletions.length;
 
       const result = enterBuilding(
         state,
@@ -273,8 +273,8 @@ describe('Milestone 16: Bidirectional Building Traversal (enterBuilding)', () =>
       assert.equal(npc.activityState, npcStateBefore, 'NPC activityState must remain unchanged');
       assert.equal(restaurant.operationalState, restaurantOperationalBefore, 'restaurant must remain unchanged');
       assert.equal(state.purchases.length, purchasesCountBefore, 'purchases must remain unchanged');
-      assert.equal(state.coffeeCompletions.length, completionsCountBefore, 'coffeeCompletions must remain unchanged');
-      assert.equal(state.version, 12, 'schema version must remain strictly 12');
+      assert.equal(state.activityCompletions.length, completionsCountBefore, 'activityCompletions must remain unchanged');
+      assert.equal(state.version, 13, 'schema version must remain strictly 13');
     });
 
     test('preserves active playerActivity across enterBuilding', () => {
@@ -380,7 +380,7 @@ describe('Milestone 16: Bidirectional Building Traversal (enterBuilding)', () =>
         const stateB = persistenceB.load();
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
-        assert.equal(stateB.version, 12, 'schema version must be preserved as 12');
+        assert.equal(stateB.version, 13, 'schema version must be preserved as 13');
 
         const playerB = stateB.agents.find((a) => a.id === 'agent:dev-player')!;
         assert.equal(playerB.locationId, 'street:development-street');
@@ -402,7 +402,7 @@ describe('Milestone 16: Bidirectional Building Traversal (enterBuilding)', () =>
         const stateC = persistenceC.load();
         assert.ok(stateC !== null);
         assert.doesNotThrow(() => validateWorldState(stateC));
-        assert.equal(stateC.version, 12);
+        assert.equal(stateC.version, 13);
         const playerC = stateC.agents.find((a) => a.id === 'agent:dev-player')!;
         assert.equal(playerC.locationId, 'building:development-building');
       } finally {

@@ -31,17 +31,17 @@ describe('LocalFilePersistence', () => {
     assert.equal(result, null);
   });
 
-  test('saves and loads valid version 12 WorldState', () => {
+  test('saves and loads valid version 13 WorldState', () => {
     const state: WorldState = {
       worldId: 'juarez-el-paso',
-      version: 12,
+      version: 13,
       worldTime: '2026-09-14T08:00:00.000Z',
       places: seed.places,
       restaurants: seed.restaurants,
       agents: seed.agents,
       offerings: seed.offerings,
       purchases: [],
-      coffeeCompletions: [],
+      activityCompletions: [],
       acquaintances: [],
       items: [],
     };
@@ -64,7 +64,7 @@ describe('LocalFilePersistence', () => {
 
     assert.throws(
       () => persistence.load(),
-      /Unsupported WorldState version: 1\. Expected version 12/
+      /Unsupported WorldState version: 1\. Expected version 13/
     );
   });
 
@@ -92,7 +92,7 @@ describe('LocalFilePersistence', () => {
 
     assert.throws(
       () => persistence.load(),
-      /Unsupported WorldState version: 2\. Expected version 12/
+      /Unsupported WorldState version: 2\. Expected version 13/
     );
   });
 
@@ -122,7 +122,7 @@ describe('LocalFilePersistence', () => {
 
     assert.throws(
       () => persistence.load(),
-      /Unsupported WorldState version: 3\. Expected version 12/
+      /Unsupported WorldState version: 3\. Expected version 13/
     );
   });
 
@@ -145,7 +145,7 @@ describe('LocalFilePersistence', () => {
 
     assert.throws(
       () => persistence.load(),
-      /Unsupported WorldState version: 4\. Expected version 12/
+      /Unsupported WorldState version: 4\. Expected version 13/
     );
   });
 
@@ -163,7 +163,7 @@ describe('LocalFilePersistence', () => {
 
     assert.throws(
       () => persistence.load(),
-      /Unsupported WorldState version: 5\. Expected version 12/
+      /Unsupported WorldState version: 5\. Expected version 13/
     );
   });
 
@@ -182,7 +182,7 @@ describe('LocalFilePersistence', () => {
 
     assert.throws(
       () => persistence.load(),
-      /Unsupported WorldState version: 6\. Expected version 12/
+      /Unsupported WorldState version: 6\. Expected version 13/
     );
   });
 
@@ -201,7 +201,7 @@ describe('LocalFilePersistence', () => {
 
     assert.throws(
       () => persistence.load(),
-      /Unsupported WorldState version: 7\. Expected version 12/
+      /Unsupported WorldState version: 7\. Expected version 13/
     );
   });
 
@@ -220,7 +220,7 @@ describe('LocalFilePersistence', () => {
 
     assert.throws(
       () => persistence.load(),
-      /Unsupported WorldState version: 8\. Expected version 12/
+      /Unsupported WorldState version: 8\. Expected version 13/
     );
   });
 
@@ -240,7 +240,7 @@ describe('LocalFilePersistence', () => {
 
     assert.throws(
       () => persistence.load(),
-      /Unsupported WorldState version: 9\. Expected version 12/
+      /Unsupported WorldState version: 9\. Expected version 13/
     );
   });
 
@@ -262,7 +262,7 @@ describe('LocalFilePersistence', () => {
 
     assert.throws(
       () => persistence.load(),
-      /Unsupported WorldState version: 10\. Expected version 12/
+      /Unsupported WorldState version: 10\. Expected version 13/
     );
   });
 
@@ -306,14 +306,14 @@ describe('LocalFilePersistence', () => {
   test('clear() removes the persistence file cleanly', () => {
     const state: WorldState = {
       worldId: 'juarez-el-paso',
-      version: 12,
+      version: 13,
       worldTime: '2026-09-14T08:00:00.000Z',
       places: seed.places,
       restaurants: seed.restaurants,
       agents: seed.agents,
       offerings: seed.offerings,
       purchases: [],
-      coffeeCompletions: [],
+      activityCompletions: [],
       acquaintances: [],
       items: [],
     };

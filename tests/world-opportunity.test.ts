@@ -308,15 +308,15 @@ describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
       enterRestaurant(state, player.id, 'restaurant:development-restaurant');
 
       const purchasesBefore = state.purchases.length;
-      const coffeeHistoryBefore = state.coffeeCompletions.length;
+      const activityHistoryBefore = state.activityCompletions.length;
 
       inspectCurrentLocation(state, player.id);
 
       const purchasesAfter = state.purchases.length;
-      const coffeeHistoryAfter = state.coffeeCompletions.length;
+      const activityHistoryAfter = state.activityCompletions.length;
 
       assert.equal(purchasesAfter, purchasesBefore);
-      assert.equal(coffeeHistoryAfter, coffeeHistoryBefore);
+      assert.equal(activityHistoryAfter, activityHistoryBefore);
       assert.equal((state as any).opportunities, undefined);
     });
   });
@@ -434,7 +434,7 @@ describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
       }
     });
 
-    test('22. Restored state maintains schema version 12 and has no persisted opportunity collection', async () => {
+    test('22. Restored state maintains schema version 13 and has no persisted opportunity collection', async () => {
       const testPath = join(tmpdir(), `mvc-test-m23-schema-${Date.now()}.json`);
       try {
         const { state, sim } = setupWorldAt(MORNING_OPEN_TIME);
@@ -448,7 +448,7 @@ describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
         const restoredState = await persistence.load();
         assert.ok(restoredState);
         validateWorldState(restoredState);
-        assert.equal(restoredState.version, 12);
+        assert.equal(restoredState.version, 13);
         assert.equal((restoredState as any).opportunities, undefined);
       } finally {
         if (existsSync(testPath)) {

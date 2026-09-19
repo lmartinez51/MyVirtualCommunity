@@ -235,7 +235,7 @@ describe('Milestone 27: Spatial Opportunity Perception Across Building Storefron
 
       assert.strictEqual(beforeSnapshot, afterSnapshot);
       validateWorldState(state);
-      assert.strictEqual(state.version, 12);
+      assert.strictEqual(state.version, 13);
     });
 
     test('Building perception does NOT leak internal restaurant state or seated agents', () => {

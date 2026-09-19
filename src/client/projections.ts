@@ -46,6 +46,7 @@ export function getAffordanceGroup(commandName: string): AffordanceGroup {
       return 'INTERACT';
     case 'purchaseOffering':
     case 'startCoffee':
+    case 'startEatingPastry':
       return 'ACT';
     default:
       return 'ACT';
@@ -300,6 +301,21 @@ export function createPresentationModel(
           commandName: 'startCoffee',
           payload: {},
           group: getAffordanceGroup('startCoffee'),
+        });
+      }
+
+      // 4. Consume pastry (Milestone 34: when restaurant is open and player possesses pastry from this restaurant)
+      const eligiblePastry = playerInventory.find(
+        (item) =>
+          item.offeringId === 'offering:development-pastry' && item.restaurantId === locationId
+      );
+      if (eligiblePastry) {
+        affordances.push({
+          id: `consume-pastry-${eligiblePastry.id}`,
+          label: `Eat Pan Dulce (${eligiblePastry.name})`,
+          commandName: 'startEatingPastry',
+          payload: {},
+          group: getAffordanceGroup('startEatingPastry'),
         });
       }
     }

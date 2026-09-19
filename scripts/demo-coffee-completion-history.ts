@@ -35,12 +35,12 @@ const persistenceA = new LocalFilePersistence(demoPath);
 persistenceA.save(stateA);
 const simA = new Simulation(clockA, stateA);
 
-assert.equal(stateA.version, 12);
-assert.equal(stateA.coffeeCompletions.length, 0);
+assert.equal(stateA.version, 13);
+assert.equal(stateA.activityCompletions.length, 0);
 console.log(`World ID:                 ${stateA.worldId}`);
 console.log(`World Version:            ${stateA.version}`);
 console.log(`World Time:               ${clockA.getTime()}`);
-console.log(`Initial Coffee Completions: ${stateA.coffeeCompletions.length}`);
+console.log(`Initial Activity Completions: ${stateA.activityCompletions.length}`);
 
 // 2. Advance to open time
 console.log('\n=== STEP 2: Advancing World Time to restaurant-open time (09:00:00 UTC) ===');
@@ -71,7 +71,7 @@ assert.equal(startResult1.success, true);
 console.log(`Activity Started:         ${playerA.playerActivity?.activity}`);
 console.log(`StartedAt:                ${playerA.playerActivity?.startedAt}`);
 console.log(`Restaurant Association:   ${playerA.playerActivity?.restaurantId}`);
-assert.equal(stateA.coffeeCompletions.length, 0);
+assert.equal(stateA.activityCompletions.length, 0);
 
 // 6. Demonstrate Spatial Movement during active coffee (M10 integration)
 console.log('\n=== STEP 6: Demonstrating spatial movement during active coffee ===');
@@ -91,9 +91,9 @@ simA.tick();
 // 8. Verify Coffee #1 completion & CoffeeCompletionRecord
 console.log('\n=== STEP 8: Verifying activity completion and historical record ===');
 assert.equal(playerA.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
-assert.equal(stateA.coffeeCompletions.length, 1);
+assert.equal(stateA.activityCompletions.length, 1);
 
-const record1 = stateA.coffeeCompletions[0];
+const record1 = stateA.activityCompletions[0];
 console.log(`Record ID:                ${record1.id}`);
 console.log(`Player ID:                ${record1.playerId}`);
 console.log(`Restaurant ID:            ${record1.restaurantId}`);
@@ -101,7 +101,7 @@ console.log(`StartedAt:                ${record1.startedAt}`);
 console.log(`CompletedAt:              ${record1.completedAt}`);
 console.log(`Player Current Location:  ${playerA.locationId}`);
 
-assert.equal(record1.id, 'coffee-completion:1');
+assert.equal(record1.id, 'activity-completion:1');
 assert.equal(record1.playerId, 'agent:dev-player');
 assert.equal(record1.restaurantId, 'restaurant:development-restaurant');
 assert.equal(record1.startedAt, '2026-09-14T09:00:00.000Z');
@@ -115,13 +115,14 @@ clockA.advance(60_000);
 simA.tick();
 clockA.advance(14 * 60_000);
 simA.tick();
-assert.equal(stateA.coffeeCompletions.length, 1);
-console.log(`Total completions after subsequent ticks: ${stateA.coffeeCompletions.length} (zero duplicate records)`);
+assert.equal(stateA.activityCompletions.length, 1);
+console.log(`Total completions after subsequent ticks: ${stateA.activityCompletions.length} (zero duplicate records)`);
 
 // 10. Verify M12 Perception Isolation
 console.log('\n=== STEP 10: Verifying M12 inspectCurrentLocation() does NOT expose completion history ===');
 const perception = inspectCurrentLocation(stateA, 'agent:dev-player');
 assert.equal(perception.success, true);
+assert.equal((perception as any).activityCompletions, undefined);
 assert.equal((perception as any).coffeeCompletions, undefined);
 assert.equal((perception as any).history, undefined);
 console.log('Perception strictly isolated from historical facts.');
@@ -137,11 +138,11 @@ const persistenceB = new LocalFilePersistence(demoPath);
 const stateB = persistenceB.load()!;
 assert.ok(stateB !== null);
 validateWorldState(stateB);
-assert.equal(stateB.version, 12);
-assert.equal(stateB.coffeeCompletions.length, 1);
+assert.equal(stateB.version, 13);
+assert.equal(stateB.activityCompletions.length, 1);
 console.log(`Restored World Version:   ${stateB.version}`);
-console.log(`Restored Completions:     ${stateB.coffeeCompletions.length}`);
-console.log(`Restored Record 1 ID:     ${stateB.coffeeCompletions[0].id}`);
+console.log(`Restored Completions:     ${stateB.activityCompletions.length}`);
+console.log(`Restored Record 1 ID:     ${stateB.activityCompletions[0].id}`);
 
 // 13. Sequential Activity: Coffee #2 in Session B
 console.log('\n=== STEP 13: Executing sequential Coffee #2 in Session B ===');
@@ -166,19 +167,19 @@ simB.tick();
 
 // 14. Verify Coffee #2 completed with monotonic ID
 console.log('\n=== STEP 14: Verifying Coffee #2 recorded with monotonic continuation ===');
-assert.equal(stateB.coffeeCompletions.length, 2);
-const record2 = stateB.coffeeCompletions[1];
+assert.equal(stateB.activityCompletions.length, 2);
+const record2 = stateB.activityCompletions[1];
 console.log(`Record 2 ID:              ${record2.id}`);
 console.log(`Record 2 StartedAt:       ${record2.startedAt}`);
 console.log(`Record 2 CompletedAt:     ${record2.completedAt}`);
-assert.equal(record2.id, 'coffee-completion:2');
+assert.equal(record2.id, 'activity-completion:2');
 assert.equal(record2.startedAt, '2026-09-14T09:30:00.000Z');
 assert.equal(record2.completedAt, '2026-09-14T09:45:00.000Z');
 
 // 15. Verify Historical Immutability
 console.log('\n=== STEP 15: Verifying historical records remain immutable ===');
-assert.equal(stateB.coffeeCompletions[0].id, 'coffee-completion:1');
-assert.equal(stateB.coffeeCompletions[0].completedAt, '2026-09-14T09:15:00.000Z');
+assert.equal(stateB.activityCompletions[0].id, 'activity-completion:1');
+assert.equal(stateB.activityCompletions[0].completedAt, '2026-09-14T09:15:00.000Z');
 
 if (existsSync(demoPath)) {
   unlinkSync(demoPath);

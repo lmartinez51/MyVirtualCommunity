@@ -78,7 +78,7 @@ console.log('\n=== STEP 10: Starting fresh runtime Session B and restoring from 
 const persistenceB = new LocalFilePersistence(demoPath);
 const stateB = persistenceB.load()!;
 assert.ok(stateB !== null);
-assert.equal(stateB.version, 12);
+assert.equal(stateB.version, 13);
 const clockB = WorldClock.create(stateB.worldTime);
 const simB = new Simulation(clockB, stateB);
 
@@ -126,7 +126,7 @@ persistenceB.save(snapshotWorldState(clockB, stateB));
 const persistenceC = new LocalFilePersistence(demoPath);
 const stateC = persistenceC.load()!;
 assert.ok(stateC !== null);
-assert.equal(stateC.version, 12);
+assert.equal(stateC.version, 13);
 assert.equal(stateC.worldTime, '2026-09-14T17:00:00.000Z');
 
 const restaurantC = stateC.restaurants.find((r) => r.id === 'restaurant:development-restaurant')!;
