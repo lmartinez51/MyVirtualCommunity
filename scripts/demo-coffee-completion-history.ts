@@ -35,7 +35,7 @@ const persistenceA = new LocalFilePersistence(demoPath);
 persistenceA.save(stateA);
 const simA = new Simulation(clockA, stateA);
 
-assert.equal(stateA.version, 13);
+assert.equal(stateA.version, 14);
 assert.equal(stateA.activityCompletions.length, 0);
 console.log(`World ID:                 ${stateA.worldId}`);
 console.log(`World Version:            ${stateA.version}`);
@@ -138,7 +138,7 @@ const persistenceB = new LocalFilePersistence(demoPath);
 const stateB = persistenceB.load()!;
 assert.ok(stateB !== null);
 validateWorldState(stateB);
-assert.equal(stateB.version, 13);
+assert.equal(stateB.version, 14);
 assert.equal(stateB.activityCompletions.length, 1);
 console.log(`Restored World Version:   ${stateB.version}`);
 console.log(`Restored Completions:     ${stateB.activityCompletions.length}`);

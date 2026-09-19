@@ -135,7 +135,7 @@ export class WorldSessionController {
    * Zero state mutation, zero disk write, bypasses command queue.
    */
   public getScheduleView(targetAgentId: string): InquireAgentScheduleResult {
-    return inquireAgentSchedule(this.state, this.activePlayerId, targetAgentId);
+    return inquireAgentSchedule(structuredClone(this.state), this.activePlayerId, targetAgentId);
   }
 
   /**

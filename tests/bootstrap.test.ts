@@ -27,7 +27,7 @@ describe('bootstrapWorld', () => {
     assert.equal(result.ready, true);
     assert.equal(result.isNewWorld, true);
     assert.equal(result.state.worldId, 'juarez-el-paso');
-    assert.equal(result.state.version, 13);
+    assert.equal(result.state.version, 14);
     assert.equal(result.clock.getTime(), result.state.worldTime);
     assert.equal(result.state.places.length, 8);
     assert.equal(result.state.restaurants.length, 1);
@@ -51,6 +51,7 @@ describe('bootstrapWorld', () => {
     assert.equal(result.state.activityCompletions.length, 0);
     assert.equal(result.state.acquaintances.length, 0);
     assert.equal(result.state.items.length, 0);
+    assert.equal(result.state.knowledge.length, 0);
 
     // Verify it was saved to the target file
     const persistence = new LocalFilePersistence(testFilePath);
@@ -65,7 +66,7 @@ describe('bootstrapWorld', () => {
     const persistence = new LocalFilePersistence(testFilePath);
     persistence.save({
       worldId: 'juarez-el-paso',
-      version: 13,
+      version: 14,
       worldTime: fixedTime,
       places: seed.places,
       restaurants: seed.restaurants,
@@ -75,6 +76,7 @@ describe('bootstrapWorld', () => {
       activityCompletions: [],
       acquaintances: [],
       items: [],
+      knowledge: [],
     });
 
     // Run bootstrapWorld pointing to the pre-populated file
@@ -83,7 +85,7 @@ describe('bootstrapWorld', () => {
     assert.equal(result.status, 'READY');
     assert.equal(result.ready, true);
     assert.equal(result.isNewWorld, false);
-    assert.equal(result.state.version, 13);
+    assert.equal(result.state.version, 14);
     assert.equal(result.state.worldTime, fixedTime);
     assert.equal(result.clock.getTime(), fixedTime);
     assert.deepEqual(result.state.places, seed.places);
@@ -109,7 +111,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 1\. Expected version 13/
+      /Unsupported WorldState version: 1\. Expected version 14/
     );
   });
 
@@ -140,7 +142,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 2\. Expected version 13/
+      /Unsupported WorldState version: 2\. Expected version 14/
     );
   });
 
@@ -173,7 +175,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 3\. Expected version 13/
+      /Unsupported WorldState version: 3\. Expected version 14/
     );
   });
 
@@ -199,7 +201,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 4\. Expected version 13/
+      /Unsupported WorldState version: 4\. Expected version 14/
     );
   });
 
@@ -220,7 +222,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 5\. Expected version 13/
+      /Unsupported WorldState version: 5\. Expected version 14/
     );
   });
 
@@ -242,7 +244,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 6\. Expected version 13/
+      /Unsupported WorldState version: 6\. Expected version 14/
     );
   });
 
@@ -264,7 +266,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 7\. Expected version 13/
+      /Unsupported WorldState version: 7\. Expected version 14/
     );
   });
 
@@ -286,7 +288,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 8\. Expected version 13/
+      /Unsupported WorldState version: 8\. Expected version 14/
     );
   });
 
@@ -309,7 +311,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 9\. Expected version 13/
+      /Unsupported WorldState version: 9\. Expected version 14/
     );
   });
 
@@ -333,7 +335,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 10\. Expected version 13/
+      /Unsupported WorldState version: 10\. Expected version 14/
     );
   });
 });

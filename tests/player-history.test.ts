@@ -374,7 +374,7 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
         const stateB = persistenceB.load();
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
-        assert.equal(stateB.version, 13);
+        assert.equal(stateB.version, 14);
 
         // Inspect Session B
         const resultB = inspectPlayerHistory(stateB, 'agent:dev-player');

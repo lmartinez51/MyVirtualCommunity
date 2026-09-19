@@ -522,7 +522,7 @@ describe('Milestone 19-A: Deterministic NPC Offering Availability', () => {
         // Restore from file
         const loaded = persistence.load();
         assert.ok(loaded);
-        assert.equal(loaded.version, 13);
+        assert.equal(loaded.version, 14);
         assert.doesNotThrow(() => validateWorldState(loaded));
 
         // Offering is absent

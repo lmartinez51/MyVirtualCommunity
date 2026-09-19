@@ -34,7 +34,7 @@ console.log('=== STEP 1: Bootstrapping development world at 08:00:00 UTC ===');
 const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
 const state = createInitialWorldState(clock);
 validateWorldState(state);
-assert.equal(state.version, 13);
+assert.equal(state.version, 14);
 
 const sim = new Simulation(clock, state);
 
@@ -293,7 +293,7 @@ console.log(`Restored NPC:       ${npcB.locationId} (${npcB.activityState})`);
 console.log(`Purchase Records:   ${stateB.purchases?.length ?? 0}`);
 console.log(`Activity Records:   ${stateB.activityCompletions?.length ?? 0}`);
 
-assert.equal(stateB.version, 13);
+assert.equal(stateB.version, 14);
 assert.equal(playerB.locationId, 'building:development-residence');
 assert.equal(npcB.locationId, 'building:development-residence');
 assert.equal(npcB.activityState, 'idle');

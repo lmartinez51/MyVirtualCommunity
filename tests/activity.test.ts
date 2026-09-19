@@ -543,15 +543,15 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
-    it('25. Explicitly rejects versions 1 through 12 in validateWorldState', () => {
+    it('25. Explicitly rejects versions 1 through 13 in validateWorldState', () => {
       const clock = new WorldClock(OPEN_TIME);
       const state = createInitialWorldState(clock);
 
-      for (let v = 1; v <= 12; v++) {
+      for (let v = 1; v <= 13; v++) {
         const legacy = { ...state, version: v };
         assert.throws(
           () => validateWorldState(legacy),
-          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 13\\.`)
+          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 14\\.`)
         );
       }
     });

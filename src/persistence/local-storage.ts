@@ -7,6 +7,8 @@ import {
   migrateWorldStateV11ToV12,
   validateWorldStateV12,
   migrateWorldStateV12ToV13,
+  validateWorldStateV13,
+  migrateWorldStateV13ToV14,
 } from '../core/world-state.js';
 
 export const DEFAULT_PERSISTENCE_PATH = resolve(process.cwd(), 'data', 'world-state.json');
@@ -69,27 +71,40 @@ export class LocalFilePersistence {
 
     const rawVersion = (parsed as { version?: unknown })?.version;
 
-    // Schema Version 11 -> 12 -> 13 Migration Path
+    // Schema Version 11 -> 12 -> 13 -> 14 Migration Path
     if (rawVersion === 11) {
       validateWorldStateV11(parsed);
       const v12 = migrateWorldStateV11ToV12(parsed);
       validateWorldStateV12(v12);
       const v13 = migrateWorldStateV12ToV13(v12);
-      validateWorldState(v13);
-      this.save(v13);
-      return v13;
+      validateWorldStateV13(v13);
+      const v14 = migrateWorldStateV13ToV14(v13);
+      validateWorldState(v14);
+      this.save(v14);
+      return v14;
     }
 
-    // Schema Version 12 -> 13 Migration Path
+    // Schema Version 12 -> 13 -> 14 Migration Path
     if (rawVersion === 12) {
       validateWorldStateV12(parsed);
       const v13 = migrateWorldStateV12ToV13(parsed);
-      validateWorldState(v13);
-      this.save(v13);
-      return v13;
+      validateWorldStateV13(v13);
+      const v14 = migrateWorldStateV13ToV14(v13);
+      validateWorldState(v14);
+      this.save(v14);
+      return v14;
     }
 
-    // Schema Version 13 Direct Validation Path
+    // Schema Version 13 -> 14 Migration Path
+    if (rawVersion === 13) {
+      validateWorldStateV13(parsed);
+      const v14 = migrateWorldStateV13ToV14(parsed);
+      validateWorldState(v14);
+      this.save(v14);
+      return v14;
+    }
+
+    // Schema Version 14 Direct Validation Path
     validateWorldState(parsed);
 
     return parsed;

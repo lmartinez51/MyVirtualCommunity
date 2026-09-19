@@ -217,7 +217,7 @@ describe('Milestone 26: Minimal Relational Inquiry & Epistemic Grounding', () =>
   });
 
   describe('3. Nonmutation & Purity', () => {
-    test('14. Successful inquiry causes ZERO state mutation to WorldState', () => {
+    test('14. Successful inquiry mutates ONLY state.knowledge via single-record upsert', () => {
       const { state } = setupWorldAt();
       const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
       const npc = state.agents.find((a) => a.id === 'agent:dev-npc')!;
@@ -225,15 +225,19 @@ describe('Milestone 26: Minimal Relational Inquiry & Epistemic Grounding', () =>
       npc.locationId = player.locationId;
       introduceToAgent(state, player.id, npc.id);
 
-      const beforeJson = JSON.stringify(state);
+      const { knowledge: beforeK, ...beforeRest } = state;
       const result = inquireAgentSchedule(state, player.id, npc.id);
       assert.strictEqual(result.success, true);
-      const afterJson = JSON.stringify(state);
+      const { knowledge: afterK, ...afterRest } = state;
 
-      assert.strictEqual(beforeJson, afterJson);
+      assert.deepStrictEqual(beforeRest, afterRest);
+      assert.strictEqual(afterK.length, 1);
+      assert.strictEqual(afterK[0].agentId, player.id);
+      assert.strictEqual(afterK[0].subjectId, npc.id);
+      assert.strictEqual(afterK[0].factType, 'agent-schedule');
     });
 
-    test('15. Repeated inquiries produce identical results with zero mutation', () => {
+    test('15. Repeated inquiries produce identical results with single-record upsert', () => {
       const { state } = setupWorldAt();
       const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
       const npc = state.agents.find((a) => a.id === 'agent:dev-npc')!;
@@ -247,6 +251,7 @@ describe('Milestone 26: Minimal Relational Inquiry & Epistemic Grounding', () =>
 
       assert.deepStrictEqual(r1, r2);
       assert.deepStrictEqual(r2, r3);
+      assert.strictEqual(state.knowledge.length, 1);
     });
 
     test('16. Stranger rejection causes ZERO state mutation to WorldState', () => {

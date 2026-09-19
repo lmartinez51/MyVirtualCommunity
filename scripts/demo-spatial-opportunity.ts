@@ -24,7 +24,7 @@ try {
   const clock = WorldClock.create('2026-09-14T09:00:00.000Z');
   const state = createInitialWorldState(clock);
   validateWorldState(state);
-  assert.equal(state.version, 13);
+  assert.equal(state.version, 14);
   const sim = new Simulation(clock, state, { silent: true });
   sim.tick(); // Apply initial time-driven transitions: restaurant opens, NPC is active on shift, pastry is published
 

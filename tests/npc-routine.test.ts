@@ -433,7 +433,7 @@ describe('Milestone 15: Deterministic NPC Spatial Routine', () => {
         const stateB = persistenceB.load();
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
-        assert.equal(stateB.version, 13, 'Schema version strictly preserved at 13');
+        assert.equal(stateB.version, 14, 'Schema version strictly preserved at 14');
 
         const npcB = stateB.agents.find((a) => a.id === 'agent:dev-npc')!;
         assert.equal(npcB.locationId, 'restaurant:development-restaurant');
@@ -452,7 +452,7 @@ describe('Milestone 15: Deterministic NPC Spatial Routine', () => {
         // Snapshot and re-validate
         const snapshotB = snapshotWorldState(clockB, stateB);
         assert.doesNotThrow(() => validateWorldState(snapshotB));
-        assert.equal(snapshotB.version, 13);
+        assert.equal(snapshotB.version, 14);
       } finally {
         if (existsSync(tmpDir)) {
           rmSync(tmpDir, { recursive: true, force: true });

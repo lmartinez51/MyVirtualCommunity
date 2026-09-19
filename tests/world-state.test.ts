@@ -11,13 +11,13 @@ import {
 import { createDevelopmentSeedWorld } from '../src/core/seed.js';
 
 describe('WorldState', () => {
-  test('creates initial WorldState with seed entities, version 13, and clock time', () => {
+  test('creates initial WorldState with seed entities, version 14, and clock time', () => {
     const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
     const state = createInitialWorldState(clock);
 
     assert.equal(state.worldId, DEFAULT_WORLD_ID);
     assert.equal(state.version, CURRENT_WORLD_STATE_VERSION);
-    assert.equal(state.version, 13);
+    assert.equal(state.version, 14);
     assert.equal(state.worldTime, '2026-09-14T08:00:00.000Z');
     assert.equal(state.places.length, 8);
     assert.equal(state.restaurants.length, 1);
@@ -43,6 +43,7 @@ describe('WorldState', () => {
     assert.equal(state.activityCompletions.length, 0);
     assert.equal(state.acquaintances.length, 0);
     assert.equal(state.items.length, 0);
+    assert.equal(state.knowledge.length, 0);
   });
 
   test('snapshots updated WorldState preserving entity collections and advancing time', () => {
@@ -53,7 +54,7 @@ describe('WorldState', () => {
     const snapshot = snapshotWorldState(clock, initial);
 
     assert.equal(snapshot.worldTime, '2026-09-14T08:00:05.000Z');
-    assert.equal(snapshot.version, 13);
+    assert.equal(snapshot.version, 14);
     assert.deepEqual(snapshot.places, initial.places);
     assert.deepEqual(snapshot.restaurants, initial.restaurants);
     assert.deepEqual(snapshot.agents, initial.agents);
@@ -62,6 +63,7 @@ describe('WorldState', () => {
     assert.deepEqual(snapshot.activityCompletions, initial.activityCompletions);
     assert.deepEqual(snapshot.acquaintances, initial.acquaintances);
     assert.deepEqual(snapshot.items, initial.items);
+    assert.deepEqual(snapshot.knowledge, initial.knowledge);
   });
 
   test('serializes cleanly to JSON and deserializes back', () => {
@@ -75,7 +77,7 @@ describe('WorldState', () => {
     assert.deepEqual(parsed, state);
   });
 
-  test('validateWorldState succeeds for valid version 13 seed state', () => {
+  test('validateWorldState succeeds for valid version 14 seed state', () => {
     const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
     const state = createInitialWorldState(clock);
 
@@ -91,7 +93,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v1State),
-      /Unsupported WorldState version: 1\. Expected version 13/
+      /Unsupported WorldState version: 1\. Expected version 14/
     );
   });
 
@@ -102,23 +104,12 @@ describe('WorldState', () => {
       version: 2,
       worldTime: '2026-09-14T08:00:00.000Z',
       places: seed.places,
-      restaurants: seed.restaurants.map((r) => ({
-        id: r.id,
-        type: r.type,
-        name: r.name,
-        buildingId: r.buildingId,
-      })),
-      agents: seed.agents.map((a) => ({
-        id: a.id,
-        type: a.type,
-        name: a.name,
-        agentType: a.agentType,
-      })),
+      agents: seed.agents,
     };
 
     assert.throws(
       () => validateWorldState(v2State),
-      /Unsupported WorldState version: 2\. Expected version 13/
+      /Unsupported WorldState version: 2\. Expected version 14/
     );
   });
 
@@ -129,25 +120,14 @@ describe('WorldState', () => {
       version: 3,
       worldTime: '2026-09-14T08:00:00.000Z',
       places: seed.places,
-      restaurants: seed.restaurants.map((r) => ({
-        id: r.id,
-        type: r.type,
-        name: r.name,
-        buildingId: r.buildingId,
-      })),
-      agents: seed.agents.map((a) => ({
-        id: a.id,
-        type: a.type,
-        name: a.name,
-        agentType: a.agentType,
-        activityState: a.activityState,
-        activitySince: a.activitySince,
-      })),
+      restaurants: seed.restaurants,
+      agents: seed.agents,
+      offerings: seed.offerings,
     };
 
     assert.throws(
       () => validateWorldState(v3State),
-      /Unsupported WorldState version: 3\. Expected version 13/
+      /Unsupported WorldState version: 3\. Expected version 14/
     );
   });
 
@@ -158,18 +138,14 @@ describe('WorldState', () => {
       version: 4,
       worldTime: '2026-09-14T08:00:00.000Z',
       places: seed.places,
-      restaurants: seed.restaurants.map((r) => ({
-        id: r.id,
-        type: r.type,
-        name: r.name,
-        buildingId: r.buildingId,
-      })),
+      restaurants: seed.restaurants,
       agents: seed.agents,
+      offerings: seed.offerings,
     };
 
     assert.throws(
       () => validateWorldState(v4State),
-      /Unsupported WorldState version: 4\. Expected version 13/
+      /Unsupported WorldState version: 4\. Expected version 14/
     );
   });
 
@@ -182,11 +158,13 @@ describe('WorldState', () => {
       places: seed.places,
       restaurants: seed.restaurants,
       agents: seed.agents,
+      offerings: seed.offerings,
+      purchases: [],
     };
 
     assert.throws(
       () => validateWorldState(v5State),
-      /Unsupported WorldState version: 5\. Expected version 13/
+      /Unsupported WorldState version: 5\. Expected version 14/
     );
   });
 
@@ -197,29 +175,16 @@ describe('WorldState', () => {
       version: 6,
       worldTime: '2026-09-14T08:00:00.000Z',
       places: seed.places,
-      restaurants: seed.restaurants.map((r) => ({
-        id: r.id,
-        type: r.type,
-        name: r.name,
-        buildingId: r.buildingId,
-        operationalState: r.operationalState,
-        operationalSince: r.operationalSince,
-      })),
-      agents: seed.agents.map((a) => ({
-        id: a.id,
-        type: a.type,
-        name: a.name,
-        agentType: a.agentType,
-        activityState: a.activityState,
-        activitySince: a.activitySince,
-        locationId: a.locationId,
-      })),
+      restaurants: seed.restaurants,
+      agents: seed.agents,
       offerings: seed.offerings,
+      purchases: [],
+      coffeeCompletions: [],
     };
 
     assert.throws(
       () => validateWorldState(v6State),
-      /Unsupported WorldState version: 6\. Expected version 13/
+      /Unsupported WorldState version: 6\. Expected version 14/
     );
   });
 
@@ -231,23 +196,15 @@ describe('WorldState', () => {
       worldTime: '2026-09-14T08:00:00.000Z',
       places: seed.places,
       restaurants: seed.restaurants,
-      agents: seed.agents.map((a) => ({
-        id: a.id,
-        type: a.type,
-        name: a.name,
-        agentType: a.agentType,
-        activityState: a.activityState,
-        activitySince: a.activitySince,
-        locationId: a.locationId,
-        balanceMinor: a.balanceMinor,
-        currency: a.currency,
-      })),
+      agents: seed.agents,
       offerings: seed.offerings,
+      purchases: [],
+      coffeeCompletions: [],
     };
 
     assert.throws(
       () => validateWorldState(v7State),
-      /Unsupported WorldState version: 7\. Expected version 13/
+      /Unsupported WorldState version: 7\. Expected version 14/
     );
   });
 
@@ -261,11 +218,13 @@ describe('WorldState', () => {
       restaurants: seed.restaurants,
       agents: seed.agents,
       offerings: seed.offerings,
+      purchases: [],
+      coffeeCompletions: [],
     };
 
     assert.throws(
       () => validateWorldState(v8State),
-      /Unsupported WorldState version: 8\. Expected version 13/
+      /Unsupported WorldState version: 8\. Expected version 14/
     );
   });
 
@@ -280,11 +239,12 @@ describe('WorldState', () => {
       agents: seed.agents,
       offerings: seed.offerings,
       purchases: [],
+      coffeeCompletions: [],
     };
 
     assert.throws(
       () => validateWorldState(v9State),
-      /Unsupported WorldState version: 9\. Expected version 13/
+      /Unsupported WorldState version: 9\. Expected version 14/
     );
   });
 
@@ -304,7 +264,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v10State),
-      /Unsupported WorldState version: 10\. Expected version 13/
+      /Unsupported WorldState version: 10\. Expected version 14/
     );
   });
 
@@ -325,7 +285,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v11State),
-      /Unsupported WorldState version: 11\. Expected version 13/
+      /Unsupported WorldState version: 11\. Expected version 14/
     );
   });
 
@@ -347,7 +307,29 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v12State),
-      /Unsupported WorldState version: 12\. Expected version 13/
+      /Unsupported WorldState version: 12\. Expected version 14/
+    );
+  });
+
+  test('validateWorldState explicitly rejects version 13 persisted state', () => {
+    const seed = createDevelopmentSeedWorld();
+    const v13State = {
+      worldId: 'juarez-el-paso',
+      version: 13,
+      worldTime: '2026-09-14T08:00:00.000Z',
+      places: seed.places,
+      restaurants: seed.restaurants,
+      agents: seed.agents,
+      offerings: seed.offerings,
+      purchases: [],
+      activityCompletions: [],
+      acquaintances: [],
+      items: [],
+    };
+
+    assert.throws(
+      () => validateWorldState(v13State),
+      /Unsupported WorldState version: 13\. Expected version 14/
     );
   });
 
@@ -359,7 +341,7 @@ describe('WorldState', () => {
       () =>
         validateWorldState({
           worldId: 'other-region',
-          version: 13,
+          version: 14,
           worldTime: '2026-09-14T08:00:00.000Z',
           places: [],
           restaurants: [],
@@ -369,6 +351,7 @@ describe('WorldState', () => {
           activityCompletions: [],
           acquaintances: [],
           items: [],
+          knowledge: [],
         }),
       /worldId must be "juarez-el-paso"/
     );
@@ -389,7 +372,7 @@ describe('WorldState', () => {
 
     const invalidState = {
       worldId: 'juarez-el-paso',
-      version: 13,
+      version: 14,
       worldTime: '2026-09-14T08:00:00.000Z',
       places: seed.places,
       restaurants: [collidingRestaurant],
@@ -399,6 +382,7 @@ describe('WorldState', () => {
       activityCompletions: [],
       acquaintances: [],
       items: [],
+      knowledge: [],
     };
 
     assert.throws(

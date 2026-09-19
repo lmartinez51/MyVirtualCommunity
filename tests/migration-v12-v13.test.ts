@@ -8,6 +8,7 @@ import {
   createInitialWorldState,
   validateWorldState,
   validateWorldStateV12,
+  validateWorldStateV13,
   migrateWorldStateV12ToV13,
   WorldStateV12,
   OwnedItem,
@@ -132,7 +133,7 @@ describe('Milestone 34: Migration v12 -> v13 & Non-Fabrication Invariants', () =
       v12.items = [];
 
       const v13 = migrateWorldStateV12ToV13(v12);
-      assert.doesNotThrow(() => validateWorldState(v13));
+      assert.doesNotThrow(() => validateWorldStateV13(v13));
       assert.equal(v13.version, 13);
 
       const migratedPlayer = v13.agents.find((a) => a.id === 'agent:dev-player')!;
@@ -156,7 +157,7 @@ describe('Milestone 34: Migration v12 -> v13 & Non-Fabrication Invariants', () =
       addPurchasedItem(v12, 'item:1', 'purchase:1', BASE_TIME, BASE_TIME);
 
       const v13 = migrateWorldStateV12ToV13(v12);
-      assert.doesNotThrow(() => validateWorldState(v13));
+      assert.doesNotThrow(() => validateWorldStateV13(v13));
 
       const migratedPlayer = v13.agents.find((a) => a.id === 'agent:dev-player')!;
       assert.ok(migratedPlayer.playerActivity);
@@ -179,7 +180,7 @@ describe('Milestone 34: Migration v12 -> v13 & Non-Fabrication Invariants', () =
       addPurchasedItem(v12, 'item:2', 'purchase:2', BASE_TIME, BASE_TIME);
 
       const v13 = migrateWorldStateV12ToV13(v12);
-      assert.doesNotThrow(() => validateWorldState(v13));
+      assert.doesNotThrow(() => validateWorldStateV13(v13));
 
       const migratedPlayer = v13.agents.find((a) => a.id === 'agent:dev-player')!;
       assert.ok(migratedPlayer.playerActivity);
@@ -210,7 +211,7 @@ describe('Milestone 34: Migration v12 -> v13 & Non-Fabrication Invariants', () =
       ];
 
       const v13 = migrateWorldStateV12ToV13(v12);
-      assert.doesNotThrow(() => validateWorldState(v13));
+      assert.doesNotThrow(() => validateWorldStateV13(v13));
       assert.equal(v13.activityCompletions.length, 2);
 
       const [c1, c2] = v13.activityCompletions;
@@ -274,16 +275,16 @@ describe('Milestone 34: Migration v12 -> v13 & Non-Fabrication Invariants', () =
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 13);
+        assert.equal(loaded.version, 14);
         assert.doesNotThrow(() => validateWorldState(loaded));
         assert.equal(loaded.activityCompletions.length, 1);
         assert.equal(loaded.activityCompletions[0].id, 'coffee-completion:1');
 
-        // Fresh persistence instance verifies disk file was saved at version 13
+        // Fresh persistence instance verifies disk file was saved at version 14
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 13);
+        assert.equal(reloaded.version, 14);
       } finally {
         if (existsSync(testFile)) {
           unlinkSync(testFile);

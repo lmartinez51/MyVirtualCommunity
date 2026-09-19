@@ -323,19 +323,19 @@ describe('Milestone 18-A: First Deterministic NPC Reaction (Reciprocal Greeting)
   // 6. Persistence & Schema Validation
   // =========================================================================
   describe('Persistence Roundtrip & Schema Preservation', () => {
-    test('WorldState remains valid schema version 13 before and after greeting', () => {
+    test('WorldState remains valid schema version 14 before and after greeting', () => {
       const { state } = setupWorld();
 
       assert.doesNotThrow(() => validateWorldState(state));
-      assert.equal(state.version, 13);
+      assert.equal(state.version, 14);
 
       greetAgent(state, 'agent:dev-player', 'agent:dev-npc');
 
       assert.doesNotThrow(() => validateWorldState(state));
-      assert.equal(state.version, 13);
+      assert.equal(state.version, 14);
     });
 
-    test('world persists and restores cleanly with schema version 13', async () => {
+    test('world persists and restores cleanly with schema version 14', async () => {
       const tempDir = mkdtempSync(join(tmpdir(), 'm18-reaction-test-'));
       const storagePath = join(tempDir, 'world-state.json');
 
@@ -355,7 +355,7 @@ describe('Milestone 18-A: First Deterministic NPC Reaction (Reciprocal Greeting)
         // Load
         const loadedState = await persistence.load();
         assert.notEqual(loadedState, null);
-        assert.equal(loadedState!.version, 13);
+        assert.equal(loadedState!.version, 14);
 
         assert.doesNotThrow(() => validateWorldState(loadedState!));
 

@@ -233,17 +233,17 @@ describe('Commercial Offering (Milestone 7)', () => {
   });
 
   describe('WorldState Integration & Global Uniqueness', () => {
-    test('version 13 accepts valid offerings', () => {
+    test('version 14 accepts valid offerings', () => {
       const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
       const state = createInitialWorldState(clock);
 
-      assert.equal(state.version, 13);
+      assert.equal(state.version, 14);
       assert.doesNotThrow(() => validateWorldState(state));
     });
 
-    test('rejects versions 1 through 12 explicitly', () => {
+    test('rejects versions 1 through 13 explicitly', () => {
       const seed = createDevelopmentSeedWorld();
-      for (let v = 1; v <= 12; v++) {
+      for (let v = 1; v <= 13; v++) {
         const state = {
           worldId: 'juarez-el-paso',
           version: v,
@@ -256,7 +256,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
         assert.throws(
           () => validateWorldState(state),
-          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 13`)
+          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 14`)
         );
       }
     });
@@ -275,7 +275,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
       const invalidState = {
         worldId: 'juarez-el-paso',
-        version: 13,
+        version: 14,
         worldTime: '2026-09-14T08:00:00.000Z',
         places: seed.places,
         restaurants: seed.restaurants,
@@ -285,6 +285,7 @@ describe('Commercial Offering (Milestone 7)', () => {
         activityCompletions: [],
         acquaintances: [],
         items: [],
+        knowledge: [],
       };
 
       assert.throws(
@@ -306,7 +307,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
       const invalidState = {
         worldId: 'juarez-el-paso',
-        version: 13,
+        version: 14,
         worldTime: '2026-09-14T08:00:00.000Z',
         places: seed.places,
         restaurants: seed.restaurants,
@@ -316,6 +317,7 @@ describe('Commercial Offering (Milestone 7)', () => {
         activityCompletions: [],
         acquaintances: [],
         items: [],
+        knowledge: [],
       };
 
       assert.throws(
@@ -356,7 +358,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
         assert.ok(restoredState !== null);
         assert.doesNotThrow(() => validateWorldState(restoredState));
-        assert.equal(restoredState.version, 13);
+        assert.equal(restoredState.version, 14);
         assert.deepEqual(restoredState.offerings, state.offerings);
       } finally {
         if (existsSync(testPath)) {
@@ -371,7 +373,7 @@ describe('Commercial Offering (Milestone 7)', () => {
         const seed = createDevelopmentSeedWorld();
         const corruptState = {
           worldId: 'juarez-el-paso',
-          version: 13,
+          version: 14,
           worldTime: '2026-09-14T08:00:00.000Z',
           places: seed.places,
           restaurants: seed.restaurants,
@@ -380,6 +382,7 @@ describe('Commercial Offering (Milestone 7)', () => {
           activityCompletions: [],
           acquaintances: [],
           items: [],
+          knowledge: [],
           offerings: [
             {
               id: 'offering:bad-price',

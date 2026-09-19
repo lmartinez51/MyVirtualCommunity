@@ -27,7 +27,7 @@ console.log(`Player initial location: ${playerA.locationId}`);
 console.log(`NPC initial location:    ${npcA.locationId}`);
 assert.equal(playerA.locationId, 'building:development-building');
 assert.equal(npcA.locationId, 'building:development-residence');
-assert.equal(stateA.version, 13);
+assert.equal(stateA.version, 14);
 
 console.log('\n=== STEP 2: Persisting Session A state and destroying Runtime A ===');
 persistenceA.save(snapshotWorldState(clockA, stateA));
@@ -37,7 +37,7 @@ console.log('\n=== STEP 3: Starting fresh Runtime Session B and restoring from d
 const persistenceB = new LocalFilePersistence(demoPath);
 const stateB = persistenceB.load()!;
 assert.ok(stateB !== null);
-assert.equal(stateB.version, 13);
+assert.equal(stateB.version, 14);
 const clockB = WorldClock.create(stateB.worldTime);
 
 const playerB = stateB.agents.find((a) => a.id === 'agent:dev-player')!;
@@ -86,7 +86,7 @@ console.log('\n=== STEP 8: Starting fresh Runtime Session C and restoring from d
 const persistenceC = new LocalFilePersistence(demoPath);
 const stateC = persistenceC.load()!;
 assert.ok(stateC !== null);
-assert.equal(stateC.version, 13);
+assert.equal(stateC.version, 14);
 assert.equal(stateC.worldTime, '2026-09-14T09:00:00.000Z');
 
 console.log('\n=== STEP 9: Verifying reconstructed spatial presence across runtimes ===');

@@ -274,7 +274,7 @@ describe('Milestone 16: Bidirectional Building Traversal (enterBuilding)', () =>
       assert.equal(restaurant.operationalState, restaurantOperationalBefore, 'restaurant must remain unchanged');
       assert.equal(state.purchases.length, purchasesCountBefore, 'purchases must remain unchanged');
       assert.equal(state.activityCompletions.length, completionsCountBefore, 'activityCompletions must remain unchanged');
-      assert.equal(state.version, 13, 'schema version must remain strictly 13');
+      assert.equal(state.version, 14, 'schema version must remain strictly 14');
     });
 
     test('preserves active playerActivity across enterBuilding', () => {
@@ -380,7 +380,7 @@ describe('Milestone 16: Bidirectional Building Traversal (enterBuilding)', () =>
         const stateB = persistenceB.load();
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
-        assert.equal(stateB.version, 13, 'schema version must be preserved as 13');
+        assert.equal(stateB.version, 14, 'schema version must be preserved as 14');
 
         const playerB = stateB.agents.find((a) => a.id === 'agent:dev-player')!;
         assert.equal(playerB.locationId, 'street:development-street');
@@ -402,7 +402,7 @@ describe('Milestone 16: Bidirectional Building Traversal (enterBuilding)', () =>
         const stateC = persistenceC.load();
         assert.ok(stateC !== null);
         assert.doesNotThrow(() => validateWorldState(stateC));
-        assert.equal(stateC.version, 13);
+        assert.equal(stateC.version, 14);
         const playerC = stateC.agents.find((a) => a.id === 'agent:dev-player')!;
         assert.equal(playerC.locationId, 'building:development-building');
       } finally {

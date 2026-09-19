@@ -31,7 +31,7 @@ try {
   const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
   const state = createInitialWorldState(clock);
   validateWorldState(state);
-  assert.equal(state.version, 13);
+  assert.equal(state.version, 14);
 
   const sim = new Simulation(clock, state);
 
@@ -176,7 +176,7 @@ try {
   validateWorldState(restoredState);
   console.log(`Restored World ID:      ${restoredState.worldId}`);
   console.log(`Restored Schema Ver:    ${restoredState.version}`);
-  assert.equal(restoredState.version, 13);
+  assert.equal(restoredState.version, 14);
 
   const restoredPlayer = restoredState.agents.find((a) => a.id === player.id)!;
   const restoredRestaurant = restoredState.restaurants.find((r) => r.id === restaurant.id)!;

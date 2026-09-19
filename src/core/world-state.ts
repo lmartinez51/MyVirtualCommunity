@@ -22,7 +22,7 @@ import {
 } from './development-npc-schedule.js';
 
 export const DEFAULT_WORLD_ID = 'juarez-el-paso';
-export const CURRENT_WORLD_STATE_VERSION = 13;
+export const CURRENT_WORLD_STATE_VERSION = 14;
 
 export const EATING_PASTRY_DURATION_MINUTES = 15;
 export const EATING_PASTRY_DURATION_MS = 15 * 60 * 1000;
@@ -144,11 +144,50 @@ export interface ActivityCompletionRecord {
 }
 
 /**
- * Authoritative WorldState schema for Milestone 34.
+ * Concrete factual payload of an agent's retained knowledge regarding work schedule (Milestone 35).
+ */
+export type KnowledgeFactType = 'agent-schedule';
+
+export interface AgentSchedulePayload {
+  readonly workplaceId: string;
+  readonly shiftStart: string; // "HH:MM"
+  readonly shiftEnd: string;   // "HH:MM"
+}
+
+export type KnowledgePayload = AgentSchedulePayload;
+
+export type KnowledgeSource = 'social-inquiry';
+
+/**
+ * Authoritative retained epistemic record for an agent (Milestone 35).
+ *
+ * Captures subjective declarative facts acquired by an agent through legitimate
+ * interactions (such as social inquiry).
+ *
+ * Invariants:
+ * - Knowledge != World Truth: Represents what the agent knows, not objective world truth.
+ * - Knowledge != Memory: Declarative semantic fact substrate; does not implement decay or cognition.
+ * - Logical identity is the composite tuple: (agentId, factType, subjectId).
+ * - Single-record upsert: Re-inquiry preserves id and acquiredAt, updates payload and lastVerifiedAt.
+ */
+export interface AgentKnowledgeRecord {
+  readonly id: string; // Implementation-level identifier e.g. /^knowledge:[a-z0-9-]+(:[a-z0-9-]+)*$/
+  readonly agentId: string; // Knower (foreign key -> state.agents, agentType === 'player')
+  readonly factType: KnowledgeFactType; // Discriminator
+  readonly subjectId: string; // Subject entity (foreign key -> state.agents, agentType === 'npc')
+  readonly payload: KnowledgePayload; // Grounded factual data
+  readonly acquiredAt: string; // ISO-8601 WorldTime when first learned
+  readonly lastVerifiedAt: string; // ISO-8601 WorldTime when last confirmed/inquired
+  readonly source: KnowledgeSource; // Provenance ('social-inquiry')
+  readonly sourceAgentId: string; // Informant (foreign key -> state.agents, agentType === 'npc')
+}
+
+/**
+ * Authoritative WorldState schema for Milestone 35.
  *
  * Contains:
  * - worldId: Identity of the regional world.
- * - version: Schema version (13 for Milestone 34).
+ * - version: Schema version (14 for Milestone 35).
  * - worldTime: Authoritative ISO-8601 string from WorldClock.
  * - places: Geographic containment hierarchy.
  * - restaurants: Spatial entities contained within Buildings with operationalState, operationalSince, balanceMinor, and currency.
@@ -158,8 +197,28 @@ export interface ActivityCompletionRecord {
  * - activityCompletions: Persistent append-only historical facts of completed consumable player activities.
  * - acquaintances: Persistent social acquaintance facts.
  * - items: Authoritative append-only physical possession entities.
+ * - knowledge: Persistent epistemic state retained by agents.
  */
 export interface WorldState {
+  worldId: string;
+  version: 14;
+  worldTime: string;
+  places: Place[];
+  restaurants: Restaurant[];
+  agents: Agent[];
+  offerings: Offering[];
+  purchases: PurchaseRecord[];
+  activityCompletions: ActivityCompletionRecord[];
+  acquaintances: Acquaintance[];
+  items: OwnedItem[];
+  knowledge: AgentKnowledgeRecord[];
+}
+
+/**
+ * Historical WorldState schema for Milestone 34 (Version 13).
+ * Preserved for strict pre-validation prior to v13 -> v14 migration.
+ */
+export interface WorldStateV13 {
   worldId: string;
   version: 13;
   worldTime: string;
@@ -230,6 +289,7 @@ export function createInitialWorldState(
     activityCompletions: [],
     acquaintances: [],
     items: [],
+    knowledge: [],
   };
 }
 
@@ -242,7 +302,7 @@ export function snapshotWorldState(
 ): WorldState {
   return {
     worldId: state.worldId,
-    version: state.version as 13,
+    version: state.version as 14,
     worldTime: clock.getTime(),
     places: state.places,
     restaurants: state.restaurants,
@@ -252,6 +312,7 @@ export function snapshotWorldState(
     activityCompletions: [...state.activityCompletions],
     acquaintances: [...state.acquaintances],
     items: [...state.items],
+    knowledge: [...state.knowledge],
   };
 }
 
@@ -2059,13 +2120,14 @@ export interface InquireAgentScheduleResult {
     shiftStart: string;
     shiftEnd: string;
   };
+  knowledgeRecord?: AgentKnowledgeRecord;
 }
 
 /**
- * Authoritative social interaction: A Player inquires about an acquainted NPC's work schedule (Milestone 26).
+ * Authoritative social interaction: A Player inquires about an acquainted NPC's work schedule (Milestone 26, Milestone 35).
  *
- * Provides minimal relational inquiry & epistemic grounding without introducing generic
- * Knowledge, Memory, Dialogue, or Schedule systems.
+ * Provides minimal relational inquiry & epistemic grounding.
+ * On success, performs an atomic single-record upsert into state.knowledge.
  *
  * Preconditions (evaluated in deterministic order):
  * 1. Player exists in WorldState.agents (code: 'player-not-found')
@@ -2079,12 +2141,12 @@ export interface InquireAgentScheduleResult {
  * 7. Target NPC has a currently defined scheduled workplace in the world model (code: 'no-scheduled-work')
  *
  * Invariants:
- * - Pure deterministic evaluation with ZERO state mutation on success or failure.
- * - Does NOT persist inquiry, memory, or knowledge state.
+ * - Deterministic evaluation. On failure, causes ZERO state mutation.
+ * - On success, causes state mutation ONLY via single-record upsert in state.knowledge.
  * - Does NOT advance WorldClock or alter state.worldTime.
  * - Does NOT alter agent locations, activityState, balances, or playerActivity.
  * - Does NOT return offeringId, pricing, menu, inventory, or future product predictions.
- * - Discloses strictly the factual workplaceId, shiftStart, and shiftEnd.
+ * - Discloses strictly the factual workplaceId, shiftStart, shiftEnd, and retained knowledgeRecord.
  */
 export function inquireAgentSchedule(
   state: WorldState,
@@ -2183,6 +2245,51 @@ export function inquireAgentSchedule(
     if (workplaceExists) {
       const shiftStart = formatHourUtc(DEVELOPMENT_NPC_WORK_SCHEDULE.shiftStartHourUtc);
       const shiftEnd = formatHourUtc(DEVELOPMENT_NPC_WORK_SCHEDULE.shiftEndHourUtc);
+
+      // M35 Knowledge Acquisition & Epistemic Retention
+      const existingRecordIndex = state.knowledge.findIndex(
+        (k) => k.agentId === playerId && k.factType === 'agent-schedule' && k.subjectId === npcId
+      );
+
+      let knowledgeRecord: AgentKnowledgeRecord;
+
+      if (existingRecordIndex >= 0) {
+        const existing = state.knowledge[existingRecordIndex];
+        knowledgeRecord = {
+          ...existing,
+          payload: {
+            workplaceId: DEVELOPMENT_NPC_WORK_SCHEDULE.workplaceId,
+            shiftStart,
+            shiftEnd,
+          },
+          lastVerifiedAt: state.worldTime,
+          source: 'social-inquiry',
+          sourceAgentId: npcId,
+        };
+        state.knowledge[existingRecordIndex] = knowledgeRecord;
+      } else {
+        let nextIdNum = state.knowledge.length + 1;
+        while (state.knowledge.some((k) => k.id === `knowledge:${nextIdNum}`)) {
+          nextIdNum++;
+        }
+        knowledgeRecord = {
+          id: `knowledge:${nextIdNum}`,
+          agentId: playerId,
+          factType: 'agent-schedule',
+          subjectId: npcId,
+          payload: {
+            workplaceId: DEVELOPMENT_NPC_WORK_SCHEDULE.workplaceId,
+            shiftStart,
+            shiftEnd,
+          },
+          acquiredAt: state.worldTime,
+          lastVerifiedAt: state.worldTime,
+          source: 'social-inquiry',
+          sourceAgentId: npcId,
+        };
+        state.knowledge.push(knowledgeRecord);
+      }
+
       return {
         success: true,
         code: 'success',
@@ -2194,6 +2301,7 @@ export function inquireAgentSchedule(
           shiftStart,
           shiftEnd,
         },
+        knowledgeRecord,
       };
     }
   }
@@ -2646,6 +2754,79 @@ export function inspectPlayerHistory(
       activityCompletions,
       coffeeCompletions,
     },
+  };
+}
+
+export type InspectPlayerKnowledgeResultCode =
+  | 'success'
+  | 'player-not-found'
+  | 'player-not-player';
+
+export interface InspectPlayerKnowledgeResult {
+  success: boolean;
+  code: InspectPlayerKnowledgeResultCode;
+  message: string;
+  playerId: string;
+  knowledge?: AgentKnowledgeRecord[];
+}
+
+/**
+ * Authoritative epistemic inspection: A Player inspects their own retained declarative knowledge (Milestone 35).
+ *
+ * Preconditions (evaluated in deterministic order):
+ * 1. Player exists in WorldState.agents (code: 'player-not-found')
+ * 2. Agent is a player: agent.agentType === 'player' (code: 'player-not-player')
+ *
+ * Epistemic Privacy & Isolation:
+ * - Returns only records where record.agentId === playerId.
+ * - Produces fresh shallow copies of record objects and payloads in a new array, ensuring
+ *   callers cannot mutate authoritative WorldState knowledge collections.
+ * - Never returns another agent's knowledge records.
+ *
+ * Invariants:
+ * - Pure deterministic evaluation with ZERO state mutation on success or failure.
+ * - Does NOT advance WorldClock or alter state.worldTime.
+ * - Does NOT alter agent locations, balances, activities, or operational states.
+ */
+export function inspectPlayerKnowledge(
+  state: WorldState,
+  playerId: string
+): InspectPlayerKnowledgeResult {
+  // 1. Confirm agent exists
+  const agent = state.agents.find((a) => a.id === playerId);
+  if (!agent) {
+    return {
+      success: false,
+      code: 'player-not-found',
+      message: `Player "${playerId}" not found in world state`,
+      playerId,
+    };
+  }
+
+  // 2. Confirm agent is a player
+  if (agent.agentType !== 'player') {
+    return {
+      success: false,
+      code: 'player-not-player',
+      message: `Agent "${playerId}" is not a player (agentType: "${agent.agentType}")`,
+      playerId,
+    };
+  }
+
+  // 3. Project safe copies of player-scoped knowledge records
+  const knowledge: AgentKnowledgeRecord[] = state.knowledge
+    .filter((k) => k.agentId === playerId)
+    .map((k) => ({
+      ...k,
+      payload: { ...k.payload },
+    }));
+
+  return {
+    success: true,
+    code: 'success',
+    message: `Player "${playerId}" successfully inspected personal knowledge`,
+    playerId,
+    knowledge,
   };
 }
 
@@ -3509,6 +3690,179 @@ export function validateWorldState(data: unknown): asserts data is WorldState {
         );
       }
     }
+  }
+
+  // Validate Knowledge (Milestone 35: authoritative epistemic retention)
+  if (!Array.isArray(candidate.knowledge)) {
+    throw new Error('Invalid WorldState: knowledge must be an array');
+  }
+
+  const knowledgeIdSet = new Set<string>();
+  const seenCompositeKeys = new Set<string>();
+
+  for (let i = 0; i < candidate.knowledge.length; i++) {
+    const recRaw = candidate.knowledge[i];
+    if (typeof recRaw !== 'object' || recRaw === null) {
+      throw new Error(`Invalid AgentKnowledgeRecord at index ${i}: record must be a non-null object`);
+    }
+
+    const rec = recRaw as Record<string, unknown>;
+
+    // 1. ID format: /^knowledge:[a-z0-9-]+(:[a-z0-9-]+)*$/
+    if (
+      typeof rec.id !== 'string' ||
+      !/^knowledge:[a-z0-9-]+(:[a-z0-9-]+)*$/.test(rec.id)
+    ) {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord at index ${i}: id must match format "knowledge:<identifier>". Received: ${JSON.stringify(rec.id)}`
+      );
+    }
+
+    if (knowledgeIdSet.has(rec.id)) {
+      throw new Error(`Duplicate knowledge id found: "${rec.id}"`);
+    }
+    if (globalIdSet.has(rec.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${rec.id}"`);
+    }
+    knowledgeIdSet.add(rec.id);
+    globalIdSet.add(rec.id);
+
+    // 2. Knower Agent (agentId): exists in state.agents and agentType === 'player'
+    if (typeof rec.agentId !== 'string' || rec.agentId.trim() === '') {
+      throw new Error(`Invalid AgentKnowledgeRecord "${rec.id}": agentId must be a non-empty string`);
+    }
+    const knowerAgent = agentMap.get(rec.agentId);
+    if (!knowerAgent) {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": agentId "${rec.agentId}" references non-existent agent`
+      );
+    }
+    if (knowerAgent.agentType !== 'player') {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": agentId "${rec.agentId}" is not a player (agentType: "${knowerAgent.agentType}")`
+      );
+    }
+
+    // 3. Fact Type: 'agent-schedule'
+    if (rec.factType !== 'agent-schedule') {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": factType must be "agent-schedule". Received: ${JSON.stringify(rec.factType)}`
+      );
+    }
+
+    // 4. Subject Agent (subjectId): exists in state.agents and agentType === 'npc'
+    if (typeof rec.subjectId !== 'string' || rec.subjectId.trim() === '') {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": subjectId must be a non-empty string`
+      );
+    }
+    const subjectAgent = agentMap.get(rec.subjectId);
+    if (!subjectAgent) {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": subjectId "${rec.subjectId}" references non-existent agent`
+      );
+    }
+    if (subjectAgent.agentType !== 'npc') {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": subjectId "${rec.subjectId}" is not an NPC (agentType: "${subjectAgent.agentType}")`
+      );
+    }
+
+    // 5. Source: 'social-inquiry'
+    if (rec.source !== 'social-inquiry') {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": source must be "social-inquiry". Received: ${JSON.stringify(rec.source)}`
+      );
+    }
+
+    // 6. Source Agent (sourceAgentId): exists in state.agents and agentType === 'npc'
+    if (typeof rec.sourceAgentId !== 'string' || rec.sourceAgentId.trim() === '') {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": sourceAgentId must be a non-empty string`
+      );
+    }
+    const sourceAgent = agentMap.get(rec.sourceAgentId);
+    if (!sourceAgent) {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": sourceAgentId "${rec.sourceAgentId}" references non-existent agent`
+      );
+    }
+    if (sourceAgent.agentType !== 'npc') {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": sourceAgentId "${rec.sourceAgentId}" is not an NPC (agentType: "${sourceAgent.agentType}")`
+      );
+    }
+
+    // 7. acquiredAt timestamp: valid ISO-8601
+    if (typeof rec.acquiredAt !== 'string' || rec.acquiredAt.trim() === '') {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": acquiredAt must be a non-empty string`
+      );
+    }
+    const acquiredMs = Date.parse(rec.acquiredAt);
+    if (Number.isNaN(acquiredMs)) {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": acquiredAt must be a valid ISO-8601 timestamp string. Received: "${rec.acquiredAt}"`
+      );
+    }
+
+    // 8. lastVerifiedAt timestamp: valid ISO-8601 and >= acquiredAt
+    if (typeof rec.lastVerifiedAt !== 'string' || rec.lastVerifiedAt.trim() === '') {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": lastVerifiedAt must be a non-empty string`
+      );
+    }
+    const lastVerifiedMs = Date.parse(rec.lastVerifiedAt);
+    if (Number.isNaN(lastVerifiedMs)) {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": lastVerifiedAt must be a valid ISO-8601 timestamp string. Received: "${rec.lastVerifiedAt}"`
+      );
+    }
+    if (lastVerifiedMs < acquiredMs) {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": lastVerifiedAt ("${rec.lastVerifiedAt}") must be greater than or equal to acquiredAt ("${rec.acquiredAt}")`
+      );
+    }
+
+    // 9. Payload validation
+    if (typeof rec.payload !== 'object' || rec.payload === null) {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": payload must be a non-null object`
+      );
+    }
+    const payload = rec.payload as Record<string, unknown>;
+
+    if (typeof payload.workplaceId !== 'string' || payload.workplaceId.trim() === '') {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": payload.workplaceId must be a non-empty string`
+      );
+    }
+    if (!restaurantMap.has(payload.workplaceId)) {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": payload.workplaceId "${payload.workplaceId}" references non-existent restaurant`
+      );
+    }
+
+    if (typeof payload.shiftStart !== 'string' || !/^\d{2}:\d{2}$/.test(payload.shiftStart)) {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": payload.shiftStart must be a "HH:MM" string. Received: ${JSON.stringify(payload.shiftStart)}`
+      );
+    }
+
+    if (typeof payload.shiftEnd !== 'string' || !/^\d{2}:\d{2}$/.test(payload.shiftEnd)) {
+      throw new Error(
+        `Invalid AgentKnowledgeRecord "${rec.id}": payload.shiftEnd must be a "HH:MM" string. Received: ${JSON.stringify(payload.shiftEnd)}`
+      );
+    }
+
+    // 10. Composite semantic identity uniqueness: (agentId, factType, subjectId)
+    const compositeKey = `${rec.agentId}::${rec.factType}::${rec.subjectId}`;
+    if (seenCompositeKeys.has(compositeKey)) {
+      throw new Error(
+        `Duplicate knowledge fact found for agent "${rec.agentId}", factType "${rec.factType}", subjectId "${rec.subjectId}"`
+      );
+    }
+    seenCompositeKeys.add(compositeKey);
   }
 }
 
@@ -4447,7 +4801,7 @@ export function validateWorldStateV12(data: unknown): asserts data is WorldState
  * Unifies coffeeCompletions into activityCompletions and populates
  * durationMs, offeringId, and truthfully resolved itemId on active player activities.
  */
-export function migrateWorldStateV12ToV13(v12: WorldStateV12): WorldState {
+export function migrateWorldStateV12ToV13(v12: WorldStateV12): WorldStateV13 {
   // 1. Map coffeeCompletions -> activityCompletions preserving legacy IDs verbatim
   const migratedCompletions: ActivityCompletionRecord[] = (v12.coffeeCompletions || []).map((c) => ({
     id: c.id,
@@ -4519,5 +4873,557 @@ export function migrateWorldStateV12ToV13(v12: WorldStateV12): WorldState {
     activityCompletions: migratedCompletions,
     acquaintances: v12.acquaintances,
     items: v12.items,
+  };
+}
+
+/**
+ * Validates that an arbitrary object conforms to the strict Milestone 34 (Version 13) WorldState contract.
+ * Preserved for pre-migration integrity checking.
+ */
+export function validateWorldStateV13(data: unknown): asserts data is WorldStateV13 {
+  if (typeof data !== 'object' || data === null) {
+    throw new Error('Invalid WorldState: state must be a non-null object');
+  }
+
+  const candidate = data as Record<string, unknown>;
+
+  if (typeof candidate.worldId !== 'string' || candidate.worldId.trim() === '') {
+    throw new Error(
+      `Invalid WorldState: worldId must be a non-empty string. Received: ${JSON.stringify(candidate.worldId)}`
+    );
+  }
+
+  if (candidate.worldId !== DEFAULT_WORLD_ID) {
+    throw new Error(
+      `Invalid WorldState: worldId must be "${DEFAULT_WORLD_ID}". Received: ${JSON.stringify(candidate.worldId)}`
+    );
+  }
+
+  if (
+    typeof candidate.version !== 'number' ||
+    !Number.isInteger(candidate.version) ||
+    candidate.version <= 0
+  ) {
+    throw new Error(
+      `Invalid WorldState: version must be a positive integer. Received: ${JSON.stringify(candidate.version)}`
+    );
+  }
+
+  if (candidate.version !== 13) {
+    throw new Error(
+      `Unsupported WorldState version: ${candidate.version}. Expected version 13. Incompatible schemas must be rejected explicitly.`
+    );
+  }
+
+  if (typeof candidate.worldTime !== 'string' || candidate.worldTime.trim() === '') {
+    throw new Error(
+      `Invalid WorldState: worldTime must be a non-empty string. Received: ${JSON.stringify(candidate.worldTime)}`
+    );
+  }
+
+  const parsedTime = Date.parse(candidate.worldTime);
+  if (Number.isNaN(parsedTime)) {
+    throw new Error(
+      `Invalid WorldState: worldTime must be a valid ISO-8601 timestamp. Received: "${candidate.worldTime}"`
+    );
+  }
+
+  // Validate Places
+  validatePlaces(candidate.places as unknown[]);
+  const places = candidate.places as Place[];
+
+  // Validate Restaurants referencing Buildings
+  const buildingIds = new Set<string>(
+    places.filter((p) => p.type === 'building').map((p) => p.id)
+  );
+  validateRestaurants(candidate.restaurants as unknown[], buildingIds);
+  const restaurants = candidate.restaurants as Restaurant[];
+
+  // Validate Agents with Place + Restaurant spatial referential integrity
+  const validLocationIds = new Set<string>([
+    ...places.map((p) => p.id),
+    ...restaurants.map((r) => r.id),
+  ]);
+  validateAgents(candidate.agents as unknown[], validLocationIds);
+  const agents = candidate.agents as Agent[];
+
+  // Validate Offerings referencing Restaurants
+  const validRestaurantIds = new Set<string>(restaurants.map((r) => r.id));
+  validateOfferings(candidate.offerings as unknown[], validRestaurantIds);
+  const offerings = candidate.offerings as Offering[];
+
+  // Validate Global Entity ID Uniqueness across Collections
+  const globalIdSet = new Set<string>();
+
+  for (const place of places) {
+    if (globalIdSet.has(place.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${place.id}"`);
+    }
+    globalIdSet.add(place.id);
+  }
+
+  for (const restaurant of restaurants) {
+    if (globalIdSet.has(restaurant.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${restaurant.id}"`);
+    }
+    globalIdSet.add(restaurant.id);
+  }
+
+  for (const agent of agents) {
+    if (globalIdSet.has(agent.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${agent.id}"`);
+    }
+    globalIdSet.add(agent.id);
+  }
+
+  for (const offering of offerings) {
+    if (globalIdSet.has(offering.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${offering.id}"`);
+    }
+    globalIdSet.add(offering.id);
+  }
+
+  // Validate Purchases
+  if (!Array.isArray(candidate.purchases)) {
+    throw new Error('Invalid WorldState: purchases must be an array');
+  }
+
+  const purchaseIdSet = new Set<string>();
+  const agentMap = new Map<string, Agent>(agents.map((a) => [a.id, a]));
+  const restaurantMap = new Map<string, Restaurant>(restaurants.map((r) => [r.id, r]));
+  const offeringMap = new Map<string, Offering>(offerings.map((o) => [o.id, o]));
+
+  for (let i = 0; i < candidate.purchases.length; i++) {
+    const p = candidate.purchases[i];
+    if (typeof p !== 'object' || p === null) {
+      throw new Error(`Invalid PurchaseRecord at index ${i}: record must be a non-null object`);
+    }
+
+    const rec = p as Record<string, unknown>;
+
+    if (typeof rec.id !== 'string' || rec.id.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord at index ${i}: id must be a non-empty string`);
+    }
+
+    if (purchaseIdSet.has(rec.id)) {
+      throw new Error(`Duplicate purchase record id found: "${rec.id}"`);
+    }
+    if (globalIdSet.has(rec.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${rec.id}"`);
+    }
+    purchaseIdSet.add(rec.id);
+    globalIdSet.add(rec.id);
+
+    if (typeof rec.worldTime !== 'string' || rec.worldTime.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord "${rec.id}": worldTime must be a non-empty string`);
+    }
+    if (Number.isNaN(Date.parse(rec.worldTime))) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": worldTime must be a valid ISO-8601 timestamp string. Received: "${rec.worldTime}"`
+      );
+    }
+
+    if (typeof rec.playerId !== 'string' || rec.playerId.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord "${rec.id}": playerId must be a non-empty string`);
+    }
+    const playerAgent = agentMap.get(rec.playerId);
+    if (!playerAgent) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": playerId "${rec.playerId}" references non-existent agent`
+      );
+    }
+    if (playerAgent.agentType !== 'player') {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": agent "${rec.playerId}" is not a player (agentType: "${playerAgent.agentType}")`
+      );
+    }
+
+    if (typeof rec.restaurantId !== 'string' || rec.restaurantId.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord "${rec.id}": restaurantId must be a non-empty string`);
+    }
+    if (!restaurantMap.has(rec.restaurantId)) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": restaurantId "${rec.restaurantId}" references non-existent restaurant`
+      );
+    }
+
+    if (typeof rec.offeringId !== 'string' || rec.offeringId.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord "${rec.id}": offeringId must be a non-empty string`);
+    }
+    const offering = offeringMap.get(rec.offeringId);
+    if (!offering && rec.offeringId !== 'offering:development-pastry' && rec.offeringId !== DEVELOPMENT_PASTRY_OFFERING_ID) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": offeringId "${rec.offeringId}" references non-existent offering`
+      );
+    }
+    if (offering && offering.restaurantId !== rec.restaurantId) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": offering "${rec.offeringId}" belongs to restaurant "${offering.restaurantId}", not "${rec.restaurantId}"`
+      );
+    }
+
+    if (typeof rec.amountMinor !== 'number' || !Number.isInteger(rec.amountMinor) || rec.amountMinor <= 0) {
+      throw new Error(`Invalid PurchaseRecord "${rec.id}": amountMinor must be a positive integer`);
+    }
+    const expectedPrice = offering
+      ? offering.priceMinor
+      : rec.offeringId === 'offering:development-pastry' || rec.offeringId === DEVELOPMENT_PASTRY_OFFERING_ID
+        ? 300
+        : undefined;
+    if (expectedPrice && rec.amountMinor !== expectedPrice) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": amountMinor ${rec.amountMinor} does not match offering priceMinor ${expectedPrice}`
+      );
+    }
+
+    if (typeof rec.currency !== 'string' || rec.currency.trim() === '') {
+      throw new Error(`Invalid PurchaseRecord "${rec.id}": currency must be a non-empty string`);
+    }
+    const expectedCurrency = offering
+      ? offering.currency
+      : rec.offeringId === 'offering:development-pastry' || rec.offeringId === DEVELOPMENT_PASTRY_OFFERING_ID
+        ? 'USD'
+        : undefined;
+    if (expectedCurrency && rec.currency !== expectedCurrency) {
+      throw new Error(
+        `Invalid PurchaseRecord "${rec.id}": currency "${rec.currency}" does not match offering currency "${expectedCurrency}"`
+      );
+    }
+
+    if (rec.consumedAt !== undefined && rec.consumedAt !== null) {
+      if (typeof rec.consumedAt !== 'string' || rec.consumedAt.trim() === '') {
+        throw new Error(
+          `Invalid PurchaseRecord "${rec.id}": consumedAt must be a non-empty string or null`
+        );
+      }
+      if (Number.isNaN(Date.parse(rec.consumedAt))) {
+        throw new Error(
+          `Invalid PurchaseRecord "${rec.id}": consumedAt must be a valid ISO-8601 timestamp string or null. Received: "${rec.consumedAt}"`
+        );
+      }
+    } else {
+      rec.consumedAt = null;
+    }
+  }
+
+  // Validate Activity Completions
+  if (!Array.isArray(candidate.activityCompletions)) {
+    throw new Error('Invalid WorldState: activityCompletions must be an array');
+  }
+
+  const activityCompletionIdSet = new Set<string>();
+
+  for (let i = 0; i < candidate.activityCompletions.length; i++) {
+    const c = candidate.activityCompletions[i];
+    if (typeof c !== 'object' || c === null) {
+      throw new Error(
+        `Invalid ActivityCompletionRecord at index ${i}: record must be a non-null object`
+      );
+    }
+
+    const rec = c as Record<string, unknown>;
+
+    if (typeof rec.id !== 'string' || rec.id.trim() === '') {
+      throw new Error(
+        `Invalid ActivityCompletionRecord at index ${i}: id must be a non-empty string`
+      );
+    }
+
+    if (activityCompletionIdSet.has(rec.id)) {
+      throw new Error(`Duplicate activity completion record id found: "${rec.id}"`);
+    }
+    if (globalIdSet.has(rec.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${rec.id}"`);
+    }
+    activityCompletionIdSet.add(rec.id);
+    globalIdSet.add(rec.id);
+
+    if (typeof rec.playerId !== 'string' || rec.playerId.trim() === '') {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": playerId must be a non-empty string`
+      );
+    }
+    const playerAgent = agentMap.get(rec.playerId);
+    if (!playerAgent) {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": playerId "${rec.playerId}" references non-existent agent`
+      );
+    }
+    if (playerAgent.agentType !== 'player') {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": agent "${rec.playerId}" is not a player (agentType: "${playerAgent.agentType}")`
+      );
+    }
+
+    if (rec.activity !== 'having-coffee' && rec.activity !== 'eating-pastry') {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": activity must be "having-coffee" or "eating-pastry". Received: ${JSON.stringify(rec.activity)}`
+      );
+    }
+
+    if (typeof rec.offeringId !== 'string' || rec.offeringId.trim() === '') {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": offeringId must be a non-empty string`
+      );
+    }
+
+    if (typeof rec.restaurantId !== 'string' || rec.restaurantId.trim() === '') {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": restaurantId must be a non-empty string`
+      );
+    }
+    if (!restaurantMap.has(rec.restaurantId)) {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": restaurantId "${rec.restaurantId}" references non-existent restaurant`
+      );
+    }
+
+    if (rec.itemId !== null && (typeof rec.itemId !== 'string' || rec.itemId.trim() === '')) {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": itemId must be null or a non-empty string`
+      );
+    }
+
+    if (typeof rec.startedAt !== 'string' || rec.startedAt.trim() === '') {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": startedAt must be a non-empty string`
+      );
+    }
+    const startedMs = Date.parse(rec.startedAt);
+    if (Number.isNaN(startedMs)) {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": startedAt must be a valid ISO-8601 timestamp. Received: "${rec.startedAt}"`
+      );
+    }
+
+    if (typeof rec.completedAt !== 'string' || rec.completedAt.trim() === '') {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": completedAt must be a non-empty string`
+      );
+    }
+    const completedMs = Date.parse(rec.completedAt);
+    if (Number.isNaN(completedMs)) {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": completedAt must be a valid ISO-8601 timestamp. Received: "${rec.completedAt}"`
+      );
+    }
+
+    if (completedMs < startedMs) {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": completedAt ("${rec.completedAt}") must be greater than or equal to startedAt ("${rec.startedAt}")`
+      );
+    }
+
+    const expectedDurationMs = 15 * 60 * 1000;
+    if (completedMs - startedMs !== expectedDurationMs) {
+      throw new Error(
+        `Invalid ActivityCompletionRecord "${rec.id}": completedAt ("${rec.completedAt}") does not match exact 15-minute duration from startedAt ("${rec.startedAt}")`
+      );
+    }
+  }
+
+  // Validate Acquaintances
+  if (!Array.isArray(candidate.acquaintances)) {
+    throw new Error('Invalid WorldState: acquaintances must be an array');
+  }
+
+  const agentIdSet = new Set<string>(agents.map((a) => a.id));
+  validateAcquaintances(candidate.acquaintances as unknown[], agentIdSet);
+  const acquaintances = candidate.acquaintances as Acquaintance[];
+
+  for (const acq of acquaintances) {
+    if (globalIdSet.has(acq.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${acq.id}"`);
+    }
+    globalIdSet.add(acq.id);
+  }
+
+  // Validate Items
+  if (!Array.isArray(candidate.items)) {
+    throw new Error('Invalid WorldState: items must be an array');
+  }
+
+  const itemIdSet = new Set<string>();
+  const seenSourcePurchaseIds = new Set<string>();
+  const itemBySourcePurchaseId = new Map<string, Record<string, unknown>>();
+  const qualifyingOfferingIds = new Set<string>(QUALIFYING_ITEM_OFFERING_IDS);
+
+  for (let i = 0; i < candidate.items.length; i++) {
+    const itemRaw = candidate.items[i];
+    if (typeof itemRaw !== 'object' || itemRaw === null) {
+      throw new Error(`Invalid OwnedItem at index ${i}: item must be a non-null object`);
+    }
+
+    const item = itemRaw as Record<string, unknown>;
+
+    if (typeof item.id !== 'string' || !/^item:\d+$/.test(item.id)) {
+      throw new Error(
+        `Invalid OwnedItem at index ${i}: id must match format "item:<number>". Received: ${JSON.stringify(item.id)}`
+      );
+    }
+
+    if (itemIdSet.has(item.id)) {
+      throw new Error(`Duplicate item id found: "${item.id}"`);
+    }
+    if (globalIdSet.has(item.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${item.id}"`);
+    }
+    itemIdSet.add(item.id);
+    globalIdSet.add(item.id);
+
+    if (item.type !== 'item') {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": type must be "item". Received: ${JSON.stringify(item.type)}`
+      );
+    }
+
+    if (typeof item.offeringId !== 'string' || !qualifyingOfferingIds.has(item.offeringId)) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": offeringId must be a qualifying item offering. Received: ${JSON.stringify(item.offeringId)}`
+      );
+    }
+
+    if (typeof item.name !== 'string' || item.name.trim() === '') {
+      throw new Error(`Invalid OwnedItem "${item.id}": name must be a non-empty string`);
+    }
+
+    if (typeof item.ownerAgentId !== 'string' || item.ownerAgentId.trim() === '') {
+      throw new Error(`Invalid OwnedItem "${item.id}": ownerAgentId must be a non-empty string`);
+    }
+    const ownerAgent = agentMap.get(item.ownerAgentId);
+    if (!ownerAgent) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": ownerAgentId "${item.ownerAgentId}" references non-existent agent`
+      );
+    }
+    if (ownerAgent.agentType !== 'player') {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": ownerAgentId "${item.ownerAgentId}" is not a player (agentType: "${ownerAgent.agentType}")`
+      );
+    }
+
+    if (typeof item.restaurantId !== 'string' || item.restaurantId.trim() === '') {
+      throw new Error(`Invalid OwnedItem "${item.id}": restaurantId must be a non-empty string`);
+    }
+    if (!restaurantMap.has(item.restaurantId)) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": restaurantId "${item.restaurantId}" references non-existent restaurant`
+      );
+    }
+
+    if (typeof item.acquiredAt !== 'string' || item.acquiredAt.trim() === '') {
+      throw new Error(`Invalid OwnedItem "${item.id}": acquiredAt must be a non-empty string`);
+    }
+    const acquiredMs = Date.parse(item.acquiredAt);
+    if (Number.isNaN(acquiredMs)) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": acquiredAt must be a valid ISO-8601 timestamp string. Received: "${item.acquiredAt}"`
+      );
+    }
+
+    if (item.status !== 'available' && item.status !== 'consumed') {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": status must be "available" or "consumed". Received: ${JSON.stringify(item.status)}`
+      );
+    }
+
+    if (item.status === 'available') {
+      if (item.consumedAt !== null) {
+        throw new Error(
+          `Invalid OwnedItem "${item.id}": consumedAt must be null when status is "available". Received: ${JSON.stringify(item.consumedAt)}`
+        );
+      }
+    } else {
+      if (typeof item.consumedAt !== 'string' || item.consumedAt.trim() === '') {
+        throw new Error(
+          `Invalid OwnedItem "${item.id}": consumedAt must be a non-empty ISO-8601 timestamp when status is "consumed"`
+        );
+      }
+      const consumedMs = Date.parse(item.consumedAt);
+      if (Number.isNaN(consumedMs)) {
+        throw new Error(
+          `Invalid OwnedItem "${item.id}": consumedAt must be a valid ISO-8601 timestamp string. Received: "${item.consumedAt}"`
+        );
+      }
+      if (consumedMs < acquiredMs) {
+        throw new Error(
+          `Invalid OwnedItem "${item.id}": consumedAt ("${item.consumedAt}") must be greater than or equal to acquiredAt ("${item.acquiredAt}")`
+        );
+      }
+    }
+
+    if (typeof item.sourcePurchaseId !== 'string' || item.sourcePurchaseId.trim() === '') {
+      throw new Error(`Invalid OwnedItem "${item.id}": sourcePurchaseId must be a non-empty string`);
+    }
+
+    if (seenSourcePurchaseIds.has(item.sourcePurchaseId)) {
+      throw new Error(
+        `Duplicate sourcePurchaseId "${item.sourcePurchaseId}" found across items (violation of 1:1 cardinality)`
+      );
+    }
+    seenSourcePurchaseIds.add(item.sourcePurchaseId);
+    itemBySourcePurchaseId.set(item.sourcePurchaseId, item);
+
+    const sourcePurchase = purchaseIdSet.has(item.sourcePurchaseId)
+      ? (candidate.purchases as PurchaseRecord[]).find((p) => p.id === item.sourcePurchaseId)
+      : undefined;
+
+    if (!sourcePurchase) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": sourcePurchaseId "${item.sourcePurchaseId}" references non-existent purchase`
+      );
+    }
+
+    if (sourcePurchase.playerId !== item.ownerAgentId) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": ownerAgentId "${item.ownerAgentId}" does not match purchase playerId "${sourcePurchase.playerId}"`
+      );
+    }
+    if (sourcePurchase.offeringId !== item.offeringId) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": offeringId "${item.offeringId}" does not match purchase offeringId "${sourcePurchase.offeringId}"`
+      );
+    }
+    if (sourcePurchase.restaurantId !== item.restaurantId) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": restaurantId "${item.restaurantId}" does not match purchase restaurantId "${sourcePurchase.restaurantId}"`
+      );
+    }
+    if (sourcePurchase.worldTime !== item.acquiredAt) {
+      throw new Error(
+        `Invalid OwnedItem "${item.id}": acquiredAt "${item.acquiredAt}" does not match purchase worldTime "${sourcePurchase.worldTime}"`
+      );
+    }
+  }
+
+  for (const p of candidate.purchases as PurchaseRecord[]) {
+    if (qualifyingOfferingIds.has(p.offeringId)) {
+      if (!itemBySourcePurchaseId.has(p.id)) {
+        throw new Error(
+          `Missing OwnedItem for qualifying purchase "${p.id}" (offering: "${p.offeringId}")`
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Migrates a valid Version 13 WorldState to Version 14.
+ * Initializes the persistent knowledge collection to an empty array (zero-fabrication).
+ */
+export function migrateWorldStateV13ToV14(v13: WorldStateV13): WorldState {
+  return {
+    worldId: v13.worldId,
+    version: 14,
+    worldTime: v13.worldTime,
+    places: v13.places,
+    restaurants: v13.restaurants,
+    agents: v13.agents,
+    offerings: v13.offerings,
+    purchases: v13.purchases,
+    activityCompletions: v13.activityCompletions,
+    acquaintances: v13.acquaintances,
+    items: v13.items,
+    knowledge: [],
   };
 }

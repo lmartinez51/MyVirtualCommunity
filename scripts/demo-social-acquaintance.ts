@@ -36,7 +36,7 @@ try {
   const state = createInitialWorldState(clock);
   validateWorldState(state);
   assert.equal(state.version, CURRENT_WORLD_STATE_VERSION);
-  assert.equal(state.version, 13);
+  assert.equal(state.version, 14);
 
   const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
   const npc = state.agents.find((a) => a.id === 'agent:dev-npc')!;
@@ -201,7 +201,7 @@ try {
   console.log(`[RESTORED] Acquaintances:  ${restoredState.acquaintances.length} records`);
   console.log(`[RESTORED] Acquaintance:   ${restoredState.acquaintances[0].id} (at ${restoredState.acquaintances[0].establishedAt})`);
 
-  assert.equal(restoredState.version, 13);
+  assert.equal(restoredState.version, 14);
   assert.equal(restoredState.acquaintances.length, 1);
   assert.equal(isAgentAcquainted(restoredState, player.id, npc.id), true);
 

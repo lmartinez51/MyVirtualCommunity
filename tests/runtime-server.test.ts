@@ -67,7 +67,7 @@ describe('Milestone 29: Controlled Local Runtime, Session Boundary & Persistence
       assert.equal(data.success, true);
       assert.equal(data.result.ready, true);
       assert.equal(data.result.worldId, 'juarez-el-paso');
-      assert.equal(data.result.schemaVersion, 13);
+      assert.equal(data.result.schemaVersion, 14);
       assert.equal(data.result.activePlayerId, 'agent:dev-player');
       assert.equal(data.result.status, 'RUNNING');
       assert.ok(typeof data.result.worldTime === 'string');

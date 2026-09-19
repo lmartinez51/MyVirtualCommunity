@@ -29,7 +29,7 @@ const stateA = createInitialWorldState(clockA);
 const persistenceA = new LocalFilePersistence(demoPath);
 const simA = new Simulation(clockA, stateA);
 
-assert.equal(stateA.version, 13);
+assert.equal(stateA.version, 14);
 console.log(`World ID:      ${stateA.worldId}`);
 console.log(`World Version: ${stateA.version}`);
 console.log(`World Time:    ${clockA.getTime()}`);
@@ -128,7 +128,7 @@ const persistenceB = new LocalFilePersistence(demoPath);
 const stateB = persistenceB.load()!;
 assert.ok(stateB !== null);
 validateWorldState(stateB);
-assert.equal(stateB.version, 13);
+assert.equal(stateB.version, 14);
 console.log(`Session B Restored World Version: ${stateB.version}`);
 console.log(`Session B Restored World Time:    ${stateB.worldTime}`);
 

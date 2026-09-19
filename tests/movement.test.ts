@@ -475,7 +475,7 @@ describe('Milestone 10: Leaving & Spatial Movement', () => {
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
 
-        assert.equal(stateB.version, 13);
+        assert.equal(stateB.version, 14);
         const playerB = stateB.agents.find((a) => a.id === 'agent:dev-player')!;
         assert.equal(playerB.locationId, 'neighborhood:development-neighborhood');
         assert.equal(playerB.playerActivity?.activity, 'having-coffee');

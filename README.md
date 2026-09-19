@@ -883,6 +883,61 @@ Append-only historical ledger (activityCompletions)
   - Active `playerActivity` with >1 ambiguous matching consumed items in `v12.items` -> sets `itemId: null` (never guessing or fabricating).
   - Subsequent runtime completion events sequence monotonically without ID collisions.
 
+## Milestone 35: Authoritative Knowledge Acquisition & Epistemic Retention
+
+Milestone 35 establishes the persistent epistemic substrate for virtual agents, enabling declarative facts acquired through legitimate social inquiry to be authoritatively retained, validated, persisted, updated, and privately inspected:
+
+```text
+Social Inquiry Interaction (inquireAgentSchedule)
+        ↓
+Precondition Validation (co-location, acquaintance, schedule existence)
+        ↓
+Epistemic Retention (WorldState.knowledge single-record upsert)
+        ↓
+Discrete Verification (inspectPlayerKnowledge, knower isolation)
+        ↓
+Process Death & Cold-Start Durability (Schema Version 14)
+```
+
+### 1. Epistemic Grounding & Core Architectural Distinctions
+- **Knowledge != World Truth**: Knowledge records represent what an agent subjectively believes or has retained from past interactions. They possess zero causal authority over physical reality, simulation schedules, or business opening states. Changes in world truth do not automatically alter retained knowledge.
+- **Knowledge != Memory**: Milestone 35 introduces an authoritative, declarative semantic fact substrate without cognitive modeling, forgetting curves, decay, or fuzzy associative recall.
+- **Knowledge != History Ledger**: Unlike append-only historical ledgers (`purchases`, `activityCompletions`), `WorldState.knowledge` represents an agent's current epistemic state. Logical identity is defined by the composite key `(agentId, factType, subjectId)`.
+- **Single-Record Upsert**: Re-inquiry updates `lastVerifiedAt` and `payload` in-place while strictly preserving `id` and `acquiredAt`, preventing unbounded record accumulation.
+
+### 2. Epistemic Data Model (`src/core/world-state.ts`)
+- **Knowledge Types**:
+  - `KnowledgeFactType`: `'agent-schedule'`
+  - `AgentSchedulePayload`: `{ workplaceId: string, shiftStart: string, shiftEnd: string }`
+  - `KnowledgeSource`: `'social-inquiry'`
+- **Authoritative Epistemic Record**:
+  ```ts
+  export interface AgentKnowledgeRecord {
+    readonly id: string;            // Deterministic "knowledge:<N>" identifier
+    readonly agentId: string;       // Knower (foreign key -> state.agents, agentType === 'player')
+    readonly factType: KnowledgeFactType; // Discriminator ('agent-schedule')
+    readonly subjectId: string;     // Subject entity (foreign key -> state.agents, agentType === 'npc')
+    readonly payload: KnowledgePayload;   // Grounded factual data
+    readonly acquiredAt: string;    // ISO-8601 WorldTime when first learned
+    readonly lastVerifiedAt: string;// ISO-8601 WorldTime when last confirmed
+    readonly source: KnowledgeSource;     // Provenance ('social-inquiry')
+    readonly sourceAgentId: string; // Informant (foreign key -> state.agents, agentType === 'npc')
+  }
+  ```
+
+### 3. Epistemic Privacy & Read Safety
+- **Private Knower Inspection (`inspectPlayerKnowledge`)**: Inspects knowledge private to the requesting player. Never exposes knowledge across agents. Rejects non-existent players or NPC callers, and returns defensive clones preventing state mutation.
+- **Read Query Isolation (`getScheduleView`)**: The HTTP/UI read projection evaluates inquiry against a defensive state clone (`structuredClone`), guaranteeing zero state mutation and zero disk writes on inspection queries.
+- **Zero API/Client Leakage**: The HTTP command allowlist and client UI projections remain strictly bounded; knowledge acquisition occurs authoritatively through kernel inquiry functions.
+
+### 4. Schema Version 14 & Migration
+- **Schema Version**: `14` (`CURRENT_WORLD_STATE_VERSION = 14`).
+- **Zero-Fabrication Migration (`migrateWorldStateV13ToV14`)**: Migrates valid Version 13 states to Version 14, initializing `knowledge: []` without guessing or fabricating epistemic records.
+- **Cascading Persistence Migration**: `LocalFilePersistence` supports automated cascading upgrades (`v11 -> v12 -> v13 -> v14`, `v12 -> v13 -> v14`, `v13 -> v14`) with atomic file writes.
+
+> [!NOTE]
+> **World Laws Status**: PENDING DOCUMENT RECONCILIATION.
+
 ## Getting Started
 
 ### 1. Install Dependencies
@@ -893,7 +948,7 @@ npm install
 
 ### 2. Run Tests
 
-Executes all **632 automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, inventory, and activity lifecycle tests across 39 test suites**:
+Executes all **automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, inventory, activity lifecycle, and epistemic retention tests across 41 test suites**:
 
 ```bash
 npm test
@@ -933,7 +988,7 @@ npx tsx scripts/start-browser-server.ts
 
 ### 7. Run All Demonstrations
 
-Executes all 28 automated milestone demonstration scripts sequentially:
+Executes all 29 automated milestone demonstration scripts sequentially:
 
 ```bash
 npm run demo:all
@@ -975,6 +1030,7 @@ Each demonstration script exercises a complete, self-contained milestone slice w
 | `npm run demo:spatial-opportunity` | M27 Storefront | Opportunity perception across building storefront boundaries |
 | `npm run demo:runtime-server` | M29 Runtime | Authoritative HTTP runtime, session controller, and FIFO persistence |
 | `npm run demo:visual-client` | M30 Client | Visual client presentation shell, Canvas 2D, and HUD integration |
+| `npm run demo:knowledge-acquisition` | M35 Knowledge | Authoritative knowledge acquisition, epistemic retention, upsert, privacy, and durability |
 
 ---
 

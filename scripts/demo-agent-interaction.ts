@@ -39,7 +39,7 @@ console.log(`World Version:      ${stateA.version}`);
 console.log(`Initial World Time: ${stateA.worldTime}`);
 console.log(`Player Location:    ${playerA.locationId}`);
 console.log(`NPC Location:       ${npcA.locationId} (seeded independently)`);
-assert.equal(stateA.version, 13);
+assert.equal(stateA.version, 14);
 assert.equal(playerA.locationId, 'building:development-building');
 assert.equal(npcA.locationId, 'building:development-residence');
 
@@ -175,7 +175,7 @@ assert.ok(stateB !== null);
 assert.doesNotThrow(() => validateWorldState(stateB));
 console.log(`Restored World Version: ${stateB.version}`);
 console.log(`Restored World Time:    ${stateB.worldTime}`);
-assert.equal(stateB.version, 13);
+assert.equal(stateB.version, 14);
 
 // === STEP 18: Verify Spatial State Survives Persistence ===
 console.log('\n=== STEP 18: Verifying reconstructed spatial state across runtimes ===');
