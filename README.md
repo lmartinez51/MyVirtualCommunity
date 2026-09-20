@@ -973,8 +973,117 @@ Business Domain Authority
 - **`validateBusinessAuthority(state)`**:
   - Integrated into `validateWorldState`, enforcing valid operational states, `operationalSince <= worldTime`, spatial building containment, non-negative finite integer offering prices, and catalog referential integrity.
 
+## Milestone 37: Asset, Property and Inventory Authority (AUD-03)
+
+Milestone 37 formalizes the authority boundaries for Property, Assets, Items, Products, Offerings, Vehicles, Buildings, Ownership, Possession, Inventory, Location, Physical condition, Economic value, and Usage, establishing clear distinctions between what the world model represents, which domain owns each mutable datum, and which transitions are valid:
+
+### 1. Conceptual Classification Matrix
+
+| Concept | Current Status |
+| :--- | :--- |
+| **Property / Real Estate** | Not currently represented |
+| **Generic Assets** | Not currently represented |
+| **Items** | Authoritative persistent state (`OwnedItem` in `state.items`) |
+| **Products** | Catalog/descriptive concept |
+| **Offerings** | Business catalog/descriptive state (`Offering` in `state.offerings`) |
+| **Vehicles** | Not currently represented |
+| **Buildings** | Authoritative spatial entities (`Place` with `type === 'building'`), not real-estate ownership |
+| **Ownership** | Limited current attribution through `ownerAgentId`; legal ownership not modeled |
+| **Possession** | Current practical personal possession/custody of acquired items |
+| **Inventory** | Derived query/projection (`getPlayerAvailableItems`), not a generalized inventory subsystem |
+| **Location** | Agent location currently authoritative (`agent.locationId`); item location is derived for current scope |
+| **Consumable Lifecycle State** | `available → consumed` (`OwnedItem.status` & `consumedAt`) |
+| **General Physical Condition** | Not currently represented (durability, wear, damage, repair are not modeled) |
+| **Historical Transaction Price** | `PurchaseRecord.amountMinor` (immutable evidence of exchange amount) |
+| **Current Economic Value** | Not currently represented (market value, resale value, and appraisal are not modeled) |
+| **Usage** | Consumable activity/lifecycle records (`playerActivity`, `activityCompletions`) |
+
+### 2. Core Architectural Distinctions & Semantic Boundaries
+- **Ownership vs Possession**: In the current model, `ownerAgentId` identifies the agent to whom an acquired personal item is attributed. The model currently treats this as personal possession/custody for acquired consumables. Legal ownership rights, transfer, lending, custody delegation, and title are not modeled.
+- **Consumable Lifecycle State vs Physical Condition**: `OwnedItem.status` (`'available' | 'consumed'`) represents consumable lifecycle state, not general physical condition. General physical condition (durability, wear, damage, degradation, repair) is not currently represented.
+- **Historical Transaction Price vs Economic Value**: `PurchaseRecord.amountMinor` is an immutable historical transaction price recording evidence of an exchange. Current economic value, market value, appraisal, and resale value are not currently represented.
+- **Commercial Catalog vs Physical Stock**: Offerings in `state.offerings` are descriptive business catalog specifications. They are not physical warehouse stock, inventory counters, or owned items. Retiring or modifying an offering does not alter existing owned items.
+- **Buildings vs Real-Estate Property**: Buildings in `state.places` represent spatial containment geometry and hierarchy. They are not real-estate assets, deeded properties, or agent-owned capital.
+- **Item Location (Scope Simplification)**: Currently acquired personal consumable items do not have independent spatial entities. Their practical location is derived from the owning agent's location. This is a scope simplification appropriate to the current consumable-item model, not a permanent architectural prohibition against future independent item locations (e.g. dropped objects, packages, or storage).
+- **Agent Possession Scope**: In the current scope, acquired consumable items are associated with player agents. NPC possession/acquisition is not currently implemented; this is a current scope limitation, not a permanent world law.
+- **Strictly Unrepresented**: Real estate deeds, generic asset registries, vehicles, durability/wear systems, dynamic market valuations, and warehouse supply chains are not modeled.
+
+### 3. Authoritative Item Lifecycle Transition (`src/core/item.ts`)
+- **`consumeOwnedItem(state, itemId, worldTime)`**:
+  - The exclusive authoritative function for consuming an OwnedItem.
+  - Deterministic precondition verification:
+    1. Item exists in `state.items` (`item-not-found`)
+    2. Item status is `'available'` (`item-already-consumed`)
+    3. Timestamp is a valid ISO-8601 string (`invalid-timestamp`)
+  - Guarantees zero state mutation on failure.
+  - Atomically sets `status = 'consumed'` and `consumedAt = worldTime`.
+  - Zero cross-domain interference: balances, restaurant operational states, locations, and knowledge are never mutated.
+- **Pure Queries**:
+  - `getOwnedItem(state, itemId)`: Retrieves item by ID without mutation.
+  - `getPlayerAvailableItems(state, playerId, offeringId?)`: Filters available items by owner and optionally offering.
+  - `isItemAvailable(state, itemId)`: Pure boolean evaluation of item availability.
+
+### 4. Item Authority Invariant Validation (`validateItemAuthority`)
+- Integrated into `validateWorldState`, enforcing:
+  1. Monotonic format `item:<N>` and global unique IDs.
+  2. Entity type strictly `'item'`.
+  3. Offering ID in qualifying offerings list.
+  4. Non-empty item name.
+  5. Owner agent exists and is player (current scope limitation).
+  6. Restaurant exists.
+  7. Valid `acquiredAt` timestamp `<= state.worldTime`.
+  8. Status strictly `'available'` or `'consumed'`.
+  9. `consumedAt` is `null` when available; valid timestamp `>= acquiredAt` when consumed.
+  10. Bidirectional 1:1 referential cardinality between qualifying purchases and OwnedItems.
+
 > [!NOTE]
 > **World Laws Status**: PENDING DOCUMENT RECONCILIATION.
+
+## Milestone 38: Real-World Spatial Foundation
+
+Milestone 38 instantiates the first small, coherent fragment of the real Ciudad Juárez world and proves the existing coordinate-free topological spatial architecture against verified geography:
+
+### 1. Real-World Geographic Fragment (`src/core/seed.ts`)
+- **Root City**: `city:ciudad-juarez` ("Ciudad Juárez", `parentId: null`)
+- **District**: `district:centro-historico` ("Centro Histórico", `parentId: 'city:ciudad-juarez'`)
+- **Neighborhood**: `neighborhood:zona-centro` ("Zona Centro", `parentId: 'district:centro-historico'`)
+- **Primary Street**: `street:avenida-benito-juarez` ("Avenida Benito Juárez", `parentId: 'neighborhood:zona-centro'`)
+- **Sibling Street**: `street:avenida-16-de-septiembre` ("Avenida 16 de Septiembre", `parentId: 'neighborhood:zona-centro'`)
+- **Residential Building**: `building:real-world-residence` ("Residential Building", `parentId: 'street:avenida-benito-juarez'`)
+- **Commercial Building**: `building:kentucky-club-building` ("Kentucky Club Building", `parentId: 'street:avenida-benito-juarez'`)
+- **Destination Restaurant**: `restaurant:kentucky-club` ("Kentucky Club", `buildingId: 'building:kentucky-club-building'`)
+- **Player Agent**: `agent:real-world-player` ("Ciudad Juárez Player", starting at `locationId: 'building:real-world-residence'`)
+
+### 2. Representation Choices vs. World Model Laws
+- Modeling `Centro Histórico` as a `district` and `Zona Centro` as a `neighborhood` are pragmatic representation choices within the existing `Place` containment hierarchy, not immutable ontological laws.
+- The residential starting location is modeled as a generic `"Residential Building"` to protect private residential data without fabricating real residents or private addresses.
+- `restaurant:kentucky-club` is grounded in its verified public address (*Av. Benito Juárez 643, Centro, 32000 Ciudad Juárez, Chihuahua*).
+- Kentucky Club's `operationalState: 'open'` and `operationalSince` are technical simulation defaults required by `enterRestaurant()` preconditions, not a verified real-world schedule claim.
+- Mandatory schema fields `balanceMinor: 0` and `currency: 'USD'` on `Restaurant` and `Agent` are technical schema prerequisites under Schema Version 14; zero economic behavior, offerings, or pricing are introduced. `offerings` is strictly an empty array `[]`.
+
+### 3. Complete Topological Spatial Flow
+```text
+Player
+  ↓
+building:real-world-residence (Home)
+  ↓ [leaveBuilding]
+street:avenida-benito-juarez (Avenida Benito Juárez)
+  ↓ [inspectCurrentLocation]
+building:kentucky-club-building (Commercial Building)
+  ↓ [enterBuilding]
+building:kentucky-club-building
+  ↓ [enterRestaurant]
+restaurant:kentucky-club (Kentucky Club)
+```
+
+### 4. Sibling Street Traversal
+- The existing `traverseToStreet()` operation allows bidirectional navigation between sibling streets in the same neighborhood (`street:avenida-benito-juarez <-> street:avenida-16-de-septiembre`).
+
+### 5. Architectural Invariants
+- **Schema Version 14 Preserved**: No schema migration, no new entity types, and no new spatial subsystems.
+- **Zero Coordinates or Metrics**: No $x, y, z$, GPS, latitude/longitude, distance meters, pathfinding, or physics.
+- **Discrete Transitions**: Movement remains instantaneous topological state transitions preserving `worldTime`.
+- **Backward Compatibility**: Synthetic development seed fixtures (`createDevelopmentSeedWorld`) remain 100% intact with zero regressions across pre-existing milestones.
 
 ## Getting Started
 
@@ -986,7 +1095,7 @@ npm install
 
 ### 2. Run Tests
 
-Executes all **automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, inventory, activity lifecycle, epistemic retention, and business authority tests across 42 test suites**:
+Executes all **automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, inventory, activity lifecycle, epistemic retention, business authority, asset/property/inventory authority, and real-world spatial foundation tests across 44 test suites**:
 
 ```bash
 npm test
@@ -1026,7 +1135,7 @@ npx tsx scripts/start-browser-server.ts
 
 ### 7. Run All Demonstrations
 
-Executes all 29 automated milestone demonstration scripts sequentially:
+Executes all 31 automated milestone demonstration scripts sequentially:
 
 ```bash
 npm run demo:all
@@ -1070,6 +1179,8 @@ Each demonstration script exercises a complete, self-contained milestone slice w
 | `npm run demo:visual-client` | M30 Client | Visual client presentation shell, Canvas 2D, and HUD integration |
 | `npm run demo:knowledge-acquisition` | M35 Knowledge | Authoritative knowledge acquisition, epistemic retention, upsert, privacy, and durability |
 | `npm run demo:business-domain-authority` | M36 Business | Authoritative business operational transitions, domain isolation, and precondition enforcement |
+| `npm run demo:asset-property-inventory-authority` | M37 Inventory | Authoritative item possession transitions, query functions, and domain boundary enforcement |
+| `npm run demo:real-world-spatial-foundation` | M38 Spatial | Real-world Ciudad Juárez street fragment and residential-to-restaurant flow |
 
 ---
 

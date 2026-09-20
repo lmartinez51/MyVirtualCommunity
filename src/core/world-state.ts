@@ -7,7 +7,7 @@ import {
 } from './entities/restaurant.js';
 import { Agent, AgentType, validateAgents, ConsumableActivityType, PlayerActivityState } from './entities/agent.js';
 import { Offering, validateOfferings } from './entities/offering.js';
-import { createDevelopmentSeedWorld } from './seed.js';
+import { createDevelopmentSeedWorld, createRealWorldJuarezSeedWorld, SeedWorldData } from './seed.js';
 import { HAVING_COFFEE_DURATION_MS } from './activities/having-coffee.js';
 import {
   type Acquaintance,
@@ -44,45 +44,37 @@ export const EATING_PASTRY_DURATION_MS = 15 * 60 * 1000;
 
 export type { ConsumableActivityType, PlayerActivityState };
 
-export const QUALIFYING_ITEM_OFFERING_IDS = [
-  'offering:development-coffee',
-  'offering:development-pastry',
-] as const;
+import {
+  QUALIFYING_ITEM_OFFERING_IDS,
+  type QualifyingItemOfferingId,
+  type ItemStatus,
+  type OwnedItem,
+  type ObservableOwnedItem,
+  type ConsumeOwnedItemResultCode,
+  type ConsumeOwnedItemResult,
+  type ItemWorldState,
+  consumeOwnedItem,
+  getOwnedItem,
+  getPlayerAvailableItems,
+  isItemAvailable,
+  validateItemAuthority,
+} from './item.js';
 
-export type QualifyingItemOfferingId = (typeof QUALIFYING_ITEM_OFFERING_IDS)[number];
-
-export type ItemStatus = 'available' | 'consumed';
-
-/**
- * Authoritative physical possession entity (Milestone 33).
- *
- * Governs current possession and consumable lifecycle authority.
- * Decoupled from immutable historical PurchaseRecord.
- */
-export interface OwnedItem {
-  readonly id: string; // Strict format: /^item:(\d+)$/
-  readonly type: 'item';
-  readonly offeringId: string;
-  readonly name: string; // Acquisition snapshot or migration-reconstructed name
-  readonly ownerAgentId: string; // Foreign key -> state.agents (agentType === 'player')
-  readonly restaurantId: string; // Foreign key -> state.restaurants
-  readonly sourcePurchaseId: string; // Foreign key -> state.purchases
-  readonly acquiredAt: string; // ISO-8601 timestamp === purchase.worldTime
-  status: ItemStatus; // Lifecycle state: 'available' | 'consumed'
-  consumedAt: string | null; // ISO-8601 timestamp when consumed, or null
-}
-
-/**
- * Client-facing projection of an OwnedItem.
- * Omits internal foreign keys and lifecycle mutation fields.
- */
-export interface ObservableOwnedItem {
-  readonly id: string;
-  readonly offeringId: string;
-  readonly name: string;
-  readonly restaurantId: string;
-  readonly acquiredAt: string;
-}
+export {
+  QUALIFYING_ITEM_OFFERING_IDS,
+  type QualifyingItemOfferingId,
+  type ItemStatus,
+  type OwnedItem,
+  type ObservableOwnedItem,
+  type ConsumeOwnedItemResultCode,
+  type ConsumeOwnedItemResult,
+  type ItemWorldState,
+  consumeOwnedItem,
+  getOwnedItem,
+  getPlayerAvailableItems,
+  isItemAvailable,
+  validateItemAuthority,
+};
 
 export type { Acquaintance, DevelopmentNpcWorkSchedule };
 export {
@@ -283,14 +275,15 @@ export interface WorldStateV11 {
 }
 
 /**
- * Creates the initial WorldState containing the synthetic development seed world
- * at the current authoritative WorldClock time.
+ * Creates the initial WorldState containing seed world data at the current authoritative WorldClock time.
+ * If no custom seed is provided, defaults to the synthetic development seed world.
  */
 export function createInitialWorldState(
   clock: WorldClock,
-  worldId: string = DEFAULT_WORLD_ID
+  worldId: string = DEFAULT_WORLD_ID,
+  customSeed?: SeedWorldData
 ): WorldState {
-  const seed = createDevelopmentSeedWorld(clock.getTime());
+  const seed = customSeed ?? createDevelopmentSeedWorld(clock.getTime());
 
   return {
     worldId,
@@ -307,6 +300,21 @@ export function createInitialWorldState(
     knowledge: [],
   };
 }
+
+/**
+ * Creates an authoritative WorldState initialized with the minimal real-world Ciudad Juárez
+ * spatial foundation seed world (Milestone 38).
+ *
+ * Configures the player starting location inside the residential building on Avenida Benito Juárez.
+ */
+export function createRealWorldJuarezWorldState(
+  clock: WorldClock,
+  worldId: string = DEFAULT_WORLD_ID
+): WorldState {
+  const seed = createRealWorldJuarezSeedWorld(clock.getTime());
+  return createInitialWorldState(clock, worldId, seed);
+}
+
 
 /**
  * Takes a snapshot of current WorldState with the latest time from the authoritative WorldClock.
@@ -1651,10 +1659,12 @@ export function executeConsumableActivity(
   });
   const chosenItem = eligibleItems[0];
 
-  // 8. Commit state transition atomically
+  // 8. Commit state transition atomically via authoritative item authority
   const startedAt = state.worldTime;
-  chosenItem.status = 'consumed';
-  chosenItem.consumedAt = startedAt;
+  const consumeResult = consumeOwnedItem(state, chosenItem.id, startedAt);
+  if (!consumeResult.success) {
+    throw new Error(`Failed to consume item: ${consumeResult.message}`);
+  }
   agent.playerActivity = {
     activity: config.activity,
     startedAt,
@@ -3709,6 +3719,9 @@ export function validateWorldState(data: unknown): asserts data is WorldState {
       }
     }
   }
+
+  // Validate Item Authority domain invariants (Milestone 37)
+  validateItemAuthority(candidate as unknown as ItemWorldState);
 
   // Validate Knowledge (Milestone 35: authoritative epistemic retention)
   if (!Array.isArray(candidate.knowledge)) {

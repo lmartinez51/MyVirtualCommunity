@@ -135,3 +135,114 @@ export function createDevelopmentSeedWorld(
     offerings,
   };
 }
+
+/**
+ * Creates the minimal real-world spatial seed world for Ciudad Juárez (Milestone 38).
+ *
+ * Grounded in verified public geography of Ciudad Juárez Centro Histórico:
+ * - City: Ciudad Juárez (city:ciudad-juarez, root)
+ * - District: Centro Histórico (district:centro-historico) [Representation Choice]
+ * - Neighborhood: Zona Centro (neighborhood:zona-centro) [Representation Choice]
+ * - Primary Street: Avenida Benito Juárez (street:avenida-benito-juarez)
+ * - Sibling Street: Avenida 16 de Septiembre (street:avenida-16-de-septiembre)
+ * - Residential Building: Residential Building (building:real-world-residence) [Generic Representation]
+ * - Commercial Building: Kentucky Club Building (building:kentucky-club-building)
+ * - Restaurant: Kentucky Club (restaurant:kentucky-club) [Av. Benito Juárez 643]
+ * - Player Agent: Ciudad Juárez Player (agent:real-world-player), starting inside building:real-world-residence
+ *
+ * NOTE:
+ * - District and Neighborhood assignments are structural representation choices within
+ *   the existing Place containment hierarchy, not immutable world model laws.
+ * - Kentucky Club's operationalState ('open') is a simulation default required by the
+ *   preconditions of enterRestaurant(), not a verified real-world schedule claim.
+ * - balanceMinor (0) and currency ('USD') on Restaurant and Agent are mandatory technical schema
+ *   defaults under Schema Version 14; no economic behavior, offerings, or pricing are introduced.
+ * - offerings is strictly an empty array []; commercial fulfillment is deferred to later milestones.
+ *
+ * @param initialTime The world time timestamp to associate with initial agent activity and restaurant operational state.
+ */
+export function createRealWorldJuarezSeedWorld(
+  initialTime: string = '2026-09-14T08:00:00.000Z'
+): SeedWorldData {
+  const places: Place[] = [
+    {
+      id: 'city:ciudad-juarez',
+      type: 'city',
+      name: 'Ciudad Juárez',
+      parentId: null,
+    },
+    {
+      id: 'district:centro-historico',
+      type: 'district',
+      name: 'Centro Histórico',
+      parentId: 'city:ciudad-juarez',
+    },
+    {
+      id: 'neighborhood:zona-centro',
+      type: 'neighborhood',
+      name: 'Zona Centro',
+      parentId: 'district:centro-historico',
+    },
+    {
+      id: 'street:avenida-benito-juarez',
+      type: 'street',
+      name: 'Avenida Benito Juárez',
+      parentId: 'neighborhood:zona-centro',
+    },
+    {
+      id: 'building:real-world-residence',
+      type: 'building',
+      name: 'Residential Building',
+      parentId: 'street:avenida-benito-juarez',
+    },
+    {
+      id: 'building:kentucky-club-building',
+      type: 'building',
+      name: 'Kentucky Club Building',
+      parentId: 'street:avenida-benito-juarez',
+    },
+    {
+      id: 'street:avenida-16-de-septiembre',
+      type: 'street',
+      name: 'Avenida 16 de Septiembre',
+      parentId: 'neighborhood:zona-centro',
+    },
+  ];
+
+  const restaurants: Restaurant[] = [
+    {
+      id: 'restaurant:kentucky-club',
+      type: 'restaurant',
+      name: 'Kentucky Club',
+      buildingId: 'building:kentucky-club-building',
+      operationalState: 'open',
+      operationalSince: initialTime,
+      balanceMinor: 0,
+      currency: 'USD',
+    },
+  ];
+
+  const agents: Agent[] = [
+    {
+      id: 'agent:real-world-player',
+      type: 'agent',
+      name: 'Ciudad Juárez Player',
+      agentType: 'player',
+      activityState: 'active',
+      activitySince: initialTime,
+      locationId: 'building:real-world-residence',
+      balanceMinor: 0,
+      currency: 'USD',
+      playerActivity: null,
+    },
+  ];
+
+  const offerings: Offering[] = [];
+
+  return {
+    places,
+    restaurants,
+    agents,
+    offerings,
+  };
+}
