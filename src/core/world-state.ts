@@ -20,9 +20,24 @@ import {
   formatHourUtc,
   DevelopmentNpcWorkSchedule,
 } from './development-npc-schedule.js';
+import {
+  RestaurantOperationalTransitionResult,
+  RestaurantOperationalTransitionResultCode,
+  transitionRestaurantOperationalState,
+  isRestaurantOpen,
+  validateBusinessAuthority,
+} from './business.js';
 
 export const DEFAULT_WORLD_ID = 'juarez-el-paso';
 export const CURRENT_WORLD_STATE_VERSION = 14;
+
+export {
+  type RestaurantOperationalTransitionResult,
+  type RestaurantOperationalTransitionResultCode,
+  transitionRestaurantOperationalState,
+  isRestaurantOpen,
+  validateBusinessAuthority,
+};
 
 export const EATING_PASTRY_DURATION_MINUTES = 15;
 export const EATING_PASTRY_DURATION_MS = 15 * 60 * 1000;
@@ -3190,6 +3205,9 @@ export function validateWorldState(data: unknown): asserts data is WorldState {
   const validRestaurantIds = new Set<string>(restaurants.map((r) => r.id));
   validateOfferings(candidate.offerings as unknown[], validRestaurantIds);
   const offerings = candidate.offerings as Offering[];
+
+  // Validate Business Authority invariants (Milestone 36)
+  validateBusinessAuthority(candidate as unknown as WorldState);
 
   for (const agent of agents) {
     if (agent.playerActivity) {

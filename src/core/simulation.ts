@@ -5,6 +5,7 @@ import {
   DEVELOPMENT_PASTRY_OFFERING_ID,
   makeDevelopmentOfferingAvailable,
   retireDevelopmentOffering,
+  transitionRestaurantOperationalState,
 } from './world-state.js';
 import { ActivityState } from './entities/agent.js';
 import {
@@ -343,40 +344,31 @@ export class Simulation {
         ? this.options.restaurantEvaluator(worldTime)
         : evaluateDevelopmentRestaurantOperationalRule(worldTime);
 
-      const previousState = restaurant.operationalState;
-      const isChanged = previousState !== targetState;
+      const transitionResult = transitionRestaurantOperationalState(
+        this.state,
+        restaurant.id,
+        targetState,
+        worldTime
+      );
 
-      if (isChanged) {
-        restaurant.operationalState = targetState;
-        restaurant.operationalSince = worldTime;
+      const previousState = transitionResult.previousState ?? restaurant.operationalState;
+      const newState = transitionResult.newState ?? restaurant.operationalState;
 
-        restaurantTransitions.push({
-          restaurantId: restaurant.id,
-          previousState,
-          newState: targetState,
-          changed: true,
-          operationalSince: worldTime,
-        });
+      restaurantTransitions.push({
+        restaurantId: restaurant.id,
+        previousState,
+        newState,
+        changed: transitionResult.changed,
+        operationalSince: transitionResult.operationalSince ?? restaurant.operationalSince,
+      });
 
-        if (!this.options.silent) {
-          console.log(`SIMULATION TICK`);
-          console.log(`WORLD TIME: ${worldTime}`);
-          console.log(`RESTAURANT ${restaurant.id}`);
-          console.log(`OPERATIONAL: ${previousState} -> ${targetState}`);
-        }
-      } else {
-        restaurantTransitions.push({
-          restaurantId: restaurant.id,
-          previousState,
-          newState: previousState,
-          changed: false,
-          operationalSince: restaurant.operationalSince,
-        });
-
-        if (!this.options.silent) {
-          console.log(`SIMULATION TICK`);
-          console.log(`WORLD TIME: ${worldTime}`);
-          console.log(`RESTAURANT ${restaurant.id}`);
+      if (!this.options.silent) {
+        console.log(`SIMULATION TICK`);
+        console.log(`WORLD TIME: ${worldTime}`);
+        console.log(`RESTAURANT ${restaurant.id}`);
+        if (transitionResult.changed) {
+          console.log(`OPERATIONAL: ${previousState} -> ${newState}`);
+        } else {
           console.log(`OPERATIONAL: ${previousState} (unchanged)`);
         }
       }

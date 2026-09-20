@@ -935,6 +935,44 @@ Process Death & Cold-Start Durability (Schema Version 14)
 - **Zero-Fabrication Migration (`migrateWorldStateV13ToV14`)**: Migrates valid Version 13 states to Version 14, initializing `knowledge: []` without guessing or fabricating epistemic records.
 - **Cascading Persistence Migration**: `LocalFilePersistence` supports automated cascading upgrades (`v11 -> v12 -> v13 -> v14`, `v12 -> v13 -> v14`, `v13 -> v14`) with atomic file writes.
 
+## Milestone 36: Business Domain Authority (AUD-02)
+
+Milestone 36 formalizes the authoritative boundary of the Business Domain, answering precisely what mutable state Business owns, what belongs to other domains, and enforcing strict domain isolation:
+
+```text
+Business Domain Authority
+├── Owned State:
+│   ├── Restaurant.operationalState ('open' | 'closed')
+│   ├── Restaurant.operationalSince (ISO 8601 timestamp)
+│   └── Commercial Offering Catalog (state.offerings: terms & pricing)
+└── Explicit Domain Delegations:
+    ├── Spatial Presence & Containment → Spatial / Agent
+    ├── Worker Employment & Activity → Activity / Agent
+    ├── Monetary Truth & Balances → Economy
+    ├── Physical Possessions (items) → Item / Possession
+    ├── Situational Opportunities → Opportunity
+    └── Agent Epistemics → Knowledge
+```
+
+### 1. Authoritative Operational Transitions (`src/core/business.ts`)
+- **`transitionRestaurantOperationalState(state, restaurantId, targetState, worldTime)`**:
+  - Exclusive authoritative state transition for opening and closing commercial venues.
+  - Deterministic precondition order: restaurant existence, valid target state (`'open' | 'closed'`), valid temporal non-future timestamp.
+  - Strict idempotency: transitions to the current state succeed with `changed: false` and preserve original `operationalSince`.
+  - Zero state mutation on any precondition violation.
+- **`isRestaurantOpen(state, restaurantId)`**:
+  - Authoritative pure query for operational availability.
+
+### 2. Strict Domain Isolation Invariants
+- **No Forced Eviction**: Closing a restaurant does NOT alter customer `locationId` (agents are not arbitrarily teleported).
+- **No Monetary Authority**: Business domain cannot unilaterally create, debit, or credit balances; financial fund movement requires Economy domain authority (`purchaseOffering`).
+- **No Staffing / Employment Engine**: Worker presence and activity belong to Activity/Agent domains; Business observes them only as preconditions.
+- **No Epistemic Bleed**: Business transitions do not directly mutate agent knowledge; agents must acquire facts through valid epistemic observation or social interaction.
+
+### 3. Business Authority Invariant Validation
+- **`validateBusinessAuthority(state)`**:
+  - Integrated into `validateWorldState`, enforcing valid operational states, `operationalSince <= worldTime`, spatial building containment, non-negative finite integer offering prices, and catalog referential integrity.
+
 > [!NOTE]
 > **World Laws Status**: PENDING DOCUMENT RECONCILIATION.
 
@@ -948,7 +986,7 @@ npm install
 
 ### 2. Run Tests
 
-Executes all **automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, inventory, activity lifecycle, and epistemic retention tests across 41 test suites**:
+Executes all **automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, inventory, activity lifecycle, epistemic retention, and business authority tests across 42 test suites**:
 
 ```bash
 npm test
@@ -1031,6 +1069,7 @@ Each demonstration script exercises a complete, self-contained milestone slice w
 | `npm run demo:runtime-server` | M29 Runtime | Authoritative HTTP runtime, session controller, and FIFO persistence |
 | `npm run demo:visual-client` | M30 Client | Visual client presentation shell, Canvas 2D, and HUD integration |
 | `npm run demo:knowledge-acquisition` | M35 Knowledge | Authoritative knowledge acquisition, epistemic retention, upsert, privacy, and durability |
+| `npm run demo:business-domain-authority` | M36 Business | Authoritative business operational transitions, domain isolation, and precondition enforcement |
 
 ---
 

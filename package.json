@@ -37,6 +37,7 @@
     "demo:runtime-server": "tsx scripts/demo-runtime-server.ts",
     "demo:visual-client": "tsx scripts/demo-visual-client.ts",
     "demo:knowledge-acquisition": "tsx scripts/demo-knowledge-acquisition.ts",
+    "demo:business-domain-authority": "tsx scripts/demo-business-domain-authority.ts",
     "demo:all": "node -e \"const fs=require('fs'); const cp=require('child_process'); const pkg=JSON.parse(fs.readFileSync('package.json')); const demos=Object.keys(pkg.scripts).filter(k=>k.startsWith('demo:')&&k!=='demo:all'); for(const d of demos){ console.log('\\n>>> '+d); cp.execSync('npm run '+d, {stdio:'inherit'}); }\""
   },
   "devDependencies": {
