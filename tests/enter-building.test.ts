@@ -21,7 +21,7 @@ import {
 import { LocalFilePersistence } from '../src/persistence/local-storage.js';
 
 describe('Milestone 16: Bidirectional Building Traversal (enterBuilding)', () => {
-  const OPEN_TIME = '2026-09-14T09:00:00.000Z';
+  const OPEN_TIME = '2026-09-14T15:00:00.000Z'; // 09:00 local Ciudad Juárez
 
   function setupWorldWithPlayerOnStreet(): {
     clock: WorldClock;
@@ -274,7 +274,7 @@ describe('Milestone 16: Bidirectional Building Traversal (enterBuilding)', () =>
       assert.equal(restaurant.operationalState, restaurantOperationalBefore, 'restaurant must remain unchanged');
       assert.equal(state.purchases.length, purchasesCountBefore, 'purchases must remain unchanged');
       assert.equal(state.activityCompletions.length, completionsCountBefore, 'activityCompletions must remain unchanged');
-      assert.equal(state.version, 14, 'schema version must remain strictly 14');
+      assert.equal(state.version, 18, 'schema version must remain strictly 18');
     });
 
     test('preserves active playerActivity across enterBuilding', () => {
@@ -380,7 +380,7 @@ describe('Milestone 16: Bidirectional Building Traversal (enterBuilding)', () =>
         const stateB = persistenceB.load();
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
-        assert.equal(stateB.version, 14, 'schema version must be preserved as 14');
+        assert.equal(stateB.version, 18, 'schema version must be preserved as 18');
 
         const playerB = stateB.agents.find((a) => a.id === 'agent:dev-player')!;
         assert.equal(playerB.locationId, 'street:development-street');
@@ -402,7 +402,7 @@ describe('Milestone 16: Bidirectional Building Traversal (enterBuilding)', () =>
         const stateC = persistenceC.load();
         assert.ok(stateC !== null);
         assert.doesNotThrow(() => validateWorldState(stateC));
-        assert.equal(stateC.version, 14);
+        assert.equal(stateC.version, 18);
         const playerC = stateC.agents.find((a) => a.id === 'agent:dev-player')!;
         assert.equal(playerC.locationId, 'building:development-building');
       } finally {

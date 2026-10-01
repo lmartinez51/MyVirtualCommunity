@@ -22,6 +22,7 @@ export interface PlayerActivityState {
   restaurantId: string;
   offeringId: string;
   itemId: string | null;
+  companionAgentId?: string | null;
 }
 
 /**
@@ -185,6 +186,12 @@ export function validateAgents(
       if (pa.itemId !== undefined && pa.itemId !== null && (typeof pa.itemId !== 'string' || pa.itemId.trim() === '')) {
         throw new Error(
           `Invalid playerActivity itemId: must be null or a non-empty string for agent "${agent.id}"`
+        );
+      }
+
+      if (pa.companionAgentId !== undefined && pa.companionAgentId !== null && (typeof pa.companionAgentId !== 'string' || pa.companionAgentId.trim() === '')) {
+        throw new Error(
+          `Invalid playerActivity companionAgentId: must be null or a non-empty string for agent "${agent.id}"`
         );
       }
 

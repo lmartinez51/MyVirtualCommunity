@@ -86,19 +86,19 @@ describe('Milestone 38: Real-World Spatial Foundation', () => {
         ...seed.restaurants.map((r) => r.id),
       ]);
       assert.doesNotThrow(() => validateAgents(seed.agents, validLocationIds));
-      assert.equal(seed.agents.length, 1);
+      assert.equal(seed.agents.length, 2);
 
-      const player = seed.agents[0];
-      assert.equal(player.id, 'agent:real-world-player');
+      const player = seed.agents.find((a) => a.id === 'agent:real-world-player')!;
+      assert.ok(player);
       assert.equal(player.locationId, 'building:real-world-residence');
 
-      // Verify zero commercial offerings (M38 is strictly a spatial foundation milestone)
-      assert.equal(seed.offerings.length, 0);
+      // Verify commercial offerings (Milestone 39 synthetic demo beverage)
+      assert.equal(seed.offerings.length, 1);
     });
 
     test('createRealWorldJuarezWorldState passes comprehensive validateWorldState', () => {
       const { state } = setupWorld();
-      assert.equal(state.version, 14);
+      assert.equal(state.version, 18);
       assert.doesNotThrow(() => validateWorldState(state));
     });
   });
@@ -173,8 +173,8 @@ describe('Milestone 38: Real-World Spatial Foundation', () => {
       assert.equal(restInspect.location.id, 'restaurant:kentucky-club');
       assert.equal(restInspect.location.name, 'Kentucky Club');
       assert.equal(restInspect.location.type, 'restaurant');
-      assert.equal(restInspect.location.parentBuilding?.id, 'building:kentucky-club-building');
-      assert.deepEqual(restInspect.location.offerings, []);
+      assert.equal(restInspect.location.offerings?.length, 1);
+      assert.equal(restInspect.location.offerings?.[0].id, 'offering:m39-demo-beverage');
 
       // 8. Player exits restaurant back to containing building
       const exitRestRes = exitRestaurant(state, player.id, 'restaurant:kentucky-club');
@@ -298,14 +298,14 @@ describe('Milestone 38: Real-World Spatial Foundation', () => {
         // Restore in clean runtime
         const restored = persistence.load();
         assert.ok(restored !== null);
-        assert.equal(restored.version, 14);
+        assert.equal(restored.version, 18);
         assert.doesNotThrow(() => validateWorldState(restored));
 
         const restoredPlayer = restored.agents.find((a) => a.id === 'agent:real-world-player')!;
         assert.equal(restoredPlayer.locationId, 'restaurant:kentucky-club');
         assert.equal(restored.places.length, 7);
         assert.equal(restored.restaurants.length, 1);
-        assert.equal(restored.offerings.length, 0);
+        assert.equal(restored.offerings.length, 1);
       } finally {
         if (existsSync(tmpDir)) {
           rmSync(tmpDir, { recursive: true, force: true });

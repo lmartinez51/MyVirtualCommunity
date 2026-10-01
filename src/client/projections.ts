@@ -22,9 +22,18 @@ export interface ClientAffordance {
   commandName: string;
   payload: Record<string, unknown>;
   group?: AffordanceGroup;
+  hint?: string;
 }
 
-export type InspectableEntityKind = 'place' | 'agent' | 'offering' | 'opportunity';
+export interface ClientActionConsideration {
+  action: string;
+  targetId: string;
+  considered: boolean;
+  reason?: string;
+  description?: string;
+}
+
+export type InspectableEntityKind = 'place' | 'agent' | 'offering' | 'opportunity' | 'order';
 
 export interface InspectableEntity {
   kind: InspectableEntityKind;
@@ -41,12 +50,15 @@ export function getAffordanceGroup(commandName: string): AffordanceGroup {
     case 'exitRestaurant':
     case 'traverseStreet':
       return 'MOVE';
+    case 'interactAtResidence':
     case 'greetAgent':
     case 'introduceAgent':
+    case 'giveItem':
       return 'INTERACT';
     case 'purchaseOffering':
     case 'startCoffee':
     case 'startEatingPastry':
+    case 'startAccompaniedActivity':
       return 'ACT';
     default:
       return 'ACT';
@@ -57,6 +69,7 @@ export interface ClientPlaceItem {
   id: string;
   name: string;
   type: string;
+  isResidential?: boolean;
 }
 
 export interface ClientAgentItem {
@@ -64,6 +77,7 @@ export interface ClientAgentItem {
   name: string;
   agentType: string;
   isAcquainted?: boolean;
+  possessions?: string[];
 }
 
 export interface ClientOfferingItem {
@@ -89,9 +103,79 @@ export interface ClientInventoryItem {
   acquiredAt: string;
 }
 
+export interface ObservablePendingOrder {
+  id: string;
+  restaurantId: string;
+  status: 'preparing' | 'ready';
+  totalAmountMinor: number;
+  currency: string;
+  readyAt: string;
+  createdAt: string;
+}
+
+export interface ClientCivilTime {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+  millisecond: number;
+  dayOfWeek: number;
+  timeZone: string;
+  utcOffsetMinutes: number;
+  isoCivilString: string;
+}
+
+export interface ClientTemporalContext {
+  worldTime: string;
+  locationId: string;
+  rootCityId: string;
+  rootCityName: string;
+  timeZone: string;
+  civilTime: ClientCivilTime;
+  formattedTime: string;
+  formattedDisplay: string;
+}
+
+/**
+ * Formats a ClientCivilTime into a 12-hour civil time string and display string with city name.
+ * e.g. formattedTime: "10:00 AM", formattedDisplay: "10:00 AM · Ciudad Juárez"
+ */
+export function formatCivilTimeDisplay(
+  civilTime: ClientCivilTime,
+  cityName: string
+): { formattedTime: string; formattedDisplay: string } {
+  const period = civilTime.hour >= 12 ? 'PM' : 'AM';
+  let hour12 = civilTime.hour % 12;
+  if (hour12 === 0) hour12 = 12;
+  const minuteStr = civilTime.minute.toString().padStart(2, '0');
+  const formattedTime = `${hour12}:${minuteStr} ${period}`;
+  const formattedDisplay = cityName ? `${formattedTime} · ${cityName}` : formattedTime;
+  return { formattedTime, formattedDisplay };
+}
+
+/**
+ * Formats universal UTC world time for clear UI presentation.
+ * e.g. "2026-10-01T16:00:00.000Z" -> "Oct 1, 2026 · 16:00 UTC"
+ */
+export function formatWorldTimeDisplay(worldTime: string): string {
+  if (!worldTime) return '---';
+  const parsed = new Date(worldTime);
+  if (Number.isNaN(parsed.getTime())) return worldTime;
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const m = months[parsed.getUTCMonth()];
+  const d = parsed.getUTCDate();
+  const y = parsed.getUTCFullYear();
+  const hh = parsed.getUTCHours().toString().padStart(2, '0');
+  const mm = parsed.getUTCMinutes().toString().padStart(2, '0');
+  return `${m} ${d}, ${y} · ${hh}:${mm} UTC`;
+}
+
 export interface PresentationModel {
   worldId: string;
   worldTime: string;
+  formattedWorldTime?: string;
   schemaVersion: number;
   activePlayerId: string;
   context: PresentationContext;
@@ -99,7 +183,7 @@ export interface PresentationModel {
   locationName: string;
   locationType: string;
   parentName?: string;
-  operationalState?: 'open' | 'closed';
+  operationalState?: 'open' | 'closing-soon' | 'closed';
   affordances: ClientAffordance[];
   agents: ClientAgentItem[];
   accessibleBuildings: ClientPlaceItem[];
@@ -108,6 +192,16 @@ export interface PresentationModel {
   offerings: ClientOfferingItem[];
   opportunities: ClientOpportunityItem[];
   playerInventory: ClientInventoryItem[];
+  pendingOrders: ObservablePendingOrder[];
+  playerActivity?: {
+    activity: string;
+    startedAt: string;
+    completedAt: string | null;
+    durationMs: number;
+    companionAgentId?: string | null;
+  } | null;
+  actionConsiderations?: ClientActionConsideration[];
+  temporalContext?: ClientTemporalContext;
 }
 
 /**
@@ -144,6 +238,9 @@ export function createPresentationModel(
     name: (a.name as string) || '',
     agentType: (a.agentType as string) || '',
     isAcquainted: Boolean(a.isAcquainted),
+    possessions: Array.isArray(a.possessions)
+      ? (a.possessions as unknown[]).filter((p): p is string => typeof p === 'string')
+      : undefined,
   }));
 
   // Extract spatial collections according to context
@@ -152,6 +249,7 @@ export function createPresentationModel(
         id: (b.id as string) || '',
         name: (b.name as string) || '',
         type: (b.type as string) || 'building',
+        ...(b.isResidential ? { isResidential: true } : {}),
       }))
     : [];
 
@@ -204,9 +302,29 @@ export function createPresentationModel(
     };
   });
 
+  const rawPendingOrders = Array.isArray(locationData.pendingOrders)
+    ? (locationData.pendingOrders as unknown[])
+    : [];
+  const pendingOrders: ObservablePendingOrder[] = rawPendingOrders
+    .map((item) => {
+      const rec = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
+      return {
+        id: (rec.id as string) || '',
+        restaurantId: (rec.restaurantId as string) || '',
+        status: (rec.status as 'preparing' | 'ready') || 'preparing',
+        totalAmountMinor: typeof rec.totalAmountMinor === 'number' ? rec.totalAmountMinor : 0,
+        currency: (rec.currency as string) || 'USD',
+        readyAt: (rec.readyAt as string) || '',
+        createdAt: (rec.createdAt as string) || '',
+      };
+    })
+    .filter((o) => o.status === 'preparing' || o.status === 'ready');
+
   const operationalState =
-    loc.operationalState === 'open' || loc.operationalState === 'closed'
-      ? loc.operationalState
+    loc.operationalState === 'open' ||
+    loc.operationalState === 'closing-soon' ||
+    loc.operationalState === 'closed'
+      ? (loc.operationalState as 'open' | 'closing-soon' | 'closed')
       : undefined;
 
   const parentStreet = loc.parentStreet as Record<string, unknown> | undefined;
@@ -217,19 +335,57 @@ export function createPresentationModel(
       ? (parentBuilding.name as string)
       : undefined;
 
+  const rawActivity = (locationData.playerActivity ?? statusData.playerActivity) as Record<string, unknown> | null | undefined;
+  const playerActivity = rawActivity
+    ? {
+        activity: (rawActivity.activity as string) || '',
+        startedAt: (rawActivity.startedAt as string) || '',
+        completedAt: (rawActivity.completedAt as string | null) || null,
+        durationMs: typeof rawActivity.durationMs === 'number' ? rawActivity.durationMs : 0,
+        companionAgentId: (rawActivity.companionAgentId as string | null | undefined) ?? null,
+      }
+    : null;
+
+  // Extract action considerations (Milestone 48)
+  const rawConsiderations = Array.isArray(loc.actionConsiderations)
+    ? loc.actionConsiderations
+    : Array.isArray(locationData.actionConsiderations)
+      ? locationData.actionConsiderations
+      : [];
+  const actionConsiderations: ClientActionConsideration[] = rawConsiderations.map((c) => {
+    const rec = (c && typeof c === 'object' ? c : {}) as Record<string, unknown>;
+    return {
+      action: (rec.action as string) || '',
+      targetId: (rec.targetId as string) || '',
+      considered: Boolean(rec.considered),
+      reason: rec.reason as string | undefined,
+      description: rec.description as string | undefined,
+    };
+  });
+
   // Build affordances strictly from exposed projection facts
   const affordances: ClientAffordance[] = [];
 
   if (context === 'STREET') {
-    // 1. Enter accessible buildings
+    // 1. Enter accessible buildings or interact at residence
     for (const b of accessibleBuildings) {
-      affordances.push({
-        id: `enter-${b.id}`,
-        label: `Enter ${b.name}`,
-        commandName: 'enterBuilding',
-        payload: { buildingId: b.id },
-        group: getAffordanceGroup('enterBuilding'),
-      });
+      if (b.isResidential) {
+        affordances.push({
+          id: `interact-residence-${b.id}`,
+          label: `Knock at ${b.name}`,
+          commandName: 'interactAtResidence',
+          payload: { buildingId: b.id },
+          group: getAffordanceGroup('interactAtResidence'),
+        });
+      } else {
+        affordances.push({
+          id: `enter-${b.id}`,
+          label: `Enter ${b.name}`,
+          commandName: 'enterBuilding',
+          payload: { buildingId: b.id },
+          group: getAffordanceGroup('enterBuilding'),
+        });
+      }
     }
 
     // 2. Traverse to neighboring streets
@@ -254,25 +410,34 @@ export function createPresentationModel(
       });
     }
 
-    // 2. Enter contained restaurants
+    // 2. Enter contained restaurants (with consideration hint if derived by world)
     for (const r of containedRestaurants) {
+      const matchConsideration = actionConsiderations.find(
+        (c) => c.action === 'enterRestaurant' && c.targetId === r.id && c.considered
+      );
+
       affordances.push({
         id: `enter-${r.id}`,
         label: `Enter ${r.name}`,
         commandName: 'enterRestaurant',
         payload: { restaurantId: r.id },
         group: getAffordanceGroup('enterRestaurant'),
+        hint: matchConsideration?.description,
       });
     }
   } else if (context === 'RESTAURANT') {
     // 1. Exit restaurant to parent building
     if (parentBuilding && typeof parentBuilding.id === 'string') {
+      const matchExitConsideration = actionConsiderations.find(
+        (c) => c.action === 'exitRestaurant' && c.considered
+      );
       affordances.push({
         id: `exit-${locationId}`,
         label: `Exit to ${parentBuilding.name || 'Building Lobby'}`,
         commandName: 'exitRestaurant',
         payload: { restaurantId: locationId },
         group: getAffordanceGroup('exitRestaurant'),
+        hint: matchExitConsideration?.description,
       });
     }
 
@@ -280,12 +445,16 @@ export function createPresentationModel(
     if (operationalState === 'open') {
       for (const off of offerings) {
         const priceFmt = (off.priceMinor / 100).toFixed(2);
+        const matchConsideration = actionConsiderations.find(
+          (c) => c.action === 'purchaseOffering' && c.targetId === off.id && c.considered
+        );
         affordances.push({
           id: `purchase-${off.id}`,
           label: `Buy ${off.name} ($${priceFmt})`,
           commandName: 'purchaseOffering',
           payload: { offeringId: off.id },
           group: getAffordanceGroup('purchaseOffering'),
+          hint: matchConsideration?.description,
         });
       }
 
@@ -318,6 +487,33 @@ export function createPresentationModel(
           group: getAffordanceGroup('startEatingPastry'),
         });
       }
+
+      // 5. Accompanied Refreshment (Milestone 51: when restaurant is open and player possesses coffee)
+      if (eligibleCoffee) {
+        for (const companion of agents) {
+          if (companion.id !== activePlayerId && companion.isAcquainted) {
+            const companionHasPastry = companion.possessions?.some(
+              (p) => p.includes('Pan Dulce') || p.includes('Pastry')
+            );
+            const matchConsideration = actionConsiderations.find(
+              (c) =>
+                c.action === 'startAccompaniedActivity' &&
+                c.targetId === companion.id &&
+                c.considered
+            );
+            if (companionHasPastry || matchConsideration) {
+              affordances.push({
+                id: `accompanied-refreshment-${companion.id}`,
+                label: `Enjoy Refreshment with ${companion.name}`,
+                commandName: 'startAccompaniedActivity',
+                payload: { companionAgentId: companion.id },
+                group: getAffordanceGroup('startAccompaniedActivity'),
+                hint: matchConsideration?.description,
+              });
+            }
+          }
+        }
+      }
     }
   }
 
@@ -341,12 +537,63 @@ export function createPresentationModel(
           group: getAffordanceGroup('introduceAgent'),
         });
       }
+
+      // Milestone 50: Give item affordance if acquainted and player possesses available items
+      if (agent.isAcquainted && playerInventory.length > 0) {
+        for (const item of playerInventory) {
+          affordances.push({
+            id: `give-${item.id}-${agent.id}`,
+            label: `Give ${item.name} to ${agent.name}`,
+            commandName: 'giveItem',
+            payload: {
+              targetAgentId: agent.id,
+              itemId: item.id,
+            },
+            group: getAffordanceGroup('giveItem'),
+          });
+        }
+      }
     }
   }
+
+  // Authoritative player-facing temporal context (derived from virtual geography)
+  const rawTemporal = (locationData.temporalContext || loc.temporalContext) as Record<string, unknown> | undefined;
+  let temporalContext: ClientTemporalContext | undefined = undefined;
+  if (rawTemporal && typeof rawTemporal === 'object') {
+    const rawCivil = (rawTemporal.civilTime || {}) as Record<string, unknown>;
+    const civilTime: ClientCivilTime = {
+      year: typeof rawCivil.year === 'number' ? rawCivil.year : 0,
+      month: typeof rawCivil.month === 'number' ? rawCivil.month : 0,
+      day: typeof rawCivil.day === 'number' ? rawCivil.day : 0,
+      hour: typeof rawCivil.hour === 'number' ? rawCivil.hour : 0,
+      minute: typeof rawCivil.minute === 'number' ? rawCivil.minute : 0,
+      second: typeof rawCivil.second === 'number' ? rawCivil.second : 0,
+      millisecond: typeof rawCivil.millisecond === 'number' ? rawCivil.millisecond : 0,
+      dayOfWeek: typeof rawCivil.dayOfWeek === 'number' ? rawCivil.dayOfWeek : 0,
+      timeZone: (rawCivil.timeZone as string) || '',
+      utcOffsetMinutes: typeof rawCivil.utcOffsetMinutes === 'number' ? rawCivil.utcOffsetMinutes : 0,
+      isoCivilString: (rawCivil.isoCivilString as string) || '',
+    };
+    const rootCityName = (rawTemporal.rootCityName as string) || '';
+    const { formattedTime, formattedDisplay } = formatCivilTimeDisplay(civilTime, rootCityName);
+    temporalContext = {
+      worldTime: (rawTemporal.worldTime as string) || worldTime,
+      locationId: (rawTemporal.locationId as string) || locationId,
+      rootCityId: (rawTemporal.rootCityId as string) || '',
+      rootCityName,
+      timeZone: (rawTemporal.timeZone as string) || '',
+      civilTime,
+      formattedTime,
+      formattedDisplay,
+    };
+  }
+
+  const formattedWorldTime = formatWorldTimeDisplay(worldTime);
 
   return {
     worldId,
     worldTime,
+    formattedWorldTime,
     schemaVersion,
     activePlayerId,
     context,
@@ -363,6 +610,10 @@ export function createPresentationModel(
     offerings,
     opportunities,
     playerInventory,
+    pendingOrders,
+    playerActivity,
+    actionConsiderations,
+    temporalContext,
   };
 }
 
@@ -374,7 +625,32 @@ export function findInspectableEntity(
   model: PresentationModel,
   id: string
 ): InspectableEntity | null {
+  if (id.startsWith('order:')) {
+    const order = model.pendingOrders?.find((o) => o.id === id);
+    if (order) {
+      const rest = model.containedRestaurants.find((r) => r.id === order.restaurantId);
+      const isReady = order.status === 'ready';
+      return {
+        kind: 'order',
+        id: order.id,
+        name: `Order ${order.id}`,
+        details: {
+          'Restaurant': rest ? rest.name : order.restaurantId,
+          'Status': isReady
+            ? (model.operationalState === 'closed' ? 'READY (Pickup Deferred)' : 'READY FOR PICKUP')
+            : 'PREPARING',
+          'Total': `$${(order.totalAmountMinor / 100).toFixed(2)} ${order.currency}`,
+          'Ready At': order.readyAt,
+        },
+      };
+    }
+  }
+
   if (model.locationId === id) {
+    const locPending = model.pendingOrders?.filter((o) => o.restaurantId === model.locationId) ?? [];
+    const pendingText = locPending.length > 0
+      ? locPending.map((o) => `${o.id} (${o.status.toUpperCase()})`).join(', ')
+      : undefined;
     return {
       kind: 'place',
       id: model.locationId,
@@ -382,7 +658,13 @@ export function findInspectableEntity(
       details: {
         'Location Type': model.locationType,
         ...(model.parentName ? { 'Parent Location': model.parentName } : {}),
+        ...(model.temporalContext ? {
+          'City': model.temporalContext.rootCityName,
+          'Timezone': model.temporalContext.timeZone,
+          'Local Time': model.temporalContext.formattedDisplay,
+        } : {}),
         ...(model.operationalState ? { 'Operational State': model.operationalState } : {}),
+        ...(pendingText ? { 'Pending Orders': pendingText } : {}),
       },
     };
   }
@@ -413,18 +695,33 @@ export function findInspectableEntity(
 
   const rest = model.containedRestaurants.find((r) => r.id === id);
   if (rest) {
+    const matchConsideration = model.actionConsiderations?.find(
+      (c) => c.action === 'enterRestaurant' && c.targetId === rest.id && c.considered
+    );
+    const restPending = model.pendingOrders?.filter((o) => o.restaurantId === rest.id) ?? [];
+    const pendingText = restPending.length > 0
+      ? restPending.map((o) => `${o.id} (${o.status === 'ready' ? 'Ready - Pickup Deferred' : 'Preparing'})`).join(', ')
+      : undefined;
+
     return {
       kind: 'place',
       id: rest.id,
       name: rest.name,
       details: {
         'Location Type': rest.type,
+        ...(matchConsideration?.description
+          ? { Consideration: matchConsideration.description }
+          : {}),
+        ...(pendingText ? { 'Pending Orders': pendingText } : {}),
       },
     };
   }
 
   const agent = model.agents.find((a) => a.id === id);
   if (agent) {
+    const matchConsideration = model.actionConsiderations?.find(
+      (c) => c.action === 'startAccompaniedActivity' && c.targetId === agent.id && c.considered
+    );
     return {
       kind: 'agent',
       id: agent.id,
@@ -432,12 +729,21 @@ export function findInspectableEntity(
       details: {
         'Agent Type': agent.agentType,
         'Acquaintance Status': agent.isAcquainted ? 'Acquainted' : 'Stranger',
+        ...(agent.possessions && agent.possessions.length > 0
+          ? { Possessions: agent.possessions.join(', ') }
+          : {}),
+        ...(matchConsideration?.description
+          ? { Consideration: matchConsideration.description }
+          : {}),
       },
     };
   }
 
   const offering = model.offerings.find((o) => o.id === id);
   if (offering) {
+    const matchConsideration = model.actionConsiderations?.find(
+      (c) => c.action === 'purchaseOffering' && c.targetId === offering.id && c.considered
+    );
     return {
       kind: 'offering',
       id: offering.id,
@@ -445,6 +751,9 @@ export function findInspectableEntity(
       details: {
         Price: `$${(offering.priceMinor / 100).toFixed(2)}`,
         Currency: offering.currency,
+        ...(matchConsideration?.description
+          ? { Consideration: matchConsideration.description }
+          : {}),
       },
     };
   }

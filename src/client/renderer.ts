@@ -14,10 +14,48 @@ interface ClickableRegion {
   entityId: string;
 }
 
+export interface ProximityPrompt {
+  id: string;
+  action: string;
+  label: string;
+  payload: Record<string, unknown>;
+  x: number;
+  y: number;
+}
+
+export interface DialogueBubble {
+  agentId: string;
+  speakerX: number;
+  speakerY: number;
+  text: string;
+  expiresAt: number;
+}
+
 export class WorldRenderer {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
+
+  // Milestone 53: 2D Locomotion & Visual Presentation State
+  private playerVisualX: number = 200;
+  private playerVisualY: number = 302;
+  private playerFacing: 'left' | 'right' = 'right';
+  private isMoving: boolean = false;
+  private walkCycle: number = 0;
+  private lastLocationId: string | null = null;
+  private moveLeftHeld: boolean = false;
+  private moveRightHeld: boolean = false;
+  private lastFrameTimestamp: number = 0;
+  private animationFrameId: number | null = null;
+  private activeProximityPrompt: ProximityPrompt | null = null;
+
+  // Milestone 54: Dialogue Bubble Presentation State
+  private activeDialogueBubble: DialogueBubble | null = null;
+  private lastProcessedDialogueTimestamp: number = 0;
+
   private hudTimeEl: HTMLElement | null = null;
+  private hudCivilTimeEl: HTMLElement | null = null;
+  private hudRestaurantItemEl: HTMLElement | null = null;
+  private hudRestaurantStatusEl: HTMLElement | null = null;
   private hudLocationEl: HTMLElement | null = null;
   private hudContextEl: HTMLElement | null = null;
   private hudPlayerEl: HTMLElement | null = null;
@@ -30,9 +68,44 @@ export class WorldRenderer {
   private perceptionAgentsEl: HTMLElement | null = null;
   private inspectionContentEl: HTMLElement | null = null;
   private inspectionCloseBtn: HTMLElement | null = null;
+  private debugWorldTimeEl: HTMLElement | null = null;
+  private debugPlayerPlaceEl: HTMLElement | null = null;
+  private debugSelectedDestinationEl: HTMLElement | null = null;
+  private debugLastCommandEl: HTMLElement | null = null;
+  private debugCommandResultEl: HTMLElement | null = null;
+  private debugLastErrorEl: HTMLElement | null = null;
+  private debugBtnInvalidMoveEl: HTMLElement | null = null;
+
+  // Restaurant Service & Order Experience (Milestone 44)
+  private restaurantServicePanelEl: HTMLElement | null = null;
+  private serviceCounterStatusEl: HTMLElement | null = null;
+  private servicePromptTitleEl: HTMLElement | null = null;
+  private servicePromptDescEl: HTMLElement | null = null;
+  private serviceOrderFormEl: HTMLElement | null = null;
+  private orderOfferingSelectEl: HTMLSelectElement | null = null;
+  private orderQuantityInputEl: HTMLInputElement | null = null;
+  private orderSubmitBtnEl: HTMLElement | null = null;
+  private serviceActiveOrderBoxEl: HTMLElement | null = null;
+  private activeOrderStatusBadgeEl: HTMLElement | null = null;
+  private activeOrderIdEl: HTMLElement | null = null;
+  private activeOrderTotalEl: HTMLElement | null = null;
+  private activeOrderReadyAtEl: HTMLElement | null = null;
+  private orderCollectBtnEl: HTMLButtonElement | null = null;
+  private playerInventoryListEl: HTMLElement | null = null;
+
+  // Milestone 44 Development Diagnostics
+  private debugAdvanceToOpenEl: HTMLElement | null = null;
+  private debugAdvancePrepEl: HTMLElement | null = null;
+  private debugTestInvalidQtyEl: HTMLElement | null = null;
+  private debugTestInsufficientFundsEl: HTMLElement | null = null;
+  private debugTestDeliveryModeEl: HTMLElement | null = null;
+  private debugTestInvalidCollectEl: HTMLElement | null = null;
 
   private onActionCallback: ((commandName: string, payload: Record<string, unknown>) => void) | null = null;
   private onSelectEntityCallback: ((entity: InspectableEntity | null) => void) | null = null;
+  private onStepSimulationCallback: ((advanceDurationMs: number) => void) | null = null;
+  private onInquireServiceCallback: ((staffNpcId: string) => void) | null = null;
+  private autoInquiredStaffId: string | null = null;
   private clickableRegions: ClickableRegion[] = [];
   private currentSessionState: ClientSessionState | null = null;
 
@@ -46,6 +119,9 @@ export class WorldRenderer {
         });
       }
       this.hudTimeEl = document.getElementById('hud-time');
+      this.hudCivilTimeEl = document.getElementById('hud-civil-time');
+      this.hudRestaurantItemEl = document.getElementById('hud-restaurant-item');
+      this.hudRestaurantStatusEl = document.getElementById('hud-restaurant-status');
       this.hudLocationEl = document.getElementById('hud-location');
       this.hudContextEl = document.getElementById('hud-context');
       this.hudPlayerEl = document.getElementById('hud-player');
@@ -58,6 +134,145 @@ export class WorldRenderer {
       this.perceptionAgentsEl = document.getElementById('perception-agents');
       this.inspectionContentEl = document.getElementById('inspection-content');
       this.inspectionCloseBtn = document.getElementById('inspection-close-btn');
+      this.debugWorldTimeEl = document.getElementById('debug-world-time');
+      this.debugPlayerPlaceEl = document.getElementById('debug-player-place');
+      this.debugSelectedDestinationEl = document.getElementById('debug-selected-destination');
+      this.debugLastCommandEl = document.getElementById('debug-last-command');
+      this.debugCommandResultEl = document.getElementById('debug-command-result');
+      this.debugLastErrorEl = document.getElementById('debug-last-error');
+      this.debugBtnInvalidMoveEl = document.getElementById('debug-btn-invalid-move');
+
+      // M44 Restaurant Service Elements
+      this.restaurantServicePanelEl = document.getElementById('restaurant-service-panel');
+      this.serviceCounterStatusEl = document.getElementById('service-counter-status');
+      this.servicePromptTitleEl = document.getElementById('service-prompt-title');
+      this.servicePromptDescEl = document.getElementById('service-prompt-desc');
+      this.serviceOrderFormEl = document.getElementById('service-order-form');
+      this.orderOfferingSelectEl = document.getElementById('order-offering-select') as HTMLSelectElement | null;
+      this.orderQuantityInputEl = document.getElementById('order-quantity-input') as HTMLInputElement | null;
+      this.orderSubmitBtnEl = document.getElementById('order-submit-btn');
+      this.serviceActiveOrderBoxEl = document.getElementById('service-active-order-box');
+      this.activeOrderStatusBadgeEl = document.getElementById('active-order-status-badge');
+      this.activeOrderIdEl = document.getElementById('active-order-id');
+      this.activeOrderTotalEl = document.getElementById('active-order-total');
+      this.activeOrderReadyAtEl = document.getElementById('active-order-ready-at');
+      this.orderCollectBtnEl = document.getElementById('order-collect-btn') as HTMLButtonElement | null;
+      this.playerInventoryListEl = document.getElementById('player-inventory-list');
+
+      // M44 Debug Diagnostic Buttons
+      this.debugAdvanceToOpenEl = document.getElementById('debug-advance-to-open');
+      this.debugAdvancePrepEl = document.getElementById('debug-advance-prep');
+      this.debugTestInvalidQtyEl = document.getElementById('debug-test-invalid-qty');
+      this.debugTestInsufficientFundsEl = document.getElementById('debug-test-insufficient-funds');
+      this.debugTestDeliveryModeEl = document.getElementById('debug-test-delivery-mode');
+      this.debugTestInvalidCollectEl = document.getElementById('debug-test-invalid-collect');
+
+      if (this.debugBtnInvalidMoveEl) {
+        this.debugBtnInvalidMoveEl.addEventListener('click', () => {
+          if (this.onActionCallback) {
+            this.onActionCallback('enterBuilding', { buildingId: 'building:does-not-exist' });
+          }
+        });
+      }
+
+      // Order Submit Action
+      if (this.orderSubmitBtnEl) {
+        this.orderSubmitBtnEl.addEventListener('click', () => {
+          if (!this.onActionCallback || !this.currentSessionState?.model) return;
+          const offeringId = this.orderOfferingSelectEl?.value;
+          if (!offeringId) return;
+          const quantity = parseInt(this.orderQuantityInputEl?.value || '1', 10);
+          this.onActionCallback('placeOrder', {
+            restaurantId: this.currentSessionState.model.locationId,
+            lines: [{ offeringId, quantity }],
+            fulfillmentMode: 'pickup',
+          });
+        });
+      }
+
+      // Order Collect Action
+      if (this.orderCollectBtnEl) {
+        this.orderCollectBtnEl.addEventListener('click', () => {
+          if (!this.onActionCallback || !this.currentSessionState?.activeOrder) return;
+          this.onActionCallback('collectOrder', {
+            orderId: this.currentSessionState.activeOrder.id,
+          });
+        });
+      }
+
+      // Debug: Advance to 16:00 UTC (Operational Hours: 10:00 AM local civil time in Ciudad Juárez)
+      if (this.debugAdvanceToOpenEl) {
+        this.debugAdvanceToOpenEl.addEventListener('click', () => {
+          if (!this.onStepSimulationCallback || !this.currentSessionState?.model) return;
+          const currentDate = new Date(this.currentSessionState.model.worldTime);
+          const targetDate = new Date(currentDate.getTime());
+          targetDate.setUTCHours(16, 0, 0, 0);
+          let diffMs = targetDate.getTime() - currentDate.getTime();
+          if (diffMs <= 0) {
+            targetDate.setUTCDate(targetDate.getUTCDate() + 1);
+            diffMs = targetDate.getTime() - currentDate.getTime();
+          }
+          this.onStepSimulationCallback(diffMs);
+        });
+      }
+
+      // Debug: Advance 5 minutes (Order Preparation Duration)
+      if (this.debugAdvancePrepEl) {
+        this.debugAdvancePrepEl.addEventListener('click', () => {
+          if (this.onStepSimulationCallback) {
+            this.onStepSimulationCallback(300000);
+          }
+        });
+      }
+
+      // Debug: Test Invalid Quantity (0 -> 400 Bad Request)
+      if (this.debugTestInvalidQtyEl) {
+        this.debugTestInvalidQtyEl.addEventListener('click', () => {
+          if (this.onActionCallback) {
+            this.onActionCallback('placeOrder', {
+              restaurantId: 'restaurant:development-restaurant',
+              lines: [{ offeringId: 'offering:development-coffee', quantity: 0 }],
+              fulfillmentMode: 'pickup',
+            });
+          }
+        });
+      }
+
+      // Debug: Test Insufficient Funds (Qty 5 -> $25 > $20 -> 422 Unprocessable Entity)
+      if (this.debugTestInsufficientFundsEl) {
+        this.debugTestInsufficientFundsEl.addEventListener('click', () => {
+          if (this.onActionCallback) {
+            this.onActionCallback('placeOrder', {
+              restaurantId: 'restaurant:development-restaurant',
+              lines: [{ offeringId: 'offering:development-coffee', quantity: 5 }],
+              fulfillmentMode: 'pickup',
+            });
+          }
+        });
+      }
+
+      // Debug: Test Delivery Mode (Deferred -> 422 Unprocessable Entity)
+      if (this.debugTestDeliveryModeEl) {
+        this.debugTestDeliveryModeEl.addEventListener('click', () => {
+          if (this.onActionCallback) {
+            this.onActionCallback('placeOrder', {
+              restaurantId: 'restaurant:development-restaurant',
+              lines: [{ offeringId: 'offering:development-coffee', quantity: 1 }],
+              fulfillmentMode: 'delivery',
+            });
+          }
+        });
+      }
+
+      // Debug: Test Premature Collect while preparing
+      if (this.debugTestInvalidCollectEl) {
+        this.debugTestInvalidCollectEl.addEventListener('click', () => {
+          if (this.onActionCallback) {
+            const orderId = this.currentSessionState?.activeOrder?.id || 'order:invalid';
+            this.onActionCallback('collectOrder', { orderId });
+          }
+        });
+      }
 
       if (this.inspectionCloseBtn) {
         this.inspectionCloseBtn.addEventListener('click', () => {
@@ -75,6 +290,14 @@ export class WorldRenderer {
 
   public onSelectEntity(callback: (entity: InspectableEntity | null) => void): void {
     this.onSelectEntityCallback = callback;
+  }
+
+  public onStepSimulation(callback: (advanceDurationMs: number) => void): void {
+    this.onStepSimulationCallback = callback;
+  }
+
+  public onInquireService(callback: (staffNpcId: string) => void): void {
+    this.onInquireServiceCallback = callback;
   }
 
   private handleCanvasClick(e: MouseEvent): void {
@@ -102,20 +325,517 @@ export class WorldRenderer {
     }
   }
 
+  public setMoveLeft(held: boolean): void {
+    this.moveLeftHeld = held;
+    this.updateMovementState();
+  }
+
+  public setMoveRight(held: boolean): void {
+    this.moveRightHeld = held;
+    this.updateMovementState();
+  }
+
+  private updateMovementState(): void {
+    if (this.moveLeftHeld && !this.moveRightHeld) {
+      this.isMoving = true;
+      this.playerFacing = 'left';
+    } else if (this.moveRightHeld && !this.moveLeftHeld) {
+      this.isMoving = true;
+      this.playerFacing = 'right';
+    } else {
+      this.isMoving = false;
+    }
+  }
+
+  public getPlayerVisualState(): {
+    x: number;
+    y: number;
+    facing: 'left' | 'right';
+    isMoving: boolean;
+    walkCycle: number;
+  } {
+    return {
+      x: this.playerVisualX,
+      y: this.playerVisualY,
+      facing: this.playerFacing,
+      isMoving: this.isMoving,
+      walkCycle: this.walkCycle,
+    };
+  }
+
+  public setPlayerVisualX(x: number): void {
+    this.playerVisualX = x;
+    if (this.currentSessionState?.model) {
+      this.evaluateProximityPrompt(this.currentSessionState.model);
+    }
+  }
+
+  public getActiveProximityPrompt(): ProximityPrompt | null {
+    return this.activeProximityPrompt;
+  }
+
+  public getActiveDialogueBubble(): DialogueBubble | null {
+    return this.activeDialogueBubble;
+  }
+
+  public getAgentVisualPosition(
+    model: PresentationModel,
+    agentId: string
+  ): { x: number; y: number } | null {
+    const otherAgents = model.agents.filter((a) => a.id !== model.activePlayerId);
+    const index = otherAgents.findIndex((a) => a.id === agentId);
+    if (index === -1) return null;
+
+    const width = 800;
+    const height = 420;
+
+    if (model.context === 'STREET') {
+      return {
+        x: Math.round(width * 0.3 + index * 85),
+        y: Math.round(height * 0.72),
+      };
+    } else if (model.context === 'BUILDING') {
+      return {
+        x: Math.round(width * 0.58 + index * 70),
+        y: Math.round(height * 0.75),
+      };
+    } else if (model.context === 'RESTAURANT') {
+      return {
+        x: Math.round(width * 0.58 + index * 80),
+        y: Math.round(height * 0.76),
+      };
+    } else {
+      return {
+        x: Math.round(400 + index * 80),
+        y: 300,
+      };
+    }
+  }
+
+  public showDialogueBubble(agentId: string, text: string, durationMs: number = 8000): void {
+    const model = this.currentSessionState?.model;
+    if (!model) return;
+    const pos = this.getAgentVisualPosition(model, agentId);
+    if (!pos) return;
+
+    this.activeDialogueBubble = {
+      agentId,
+      speakerX: pos.x,
+      speakerY: pos.y,
+      text,
+      expiresAt: performance.now() + durationMs,
+    };
+
+    // Ensure player faces the speaker during interaction
+    this.playerFacing = this.playerVisualX < pos.x ? 'right' : 'left';
+  }
+
+  public updateVisualState(dtMs: number): void {
+    const dt = Math.max(0, Math.min(100, dtMs));
+    const speed = 220; // px/sec
+
+    let dx = 0;
+    if (this.moveLeftHeld && !this.moveRightHeld) {
+      dx = -speed * (dt / 1000);
+      this.playerFacing = 'left';
+      this.isMoving = true;
+    } else if (this.moveRightHeld && !this.moveLeftHeld) {
+      dx = speed * (dt / 1000);
+      this.playerFacing = 'right';
+      this.isMoving = true;
+    } else {
+      this.isMoving = false;
+    }
+
+    if (this.isMoving) {
+      this.walkCycle += dt / 1000;
+    }
+
+    const model = this.currentSessionState?.model;
+    const context = model?.context || 'UNKNOWN';
+
+    // Scene walkway bounds
+    let minX = 40;
+    let maxX = 760;
+    if (context === 'BUILDING') {
+      minX = 60;
+      maxX = 740;
+    } else if (context === 'RESTAURANT') {
+      minX = 50;
+      maxX = 740;
+    }
+
+    this.playerVisualX = Math.max(minX, Math.min(maxX, this.playerVisualX + dx));
+
+    // Milestone 54: Update active dialogue bubble expiration and distance dismissal (> 80px)
+    if (this.activeDialogueBubble) {
+      if (performance.now() > this.activeDialogueBubble.expiresAt) {
+        this.activeDialogueBubble = null;
+      } else if (Math.abs(this.playerVisualX - this.activeDialogueBubble.speakerX) > 80) {
+        this.activeDialogueBubble = null;
+      }
+    }
+
+    if (model) {
+      this.evaluateProximityPrompt(model);
+    }
+  }
+
+  public reconcileLocationEntryPosition(model: PresentationModel | null): void {
+    if (!model) return;
+
+    this.activeDialogueBubble = null;
+    const prevLocation = this.lastLocationId;
+    const newLocation = model.locationId;
+    this.lastLocationId = newLocation;
+
+    if (model.context === 'STREET') {
+      this.playerVisualY = 302;
+      if (prevLocation && prevLocation.startsWith('building:')) {
+        // Exited building onto street - place outside the exited building door
+        const idx = model.accessibleBuildings.findIndex((b) => b.id === prevLocation);
+        if (idx !== -1) {
+          const buildings = model.accessibleBuildings;
+          const bldgWidth = 170;
+          const spacing = 35;
+          const totalBldgWidth = buildings.length * bldgWidth + Math.max(0, buildings.length - 1) * spacing;
+          const startX = Math.max(30, (800 - totalBldgWidth) / 2);
+          this.playerVisualX = Math.round(startX + idx * (bldgWidth + spacing) + bldgWidth / 2);
+        } else {
+          this.playerVisualX = 298;
+        }
+        this.playerFacing = 'right';
+      } else {
+        // Default street spawn
+        this.playerVisualX = 200;
+        this.playerFacing = 'right';
+      }
+    } else if (model.context === 'BUILDING') {
+      this.playerVisualY = 315;
+      if (prevLocation && prevLocation.startsWith('restaurant:')) {
+        // Exited restaurant back into lobby (at right portal x = 715)
+        this.playerVisualX = 660;
+        this.playerFacing = 'left';
+      } else {
+        // Entered from street (at left door x = 82)
+        this.playerVisualX = 110;
+        this.playerFacing = 'right';
+      }
+    } else if (model.context === 'RESTAURANT') {
+      this.playerVisualY = 319;
+      // Entered from lobby (at left door x = 58)
+      this.playerVisualX = 100;
+      this.playerFacing = 'right';
+    } else {
+      this.playerVisualX = 400;
+      this.playerVisualY = 300;
+    }
+
+    this.evaluateProximityPrompt(model);
+  }
+
+  public evaluateProximityPrompt(model: PresentationModel): void {
+    this.activeProximityPrompt = null;
+
+    // Milestone 54: Social Proximity Check across all scene contexts (highest priority when close to an NPC)
+    const otherAgents = model.agents.filter((a) => a.id !== model.activePlayerId);
+    for (const agent of otherAgents) {
+      const pos = this.getAgentVisualPosition(model, agent.id);
+      if (pos && Math.abs(this.playerVisualX - pos.x) <= 55) {
+        if (!agent.isAcquainted) {
+          this.activeProximityPrompt = {
+            id: `introduce-${agent.id}`,
+            action: 'introduceAgent',
+            label: `[E] Introduce to ${agent.name}`,
+            payload: { targetAgentId: agent.id },
+            x: pos.x,
+            y: 180,
+          };
+          return;
+        } else {
+          this.activeProximityPrompt = {
+            id: `greet-${agent.id}`,
+            action: 'greetAgent',
+            label: `[E] Greet ${agent.name}`,
+            payload: { targetAgentId: agent.id },
+            x: pos.x,
+            y: 180,
+          };
+          return;
+        }
+      }
+    }
+
+    if (model.context === 'STREET') {
+      // Check building entrance doors
+      const buildings = model.accessibleBuildings;
+      const bldgWidth = 170;
+      const spacing = 35;
+      const totalBldgWidth = buildings.length * bldgWidth + Math.max(0, buildings.length - 1) * spacing;
+      const startX = Math.max(30, (800 - totalBldgWidth) / 2);
+
+      for (let i = 0; i < buildings.length; i++) {
+        const b = buildings[i];
+        const doorX = startX + i * (bldgWidth + spacing) + bldgWidth / 2;
+        if (Math.abs(this.playerVisualX - doorX) <= 60) {
+          this.activeProximityPrompt = {
+            id: `enter-${b.id}`,
+            action: 'enterBuilding',
+            label: `[E] Enter ${b.name}`,
+            payload: { buildingId: b.id },
+            x: doorX,
+            y: 195,
+          };
+          return;
+        }
+      }
+
+      // Check street transitions if any
+      if (model.neighboringStreets.length > 0) {
+        if (this.playerVisualX <= 75) {
+          const s0 = model.neighboringStreets[0];
+          this.activeProximityPrompt = {
+            id: `street-${s0.id}`,
+            action: 'traverseStreet',
+            label: `[E] Walk to ${s0.name}`,
+            payload: { targetStreetId: s0.id },
+            x: 95,
+            y: 270,
+          };
+          return;
+        }
+        if (model.neighboringStreets.length > 1 && this.playerVisualX >= 725) {
+          const s1 = model.neighboringStreets[1];
+          this.activeProximityPrompt = {
+            id: `street-${s1.id}`,
+            action: 'traverseStreet',
+            label: `[E] Walk to ${s1.name}`,
+            payload: { targetStreetId: s1.id },
+            x: 705,
+            y: 270,
+          };
+          return;
+        }
+      }
+    } else if (model.context === 'BUILDING') {
+      // Exit door to parent street (left door at x = 82)
+      if (Math.abs(this.playerVisualX - 82) <= 60) {
+        this.activeProximityPrompt = {
+          id: 'leave-building',
+          action: 'leaveBuilding',
+          label: model.parentName ? `[E] Leave Building to ${model.parentName}` : '[E] Leave Building',
+          payload: {},
+          x: 82,
+          y: 180,
+        };
+        return;
+      }
+
+      // Restaurant portal (right door at rx + 185 = 715)
+      if (model.containedRestaurants.length > 0) {
+        const rest = model.containedRestaurants[0];
+        if (Math.abs(this.playerVisualX - 715) <= 65) {
+          this.activeProximityPrompt = {
+            id: `enter-${rest.id}`,
+            action: 'enterRestaurant',
+            label: `[E] Enter ${rest.name}`,
+            payload: { restaurantId: rest.id },
+            x: 715,
+            y: 180,
+          };
+          return;
+        }
+      }
+    } else if (model.context === 'RESTAURANT') {
+      // Exit door to parent building (left door at x = 58)
+      if (Math.abs(this.playerVisualX - 58) <= 60) {
+        this.activeProximityPrompt = {
+          id: 'exit-restaurant',
+          action: 'exitRestaurant',
+          label: model.parentName ? `[E] Exit to ${model.parentName}` : '[E] Exit Restaurant',
+          payload: {},
+          x: 58,
+          y: 180,
+        };
+        return;
+      }
+
+      // Service Counter (x >= 520)
+      if (this.playerVisualX >= 520) {
+        const staffAgent = model.agents.find((a) => a.id !== model.activePlayerId);
+        if (staffAgent) {
+          const readyOrder = (model.pendingOrders || []).find(
+            (o) => o.restaurantId === model.locationId && o.status === 'ready'
+          );
+          if (readyOrder) {
+            this.activeProximityPrompt = {
+              id: `collect-${readyOrder.id}`,
+              action: 'collectOrder',
+              label: `[E] Collect Order (${readyOrder.id})`,
+              payload: { orderId: readyOrder.id },
+              x: Math.min(this.playerVisualX, 580),
+              y: 190,
+            };
+            return;
+          }
+
+          if (!this.currentSessionState?.restaurantService) {
+            this.activeProximityPrompt = {
+              id: `inquire-${staffAgent.id}`,
+              action: 'inquireRestaurantService',
+              label: `[E] Talk to Service Staff (${staffAgent.name})`,
+              payload: { staffNpcId: staffAgent.id },
+              x: Math.min(this.playerVisualX, 580),
+              y: 190,
+            };
+            return;
+          }
+
+          const preparingOrder = (model.pendingOrders || []).find(
+            (o) => o.restaurantId === model.locationId && o.status === 'preparing'
+          );
+          if (preparingOrder) {
+            this.activeProximityPrompt = {
+              id: `waiting-${preparingOrder.id}`,
+              action: 'none',
+              label: `Order in Preparation (${preparingOrder.id})`,
+              payload: {},
+              x: Math.min(this.playerVisualX, 580),
+              y: 190,
+            };
+            return;
+          }
+
+          // Service is active, ready to place order
+          const defaultOfferingId =
+            this.orderOfferingSelectEl?.value ||
+            model.offerings[0]?.id ||
+            'offering:development-coffee';
+          const defaultQty = parseInt(this.orderQuantityInputEl?.value || '1', 10);
+          this.activeProximityPrompt = {
+            id: 'order-counter',
+            action: 'placeOrder',
+            label: `[E] Place Order at Counter`,
+            payload: {
+              restaurantId: model.locationId,
+              lines: [{ offeringId: defaultOfferingId, quantity: defaultQty }],
+              fulfillmentMode: 'pickup',
+            },
+            x: Math.min(this.playerVisualX, 580),
+            y: 190,
+          };
+          return;
+        }
+      }
+    }
+  }
+
+  public startAnimationLoop(): void {
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      return;
+    }
+    if (this.animationFrameId !== null) return;
+    this.lastFrameTimestamp = performance.now();
+    const step = (timestamp: number) => {
+      const dt = Math.min(100, Math.max(0, timestamp - this.lastFrameTimestamp));
+      this.lastFrameTimestamp = timestamp;
+      this.updateVisualState(dt);
+      if (this.currentSessionState?.model && this.ctx && this.canvas) {
+        this.clickableRegions = [];
+        this.renderCanvas(this.currentSessionState.model, this.currentSessionState.selectedEntity);
+      }
+      this.animationFrameId = window.requestAnimationFrame(step);
+    };
+    this.animationFrameId = window.requestAnimationFrame(step);
+  }
+
+  public stopAnimationLoop(): void {
+    if (typeof window !== 'undefined' && this.animationFrameId !== null) {
+      window.cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+  }
+
   /**
    * Main render dispatch called on session state change.
    */
   public render(sessionState: ClientSessionState): void {
     this.currentSessionState = sessionState;
+
+    // Location transition reconciliation
+    if (sessionState.model && sessionState.model.locationId !== this.lastLocationId) {
+      this.reconcileLocationEntryPosition(sessionState.model);
+    } else if (sessionState.model) {
+      this.evaluateProximityPrompt(sessionState.model);
+    }
+
+    // Milestone 54: Reconcile incoming authoritative dialogue response
+    if (
+      sessionState.dialogueResponse &&
+      sessionState.dialogueResponse.timestamp !== this.lastProcessedDialogueTimestamp
+    ) {
+      this.lastProcessedDialogueTimestamp = sessionState.dialogueResponse.timestamp;
+      this.showDialogueBubble(
+        sessionState.dialogueResponse.speakerAgentId,
+        sessionState.dialogueResponse.text
+      );
+    }
+
     this.renderHUD(sessionState);
     this.renderNotification(sessionState);
     this.renderPerception(sessionState);
     this.renderInspection(sessionState);
     this.renderActions(sessionState);
+    this.renderRestaurantService(sessionState);
+    this.renderInventory(sessionState);
+    this.renderDebugPanel(sessionState);
 
     if (this.ctx && this.canvas && sessionState.model) {
       this.clickableRegions = [];
       this.renderCanvas(sessionState.model, sessionState.selectedEntity);
+    }
+
+    // Start continuous animation loop in browser environment
+    this.startAnimationLoop();
+  }
+
+  private renderDebugPanel(sessionState: ClientSessionState): void {
+    const model = sessionState.model;
+
+    if (this.debugWorldTimeEl) {
+      this.debugWorldTimeEl.textContent = model?.worldTime || '---';
+    }
+
+    if (this.debugPlayerPlaceEl) {
+      this.debugPlayerPlaceEl.textContent = model ? `${model.locationName} (${model.locationId})` : '---';
+    }
+
+    if (this.debugSelectedDestinationEl) {
+      this.debugSelectedDestinationEl.textContent = sessionState.selectedEntity
+        ? `${sessionState.selectedEntity.name} (${sessionState.selectedEntity.id})`
+        : 'None';
+    }
+
+    if (this.debugLastCommandEl) {
+      this.debugLastCommandEl.textContent = sessionState.lastCommandName || 'None';
+    }
+
+    if (this.debugCommandResultEl) {
+      if (sessionState.lastCommandResult) {
+        const res = sessionState.lastCommandResult;
+        this.debugCommandResultEl.textContent = res.success
+          ? `SUCCESS: ${res.message || 'OK'}`
+          : `FAILED: ${res.message || 'Error'}`;
+        this.debugCommandResultEl.style.color = res.success ? '#10b981' : '#f97316';
+      } else {
+        this.debugCommandResultEl.textContent = '---';
+        this.debugCommandResultEl.style.color = 'inherit';
+      }
+    }
+
+    if (this.debugLastErrorEl) {
+      this.debugLastErrorEl.textContent = sessionState.errorMessage || 'None';
+      this.debugLastErrorEl.style.color = sessionState.errorMessage ? '#ef4444' : 'inherit';
     }
   }
 
@@ -129,6 +849,8 @@ export class WorldRenderer {
 
     if (!model) {
       if (this.hudTimeEl) this.hudTimeEl.textContent = '---';
+      if (this.hudCivilTimeEl) this.hudCivilTimeEl.textContent = '---';
+      if (this.hudRestaurantItemEl) this.hudRestaurantItemEl.style.display = 'none';
       if (this.hudLocationEl) this.hudLocationEl.textContent = 'Connecting...';
       if (this.hudContextEl) this.hudContextEl.textContent = '---';
       if (this.hudPlayerEl) this.hudPlayerEl.textContent = '---';
@@ -136,10 +858,25 @@ export class WorldRenderer {
     }
 
     if (this.hudTimeEl) {
-      const parsed = new Date(model.worldTime);
-      this.hudTimeEl.textContent = Number.isNaN(parsed.getTime())
-        ? model.worldTime
-        : `${parsed.toUTCString().replace('GMT', 'UTC')}`;
+      this.hudTimeEl.textContent = model.formattedWorldTime ?? (
+        Number.isNaN(new Date(model.worldTime).getTime())
+          ? model.worldTime
+          : `${new Date(model.worldTime).toUTCString().replace('GMT', 'UTC')}`
+      );
+    }
+
+    if (this.hudCivilTimeEl) {
+      this.hudCivilTimeEl.textContent = model.temporalContext?.formattedDisplay ?? '---';
+    }
+
+    if (this.hudRestaurantItemEl && this.hudRestaurantStatusEl) {
+      if (model.operationalState) {
+        this.hudRestaurantItemEl.style.display = 'flex';
+        this.hudRestaurantStatusEl.textContent = model.operationalState.toUpperCase();
+        this.hudRestaurantStatusEl.className = `operational-badge operational-${model.operationalState}`;
+      } else {
+        this.hudRestaurantItemEl.style.display = 'none';
+      }
     }
 
     if (this.hudLocationEl) {
@@ -152,7 +889,22 @@ export class WorldRenderer {
     }
 
     if (this.hudPlayerEl) {
-      this.hudPlayerEl.textContent = model.activePlayerId;
+      if (model.playerActivity && model.playerActivity.completedAt === null) {
+        const startedMs = Date.parse(model.playerActivity.startedAt);
+        const currentMs = Date.parse(model.worldTime);
+        const remainingMs = Math.max(0, startedMs + model.playerActivity.durationMs - currentMs);
+        const remainingMin = Math.ceil(remainingMs / 60000);
+        let activityLabel =
+          model.playerActivity.activity === 'having-coffee' ? 'Having Coffee' : 'Eating Pan Dulce';
+        if (model.playerActivity.companionAgentId) {
+          const companion = model.agents.find((a) => a.id === model.playerActivity?.companionAgentId);
+          const companionName = companion ? companion.name : 'Development NPC';
+          activityLabel = `Having Coffee with ${companionName}`;
+        }
+        this.hudPlayerEl.textContent = `${model.activePlayerId} • ${activityLabel} (${remainingMin}m remaining)`;
+      } else {
+        this.hudPlayerEl.textContent = model.activePlayerId;
+      }
     }
   }
 
@@ -225,7 +977,9 @@ export class WorldRenderer {
         chips.push({ id: s.id, label: `🛣️ ${s.name}` });
       }
       for (const r of model.containedRestaurants) {
-        chips.push({ id: r.id, label: `🍽️ ${r.name}` });
+        const restPending = model.pendingOrders?.filter((o) => o.restaurantId === r.id) ?? [];
+        const pendingNote = restPending.length > 0 ? ` (${restPending.length} Order${restPending.length > 1 ? 's' : ''} Pending)` : '';
+        chips.push({ id: r.id, label: `🍽️ ${r.name}${pendingNote}` });
       }
       for (const off of model.offerings) {
         const priceFmt = (off.priceMinor / 100).toFixed(2);
@@ -233,6 +987,13 @@ export class WorldRenderer {
       }
       for (const opp of model.opportunities) {
         chips.push({ id: opp.id, label: `⭐ ${opp.name}` });
+      }
+
+      if (model.context !== 'RESTAURANT' && model.pendingOrders && model.pendingOrders.length > 0) {
+        for (const po of model.pendingOrders) {
+          const statusText = po.status === 'ready' ? 'Ready - Pickup Deferred' : 'Preparing';
+          chips.push({ id: po.id, label: `📦 ${po.id} (${statusText})` });
+        }
       }
 
       if (chips.length === 0) {
@@ -405,7 +1166,18 @@ export class WorldRenderer {
         const btn = document.createElement('button');
         btn.id = affordance.id;
         btn.className = `action-button action-${affordance.commandName}`;
-        btn.textContent = affordance.label;
+        if (affordance.hint) {
+          const labelSpan = document.createElement('span');
+          labelSpan.className = 'action-label';
+          labelSpan.textContent = affordance.label;
+          const hintSpan = document.createElement('span');
+          hintSpan.className = 'action-hint';
+          hintSpan.textContent = affordance.hint;
+          btn.appendChild(labelSpan);
+          btn.appendChild(hintSpan);
+        } else {
+          btn.textContent = affordance.label;
+        }
         btn.disabled = disabled;
 
         btn.addEventListener('click', () => {
@@ -422,6 +1194,203 @@ export class WorldRenderer {
     }
 
     this.actionPanelEl.appendChild(container);
+  }
+
+  /**
+   * Renders the authoritative Restaurant Service Counter & Active Order experience (Milestone 44).
+   */
+  private renderRestaurantService(sessionState: ClientSessionState): void {
+    if (!this.restaurantServicePanelEl) return;
+
+    const model = sessionState.model;
+    if (!model || model.context !== 'RESTAURANT') {
+      this.restaurantServicePanelEl.classList.add('hidden');
+      this.restaurantServicePanelEl.style.display = 'none';
+      this.autoInquiredStaffId = null;
+      return;
+    }
+
+    // Display restaurant service panel in RESTAURANT context
+    this.restaurantServicePanelEl.classList.remove('hidden');
+    this.restaurantServicePanelEl.style.display = 'block';
+
+    const staffAgent = model.agents.find((a) => a.id !== model.activePlayerId);
+
+    // Auto-inquire service if staff is present and service not yet inquired for this staff
+    if (staffAgent && !sessionState.restaurantService && this.autoInquiredStaffId !== staffAgent.id) {
+      this.autoInquiredStaffId = staffAgent.id;
+      if (this.onInquireServiceCallback) {
+        this.onInquireServiceCallback(staffAgent.id);
+      }
+    }
+
+    // 1. Service counter status & prompt description
+    if (sessionState.restaurantService) {
+      const svc = sessionState.restaurantService;
+      if (this.serviceCounterStatusEl) {
+        this.serviceCounterStatusEl.textContent = 'Service Counter Open (Staff on Duty)';
+      }
+      if (this.servicePromptDescEl) {
+        this.servicePromptDescEl.textContent = svc.prompt || 'Pickup or delivery?';
+      }
+      if (this.serviceOrderFormEl) {
+        this.serviceOrderFormEl.style.display = 'flex';
+      }
+
+      // Populate offerings dropdown
+      const offerings = svc.availableOfferings && svc.availableOfferings.length > 0
+        ? svc.availableOfferings
+        : model.offerings;
+
+      if (this.orderOfferingSelectEl && offerings.length > 0) {
+        const currentVal = this.orderOfferingSelectEl.value;
+        const currentCount = this.orderOfferingSelectEl.options.length;
+        if (currentCount !== offerings.length) {
+          this.orderOfferingSelectEl.innerHTML = '';
+          for (const off of offerings) {
+            const opt = document.createElement('option');
+            opt.value = off.id;
+            opt.textContent = `${off.name} - $${(off.priceMinor / 100).toFixed(2)} ${off.currency}`;
+            this.orderOfferingSelectEl.appendChild(opt);
+          }
+          if (currentVal) {
+            this.orderOfferingSelectEl.value = currentVal;
+          }
+        }
+      }
+    } else if (staffAgent) {
+      if (this.serviceCounterStatusEl) {
+        this.serviceCounterStatusEl.textContent = 'Connecting to Service Counter...';
+      }
+      if (this.servicePromptDescEl) {
+        this.servicePromptDescEl.textContent = 'Approaching counter staff...';
+      }
+      if (this.serviceOrderFormEl) {
+        this.serviceOrderFormEl.style.display = 'flex';
+      }
+      // Populate offerings from model.offerings if available
+      if (this.orderOfferingSelectEl && model.offerings.length > 0 && this.orderOfferingSelectEl.options.length === 0) {
+        for (const off of model.offerings) {
+          const opt = document.createElement('option');
+          opt.value = off.id;
+          opt.textContent = `${off.name} - $${(off.priceMinor / 100).toFixed(2)} ${off.currency}`;
+          this.orderOfferingSelectEl.appendChild(opt);
+        }
+      }
+    } else {
+      if (this.serviceCounterStatusEl) {
+        this.serviceCounterStatusEl.textContent = 'Counter Closed (Unstaffed)';
+      }
+      if (this.servicePromptDescEl) {
+        this.servicePromptDescEl.textContent = 'The counter is currently unstaffed. Advance simulation time to operational hours (09:00 - 17:00 UTC).';
+      }
+      if (this.serviceOrderFormEl) {
+        this.serviceOrderFormEl.style.display = 'none';
+      }
+    }
+
+    // 2. Active / Pending Orders for Current Restaurant (Milestone 52.1)
+    if (this.serviceActiveOrderBoxEl) {
+      const currentRestaurantOrders = (sessionState.model?.pendingOrders || []).filter(
+        (o) => o.restaurantId === model.locationId
+      );
+
+      if (currentRestaurantOrders.length === 0) {
+        this.serviceActiveOrderBoxEl.classList.add('hidden');
+        this.serviceActiveOrderBoxEl.style.display = 'none';
+      } else {
+        this.serviceActiveOrderBoxEl.classList.remove('hidden');
+        this.serviceActiveOrderBoxEl.style.display = 'block';
+
+        this.serviceActiveOrderBoxEl.innerHTML = '';
+        for (let i = 0; i < currentRestaurantOrders.length; i++) {
+          const order = currentRestaurantOrders[i];
+          const isReady = order.status === 'ready';
+          const rDate = new Date(order.readyAt);
+          const readyFmt = Number.isNaN(rDate.getTime())
+            ? order.readyAt
+            : rDate.toUTCString().replace('GMT', 'UTC');
+
+          const orderCard = document.createElement('div');
+          orderCard.className = 'active-order-item';
+          if (i > 0) {
+            orderCard.style.marginTop = '12px';
+            orderCard.style.paddingTop = '12px';
+            orderCard.style.borderTop = '1px solid rgba(56, 189, 248, 0.2)';
+          }
+
+          const header = document.createElement('div');
+          header.className = 'active-order-header';
+          const title = document.createElement('span');
+          title.className = 'active-order-title';
+          title.textContent = `ORDER: ${order.id.toUpperCase()}`;
+          const badge = document.createElement('span');
+          badge.id = i === 0 ? 'active-order-status-badge' : `active-order-status-badge-${order.id}`;
+          badge.className = `order-badge status-${order.status}`;
+          badge.textContent = isReady ? 'READY FOR PICKUP' : 'PREPARING';
+          header.appendChild(title);
+          header.appendChild(badge);
+          orderCard.appendChild(header);
+
+          const details = document.createElement('div');
+          details.className = 'active-order-details';
+          details.innerHTML = `
+            <div class="order-detail-item">
+              <span class="order-detail-label">ORDER ID:</span>
+              <span id="${i === 0 ? 'active-order-id' : `active-order-id-${order.id}`}" class="order-detail-val">${order.id}</span>
+            </div>
+            <div class="order-detail-item">
+              <span class="order-detail-label">TOTAL:</span>
+              <span id="${i === 0 ? 'active-order-total' : `active-order-total-${order.id}`}" class="order-detail-val">$${(order.totalAmountMinor / 100).toFixed(2)} ${order.currency}</span>
+            </div>
+            <div class="order-detail-item">
+              <span class="order-detail-label">READY AT:</span>
+              <span id="${i === 0 ? 'active-order-ready-at' : `active-order-ready-at-${order.id}`}" class="order-detail-val">${readyFmt}</span>
+            </div>
+          `;
+          orderCard.appendChild(details);
+
+          const actions = document.createElement('div');
+          actions.className = 'active-order-actions';
+          const collectBtn = document.createElement('button');
+          collectBtn.id = i === 0 ? 'order-collect-btn' : `order-collect-btn-${order.id}`;
+          collectBtn.className = 'action-button action-collect';
+          collectBtn.disabled = !isReady;
+          collectBtn.textContent = isReady ? 'Collect Order (Ready!)' : 'Collect Order';
+          collectBtn.addEventListener('click', () => {
+            if (this.onActionCallback) {
+              this.onActionCallback('collectOrder', { orderId: order.id });
+            }
+          });
+          actions.appendChild(collectBtn);
+          orderCard.appendChild(actions);
+
+          this.serviceActiveOrderBoxEl.appendChild(orderCard);
+        }
+      }
+    }
+  }
+
+  /**
+   * Renders the authoritative Player Possessions / OwnedItems (Milestone 33 / 44).
+   */
+  private renderInventory(sessionState: ClientSessionState): void {
+    if (!this.playerInventoryListEl) return;
+
+    this.playerInventoryListEl.innerHTML = '';
+    const items = sessionState.model?.playerInventory || [];
+
+    if (items.length === 0) {
+      this.playerInventoryListEl.textContent = 'None';
+      return;
+    }
+
+    for (const item of items) {
+      const chip = document.createElement('span');
+      chip.className = 'inventory-chip';
+      chip.textContent = `☕ ${item.name} (${item.id})`;
+      this.playerInventoryListEl.appendChild(chip);
+    }
   }
 
   private renderCanvas(model: PresentationModel, selectedEntity: InspectableEntity | null): void {
@@ -445,6 +1414,11 @@ export class WorldRenderer {
       default:
         this.renderUnknownScene(ctx, width, height, model);
         break;
+    }
+
+    // Milestone 54: Render transient speech bubble if active
+    if (this.activeDialogueBubble) {
+      this.renderSpeechBubble(ctx, this.activeDialogueBubble);
     }
   }
 
@@ -637,16 +1611,16 @@ export class WorldRenderer {
 
     // Player Marker
     this.clickableRegions.push({
-      x: width * 0.5 - 20,
-      y: height * 0.72 - 20,
+      x: this.playerVisualX - 20,
+      y: this.playerVisualY - 20,
       width: 40,
       height: 40,
       entityId: model.activePlayerId,
     });
     this.renderPlayerAvatar(
       ctx,
-      width * 0.5,
-      height * 0.72,
+      this.playerVisualX,
+      this.playerVisualY,
       'YOU',
       selectedEntity?.id === model.activePlayerId
     );
@@ -654,8 +1628,12 @@ export class WorldRenderer {
     // Co-located NPCs (only perceived agents)
     const otherAgents = model.agents.filter((a) => a.id !== model.activePlayerId);
     otherAgents.forEach((agent, i) => {
-      const ax = width * 0.3 + i * 85;
-      const ay = height * 0.72;
+      const pos = this.getAgentVisualPosition(model, agent.id) || {
+        x: width * 0.3 + i * 85,
+        y: height * 0.72,
+      };
+      const ax = pos.x;
+      const ay = pos.y;
       this.clickableRegions.push({
         x: ax - 20,
         y: ay - 20,
@@ -663,15 +1641,28 @@ export class WorldRenderer {
         height: 40,
         entityId: agent.id,
       });
+      const npcFacing: 'left' | 'right' = this.playerVisualX < ax ? 'left' : 'right';
       this.renderNpcAvatar(
         ctx,
         ax,
         ay,
         agent.name,
         agent.isAcquainted,
-        selectedEntity?.id === agent.id
+        selectedEntity?.id === agent.id,
+        npcFacing
       );
     });
+
+    // Render proximity prompt if active
+    if (this.activeProximityPrompt) {
+      this.renderProximityPrompt(ctx, this.activeProximityPrompt);
+    }
+
+    // Controls Legend overlay
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('⌨ A/D or ◄/► to Walk  •  [E] to Interact', 16, height - 12);
   }
 
   // --------------------------------------------------------------------------
@@ -836,16 +1827,16 @@ export class WorldRenderer {
 
     // Player Marker
     this.clickableRegions.push({
-      x: width * 0.4 - 20,
-      y: height * 0.75 - 20,
+      x: this.playerVisualX - 20,
+      y: this.playerVisualY - 20,
       width: 40,
       height: 40,
       entityId: model.activePlayerId,
     });
     this.renderPlayerAvatar(
       ctx,
-      width * 0.4,
-      height * 0.75,
+      this.playerVisualX,
+      this.playerVisualY,
       'YOU',
       selectedEntity?.id === model.activePlayerId
     );
@@ -853,8 +1844,12 @@ export class WorldRenderer {
     // Co-located NPCs
     const otherAgents = model.agents.filter((a) => a.id !== model.activePlayerId);
     otherAgents.forEach((agent, i) => {
-      const ax = width * 0.58 + i * 70;
-      const ay = height * 0.75;
+      const pos = this.getAgentVisualPosition(model, agent.id) || {
+        x: width * 0.58 + i * 70,
+        y: height * 0.75,
+      };
+      const ax = pos.x;
+      const ay = pos.y;
       this.clickableRegions.push({
         x: ax - 20,
         y: ay - 20,
@@ -862,15 +1857,28 @@ export class WorldRenderer {
         height: 40,
         entityId: agent.id,
       });
+      const npcFacing: 'left' | 'right' = this.playerVisualX < ax ? 'left' : 'right';
       this.renderNpcAvatar(
         ctx,
         ax,
         ay,
         agent.name,
         agent.isAcquainted,
-        selectedEntity?.id === agent.id
+        selectedEntity?.id === agent.id,
+        npcFacing
       );
     });
+
+    // Render proximity prompt if active
+    if (this.activeProximityPrompt) {
+      this.renderProximityPrompt(ctx, this.activeProximityPrompt);
+    }
+
+    // Controls Legend overlay
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('⌨ A/D or ◄/► to Walk  •  [E] to Interact', 16, height - 12);
   }
 
   // --------------------------------------------------------------------------
@@ -916,16 +1924,29 @@ export class WorldRenderer {
 
     // Operational State Sign
     const isOpen = model.operationalState === 'open';
-    ctx.fillStyle = isOpen ? '#14532d' : '#7f1d1d';
-    ctx.strokeStyle = isOpen ? '#22c55e' : '#ef4444';
-    ctx.lineWidth = 2;
-    ctx.fillRect(width - 120, 15, 90, 30);
-    ctx.strokeRect(width - 120, 15, 90, 30);
+    const isClosingSoon = model.operationalState === 'closing-soon';
+    const signWidth = isClosingSoon ? 140 : 90;
+    const signX = width - signWidth - 30;
 
-    ctx.fillStyle = isOpen ? '#86efac' : '#fca5a5';
+    if (isOpen) {
+      ctx.fillStyle = '#14532d';
+      ctx.strokeStyle = '#22c55e';
+    } else if (isClosingSoon) {
+      ctx.fillStyle = '#78350f';
+      ctx.strokeStyle = '#f59e0b';
+    } else {
+      ctx.fillStyle = '#7f1d1d';
+      ctx.strokeStyle = '#ef4444';
+    }
+    ctx.lineWidth = 2;
+    ctx.fillRect(signX, 15, signWidth, 30);
+    ctx.strokeRect(signX, 15, signWidth, 30);
+
+    ctx.fillStyle = isOpen ? '#86efac' : isClosingSoon ? '#fde68a' : '#fca5a5';
     ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(isOpen ? '● OPEN' : '● CLOSED', width - 75, 35);
+    const signText = isOpen ? '● OPEN' : isClosingSoon ? '● CLOSING SOON' : '● CLOSED';
+    ctx.fillText(signText, signX + signWidth / 2, 35);
 
     // Menu Board listing observable offerings
     const isMenuSelected = selectedEntity && model.offerings.some((o) => o.id === selectedEntity.id);
@@ -1024,16 +2045,16 @@ export class WorldRenderer {
 
     // Player Marker (foreground customer space)
     this.clickableRegions.push({
-      x: width * 0.32 - 20,
-      y: height * 0.76 - 20,
+      x: this.playerVisualX - 20,
+      y: this.playerVisualY - 20,
       width: 40,
       height: 40,
       entityId: model.activePlayerId,
     });
     this.renderPlayerAvatar(
       ctx,
-      width * 0.32,
-      height * 0.76,
+      this.playerVisualX,
+      this.playerVisualY,
       'YOU',
       selectedEntity?.id === model.activePlayerId
     );
@@ -1041,8 +2062,12 @@ export class WorldRenderer {
     // Co-located Agents (neutral presentation, NO assumed roles)
     const otherAgents = model.agents.filter((a) => a.id !== model.activePlayerId);
     otherAgents.forEach((agent, i) => {
-      const ax = width * 0.58 + i * 80;
-      const ay = height * 0.76;
+      const pos = this.getAgentVisualPosition(model, agent.id) || {
+        x: width * 0.58 + i * 80,
+        y: height * 0.76,
+      };
+      const ax = pos.x;
+      const ay = pos.y;
       this.clickableRegions.push({
         x: ax - 20,
         y: ay - 20,
@@ -1050,15 +2075,28 @@ export class WorldRenderer {
         height: 40,
         entityId: agent.id,
       });
+      const npcFacing: 'left' | 'right' = this.playerVisualX < ax ? 'left' : 'right';
       this.renderNpcAvatar(
         ctx,
         ax,
         ay,
         agent.name,
         agent.isAcquainted,
-        selectedEntity?.id === agent.id
+        selectedEntity?.id === agent.id,
+        npcFacing
       );
     });
+
+    // Render proximity prompt if active
+    if (this.activeProximityPrompt) {
+      this.renderProximityPrompt(ctx, this.activeProximityPrompt);
+    }
+
+    // Controls Legend overlay
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('⌨ A/D or ◄/► to Walk  •  [E] to Interact', 16, height - 12);
   }
 
   // --------------------------------------------------------------------------
@@ -1089,10 +2127,19 @@ export class WorldRenderer {
     label: string,
     isSelected?: boolean
   ): void {
+    const bobY = this.isMoving ? Math.sin(this.walkCycle * 12) * 3 : 0;
+    const drawY = y + bobY;
+
+    // Shadow under feet
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 16, 16, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
     // Glow halo
     ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
     ctx.beginPath();
-    ctx.arc(x, y, 22, 0, Math.PI * 2);
+    ctx.arc(x, drawY, 22, 0, Math.PI * 2);
     ctx.fill();
 
     // Body circle
@@ -1100,16 +2147,23 @@ export class WorldRenderer {
     ctx.strokeStyle = isSelected ? '#38bdf8' : '#fbbf24';
     ctx.lineWidth = isSelected ? 4 : 3;
     ctx.beginPath();
-    ctx.arc(x, y, 14, 0, Math.PI * 2);
+    ctx.arc(x, drawY, 14, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+
+    // Facing visor/eye accent
+    ctx.fillStyle = '#f8fafc';
+    const eyeOffset = this.playerFacing === 'right' ? 6 : -6;
+    ctx.beginPath();
+    ctx.arc(x + eyeOffset, drawY - 3, 3, 0, Math.PI * 2);
+    ctx.fill();
 
     // Selected outer ring
     if (isSelected) {
       ctx.strokeStyle = '#38bdf8';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(x, y, 26, 0, Math.PI * 2);
+      ctx.arc(x, drawY, 26, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -1117,7 +2171,55 @@ export class WorldRenderer {
     ctx.fillStyle = '#fbbf24';
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(label, x, y + 28);
+    ctx.fillText(label, x, drawY + 28);
+  }
+
+  private renderProximityPrompt(ctx: CanvasRenderingContext2D, prompt: ProximityPrompt): void {
+    const px = prompt.x;
+    const py = prompt.y;
+
+    ctx.save();
+    ctx.font = 'bold 13px sans-serif';
+    const textWidth = ctx.measureText(prompt.label).width;
+    const badgeWidth = textWidth + 32;
+    const badgeHeight = 32;
+    const bx = Math.max(10, Math.min(800 - badgeWidth - 10, px - badgeWidth / 2));
+    const by = py;
+
+    // Background pill with dark glow
+    ctx.shadowColor = 'rgba(56, 189, 248, 0.6)';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+
+    // Rounded rectangle
+    ctx.beginPath();
+    const radius = 8;
+    ctx.moveTo(bx + radius, by);
+    ctx.lineTo(bx + badgeWidth - radius, by);
+    ctx.quadraticCurveTo(bx + badgeWidth, by, bx + badgeWidth, by + radius);
+    ctx.lineTo(bx + badgeWidth, by + badgeHeight - radius);
+    ctx.quadraticCurveTo(bx + badgeWidth, by + badgeHeight, bx + badgeWidth - radius, by + badgeHeight);
+    ctx.lineTo(bx + radius, by + badgeHeight);
+    ctx.quadraticCurveTo(bx, by + badgeHeight, bx, by + badgeHeight - radius);
+    ctx.lineTo(bx, by + radius);
+    ctx.quadraticCurveTo(bx, by, bx + radius, by);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Reset shadow
+    ctx.shadowBlur = 0;
+
+    // Key badge icon & label
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(prompt.label, bx + badgeWidth / 2, by + badgeHeight / 2);
+
+    ctx.restore();
   }
 
   private renderNpcAvatar(
@@ -1126,7 +2228,8 @@ export class WorldRenderer {
     y: number,
     label: string,
     isAcquainted?: boolean,
-    isSelected?: boolean
+    isSelected?: boolean,
+    facing?: 'left' | 'right'
   ): void {
     // Glow
     ctx.fillStyle = 'rgba(168, 85, 247, 0.2)';
@@ -1142,6 +2245,15 @@ export class WorldRenderer {
     ctx.arc(x, y, 12, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+
+    // Facing pupil / eye accent
+    if (facing) {
+      ctx.fillStyle = '#f8fafc';
+      const eyeOffset = facing === 'right' ? 5 : -5;
+      ctx.beginPath();
+      ctx.arc(x + eyeOffset, y - 2, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Selected outer ring
     if (isSelected) {
@@ -1164,5 +2276,99 @@ export class WorldRenderer {
       ctx.font = '9px sans-serif';
       ctx.fillText('● Acquainted', x, y + 38);
     }
+  }
+
+  /**
+   * Milestone 54: In-Canvas Speech Bubble Rendering
+   * Displays authoritative server dialogue text directly above the speaking NPC.
+   */
+  private renderSpeechBubble(ctx: CanvasRenderingContext2D, bubble: DialogueBubble): void {
+    const now = performance.now();
+    const timeLeft = bubble.expiresAt - now;
+    if (timeLeft <= 0) return;
+
+    // Smooth fade out during last 800ms
+    const alpha = Math.min(1, Math.max(0, timeLeft / 800));
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    ctx.font = '12px sans-serif';
+    const maxWidth = 250;
+    const words = bubble.text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const testWidth = ctx.measureText(testLine).width;
+      if (testWidth > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+
+    let maxLineWidth = 0;
+    for (const line of lines) {
+      const w = ctx.measureText(line).width;
+      if (w > maxLineWidth) maxLineWidth = w;
+    }
+
+    const paddingX = 14;
+    const paddingY = 10;
+    const lineHeight = 16;
+    const bubbleWidth = Math.max(90, maxLineWidth + paddingX * 2);
+    const bubbleHeight = lines.length * lineHeight + paddingY * 2;
+
+    // Anchor bubble above speaker's head
+    const bx = Math.max(15, Math.min(800 - bubbleWidth - 15, bubble.speakerX - bubbleWidth / 2));
+    const by = Math.max(15, bubble.speakerY - 32 - bubbleHeight);
+
+    // Dark semi-transparent bubble background with cyan glow
+    ctx.shadowColor = 'rgba(56, 189, 248, 0.4)';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+
+    const r = 8;
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by);
+    ctx.lineTo(bx + bubbleWidth - r, by);
+    ctx.quadraticCurveTo(bx + bubbleWidth, by, bx + bubbleWidth, by + r);
+    ctx.lineTo(bx + bubbleWidth, by + bubbleHeight - r);
+    ctx.quadraticCurveTo(bx + bubbleWidth, by + bubbleHeight, bx + bubbleWidth - r, by + bubbleHeight);
+
+    // Speech bubble tail pointing towards speaker
+    const tailX = Math.max(bx + 15, Math.min(bx + bubbleWidth - 15, bubble.speakerX));
+    ctx.lineTo(tailX + 7, by + bubbleHeight);
+    ctx.lineTo(bubble.speakerX, by + bubbleHeight + 8);
+    ctx.lineTo(tailX - 7, by + bubbleHeight);
+
+    ctx.lineTo(bx + r, by + bubbleHeight);
+    ctx.quadraticCurveTo(bx, by + bubbleHeight, bx, by + bubbleHeight - r);
+    ctx.lineTo(bx, by + r);
+    ctx.quadraticCurveTo(bx, by, bx + r, by);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+
+    // Text lines
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    lines.forEach((line, idx) => {
+      ctx.fillText(line, bx + paddingX, by + paddingY + idx * lineHeight);
+    });
+
+    ctx.restore();
   }
 }

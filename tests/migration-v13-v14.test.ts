@@ -10,6 +10,8 @@ import {
   validateWorldStateV11,
   validateWorldStateV12,
   validateWorldStateV13,
+  validateWorldStateV14,
+  WorldStateV14,
   migrateWorldStateV11ToV12,
   migrateWorldStateV12ToV13,
   migrateWorldStateV13ToV14,
@@ -112,16 +114,16 @@ describe('Milestone 35: Migration v13 -> v14 & Epistemic Retention Invariants', 
     });
   });
 
-  describe('2. validateWorldState (Schema v14) Rejections', () => {
+  describe('2. validateWorldStateV14 (Schema v14) Rejections', () => {
     it('rejects v13 state due to version mismatch', () => {
       const v13 = createSampleV13State();
-      assert.throws(() => validateWorldState(v13), /Unsupported WorldState version: 13. Expected version 14/);
+      assert.throws(() => validateWorldStateV14(v13), /Unsupported WorldState version: 13. Expected version 14/);
     });
 
     it('rejects state missing knowledge array', () => {
       const v13 = createSampleV13State();
       const candidate = { ...v13, version: 14 };
-      assert.throws(() => validateWorldState(candidate), /knowledge must be an array/);
+      assert.throws(() => validateWorldStateV14(candidate), /knowledge must be an array/);
     });
   });
 
@@ -163,7 +165,7 @@ describe('Milestone 35: Migration v13 -> v14 & Epistemic Retention Invariants', 
       assert.deepEqual(v14.items, v13.items);
 
       // Verify that the migrated v14 state strictly satisfies validateWorldState
-      assert.doesNotThrow(() => validateWorldState(v14));
+      assert.doesNotThrow(() => validateWorldStateV14(v14));
     });
   });
 
@@ -178,7 +180,7 @@ describe('Milestone 35: Migration v13 -> v14 & Epistemic Retention Invariants', 
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 14);
+        assert.equal(loaded.version, 18);
         assert.deepEqual(loaded.knowledge, []);
         assert.doesNotThrow(() => validateWorldState(loaded));
 
@@ -186,7 +188,7 @@ describe('Milestone 35: Migration v13 -> v14 & Epistemic Retention Invariants', 
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 14);
+        assert.equal(reloaded.version, 18);
         assert.deepEqual(reloaded.knowledge, []);
         assert.doesNotThrow(() => validateWorldState(reloaded));
       } finally {
@@ -207,14 +209,14 @@ describe('Milestone 35: Migration v13 -> v14 & Epistemic Retention Invariants', 
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 14);
+        assert.equal(loaded.version, 18);
         assert.deepEqual(loaded.knowledge, []);
         assert.doesNotThrow(() => validateWorldState(loaded));
 
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 14);
+        assert.equal(reloaded.version, 18);
         assert.deepEqual(reloaded.knowledge, []);
       } finally {
         if (existsSync(testFile)) {
@@ -234,14 +236,14 @@ describe('Milestone 35: Migration v13 -> v14 & Epistemic Retention Invariants', 
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 14);
+        assert.equal(loaded.version, 18);
         assert.deepEqual(loaded.knowledge, []);
         assert.doesNotThrow(() => validateWorldState(loaded));
 
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 14);
+        assert.equal(reloaded.version, 18);
         assert.deepEqual(reloaded.knowledge, []);
       } finally {
         if (existsSync(testFile)) {
@@ -261,7 +263,7 @@ describe('Milestone 35: Migration v13 -> v14 & Epistemic Retention Invariants', 
         const persistence = new LocalFilePersistence(testFile);
         const state = persistence.load();
         assert.ok(state);
-        assert.equal(state.version, 14);
+        assert.equal(state.version, 18);
         assert.equal(state.knowledge.length, 0);
 
         // Co-locate and introduce player and NPC at building
@@ -288,7 +290,7 @@ describe('Milestone 35: Migration v13 -> v14 & Epistemic Retention Invariants', 
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 14);
+        assert.equal(reloaded.version, 18);
         assert.equal(reloaded.knowledge.length, 1);
         assert.strictEqual(reloaded.knowledge[0].id, state.knowledge[0].id);
         assert.strictEqual(reloaded.knowledge[0].agentId, 'agent:dev-player');

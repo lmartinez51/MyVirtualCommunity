@@ -14,7 +14,7 @@ import {
 import { Simulation } from '../src/core/simulation.js';
 
 describe('Milestone 33: Authoritative Inventory, Ownership & Consumable Lifecycle', () => {
-  const OPEN_TIME = '2026-09-14T09:00:00.000Z';
+  const OPEN_TIME = '2026-09-14T15:00:00.000Z';
 
   function setupOpenWorldWithPlayerInside() {
     const clock = WorldClock.create(OPEN_TIME);

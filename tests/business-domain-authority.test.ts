@@ -424,18 +424,18 @@ describe('Milestone 36: Business Domain Authority (AUD-02)', () => {
 
   describe('6. Simulation & Persistence Integration', () => {
     test('Simulation.tick executes business operational transition deterministically', () => {
-      const clock = WorldClock.create('2026-09-14T08:55:00.000Z'); // 5 minutes before opening
+      const clock = WorldClock.create('2026-09-14T14:55:00.000Z'); // 5 minutes before opening (08:55 local)
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
 
       const restaurant = state.restaurants.find((r) => r.id === RESTAURANT_ID)!;
       assert.equal(restaurant.operationalState, 'closed');
 
-      // Advance clock 10 minutes forward -> crosses 09:00 opening boundary
+      // Advance clock 10 minutes forward -> crosses 09:00 opening boundary (15:00 UTC)
       clock.advance(10 * 60 * 1000);
       const tickResult = sim.tick();
       assert.equal(restaurant.operationalState, 'open');
-      assert.equal(restaurant.operationalSince, '2026-09-14T09:05:00.000Z');
+      assert.equal(restaurant.operationalSince, '2026-09-14T15:05:00.000Z');
 
       const restaurantTrans = tickResult.restaurantTransitions.find(
         (rt) => rt.restaurantId === RESTAURANT_ID

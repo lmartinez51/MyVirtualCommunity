@@ -5,12 +5,21 @@ import {
 } from './entities/restaurant.js';
 import { Agent } from './entities/agent.js';
 import { Offering } from './entities/offering.js';
+import { Property, createInitialPropertiesForPlaces } from './property.js';
+import {
+  SiteAgentAssociation,
+  DEVELOPMENT_SEED_SITE_AGENT_ASSOCIATIONS,
+  REAL_WORLD_JUAREZ_SEED_SITE_AGENT_ASSOCIATIONS,
+} from './site-agent-association.js';
+import { resolveLocationTimeZone } from './civil-time.js';
 
 export interface SeedWorldData {
   places: Place[];
   restaurants: Restaurant[];
   agents: Agent[];
   offerings: Offering[];
+  properties: Property[];
+  siteAgentAssociations: SiteAgentAssociation[];
 }
 
 /**
@@ -77,13 +86,17 @@ export function createDevelopmentSeedWorld(
     },
   ];
 
+  const restaurantBuildingId = 'building:development-building';
+  const restaurantTimeZone = resolveLocationTimeZone({ places } as any, restaurantBuildingId);
+  const operationalState = evaluateDevelopmentRestaurantOperationalRule(initialTime, restaurantTimeZone);
+
   const restaurants: Restaurant[] = [
     {
       id: 'restaurant:development-restaurant',
       type: 'restaurant',
       name: 'Development Restaurant',
-      buildingId: 'building:development-building',
-      operationalState: evaluateDevelopmentRestaurantOperationalRule(initialTime),
+      buildingId: restaurantBuildingId,
+      operationalState,
       operationalSince: initialTime,
       balanceMinor: 0,
       currency: 'USD',
@@ -128,11 +141,16 @@ export function createDevelopmentSeedWorld(
     },
   ];
 
+  const properties = createInitialPropertiesForPlaces(places);
+  const siteAgentAssociations = [...DEVELOPMENT_SEED_SITE_AGENT_ASSOCIATIONS];
+
   return {
     places,
     restaurants,
     agents,
     offerings,
+    properties,
+    siteAgentAssociations,
   };
 }
 
@@ -149,15 +167,18 @@ export function createDevelopmentSeedWorld(
  * - Commercial Building: Kentucky Club Building (building:kentucky-club-building)
  * - Restaurant: Kentucky Club (restaurant:kentucky-club) [Av. Benito Juárez 643]
  * - Player Agent: Ciudad Juárez Player (agent:real-world-player), starting inside building:real-world-residence
+ * - Synthetic Service Staff Agent: Service Staff (agent:m39-service-staff), located inside restaurant:kentucky-club (Milestone 39)
+ * - Synthetic Commercial Offering: M39 Demo Beverage (offering:m39-demo-beverage), available at Kentucky Club (Milestone 39)
  *
  * NOTE:
  * - District and Neighborhood assignments are structural representation choices within
  *   the existing Place containment hierarchy, not immutable world model laws.
  * - Kentucky Club's operationalState ('open') is a simulation default required by the
  *   preconditions of enterRestaurant(), not a verified real-world schedule claim.
- * - balanceMinor (0) and currency ('USD') on Restaurant and Agent are mandatory technical schema
- *   defaults under Schema Version 14; no economic behavior, offerings, or pricing are introduced.
- * - offerings is strictly an empty array []; commercial fulfillment is deferred to later milestones.
+ * - agent:m39-service-staff is a synthetic M39 service-agent fixture. It does NOT represent
+ *   a real Kentucky Club employee or real staffing identity.
+ * - offering:m39-demo-beverage is a synthetic M39 demonstration fixture ($3.00 USD). It does NOT
+ *   represent a real Kentucky Club menu item, price, offering, or inventory.
  *
  * @param initialTime The world time timestamp to associate with initial agent activity and restaurant operational state.
  */
@@ -231,18 +252,44 @@ export function createRealWorldJuarezSeedWorld(
       activityState: 'active',
       activitySince: initialTime,
       locationId: 'building:real-world-residence',
+      balanceMinor: 2000,
+      currency: 'USD',
+      playerActivity: null,
+    },
+    {
+      id: 'agent:m39-service-staff',
+      type: 'agent',
+      name: 'Service Staff',
+      agentType: 'npc',
+      activityState: 'active',
+      activitySince: initialTime,
+      locationId: 'restaurant:kentucky-club',
       balanceMinor: 0,
       currency: 'USD',
       playerActivity: null,
     },
   ];
 
-  const offerings: Offering[] = [];
+  const offerings: Offering[] = [
+    {
+      id: 'offering:m39-demo-beverage',
+      type: 'offering',
+      name: 'M39 Demo Beverage',
+      restaurantId: 'restaurant:kentucky-club',
+      priceMinor: 300,
+      currency: 'USD',
+    },
+  ];
+
+  const properties = createInitialPropertiesForPlaces(places);
+  const siteAgentAssociations = [...REAL_WORLD_JUAREZ_SEED_SITE_AGENT_ASSOCIATIONS];
 
   return {
     places,
     restaurants,
     agents,
     offerings,
+    properties,
+    siteAgentAssociations,
   };
 }

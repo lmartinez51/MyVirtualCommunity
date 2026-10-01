@@ -16,9 +16,9 @@ import { LocalFilePersistence } from '../src/persistence/local-storage.js';
 import { Offering } from '../src/core/entities/offering.js';
 
 describe('Purchase Offering Interaction (Milestone 8)', () => {
-  // Test fixture setup helper: boots at 09:00:00 UTC (open restaurant window) and places player inside
+  // Test fixture setup helper: boots at 09:00:00 local / 15:00:00 UTC (open restaurant window) and places player inside
   function setupOpenWorldWithPlayerInside() {
-    const clock = WorldClock.create('2026-09-14T09:00:00.000Z');
+    const clock = WorldClock.create('2026-09-14T15:00:00.000Z');
     const state = createInitialWorldState(clock);
     const entryResult = enterRestaurant(
       state,
@@ -94,7 +94,7 @@ describe('Purchase Offering Interaction (Milestone 8)', () => {
     });
 
     test('4. fails with not-inside-restaurant when player is outside the restaurant', () => {
-      const clock = WorldClock.create('2026-09-14T09:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T15:00:00.000Z');
       const state = createInitialWorldState(clock);
       // Player starts at building:development-building, NOT inside restaurant:development-restaurant
       const stateBefore = JSON.stringify(state);
@@ -117,8 +117,8 @@ describe('Purchase Offering Interaction (Milestone 8)', () => {
     });
 
     test('5. fails with restaurant-closed when restaurant is closed', () => {
-      // Create world at 08:00:00 UTC (closed window)
-      const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
+      // Create world at 08:00:00 local / 14:00:00 UTC (closed window)
+      const clock = WorldClock.create('2026-09-14T14:00:00.000Z');
       const state = createInitialWorldState(clock);
       const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
       // Position player inside closed restaurant for testing operational check
@@ -171,7 +171,7 @@ describe('Purchase Offering Interaction (Milestone 8)', () => {
         name: 'Other Bistro',
         buildingId: 'building:development-building',
         operationalState: 'open',
-        operationalSince: '2026-09-14T09:00:00.000Z',
+        operationalSince: '2026-09-14T15:00:00.000Z',
         balanceMinor: 0,
         currency: 'USD',
       });
@@ -395,7 +395,7 @@ describe('Purchase Offering Interaction (Milestone 8)', () => {
       const testFile = join(tmpdir(), `purchase-persistence-test-${Date.now()}.json`);
       try {
         // --- SESSION A: Purchase coffee and persist ---
-        const clockA = WorldClock.create('2026-09-14T09:00:00.000Z');
+        const clockA = WorldClock.create('2026-09-14T15:00:00.000Z');
         const stateA = createInitialWorldState(clockA);
         enterRestaurant(
           stateA,
@@ -421,7 +421,7 @@ describe('Purchase Offering Interaction (Milestone 8)', () => {
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
 
-        assert.equal(stateB.version, 14);
+        assert.equal(stateB.version, 18);
         const playerB = stateB.agents.find((a) => a.id === 'agent:dev-player')!;
         const restaurantB = stateB.restaurants.find(
           (r) => r.id === 'restaurant:development-restaurant'

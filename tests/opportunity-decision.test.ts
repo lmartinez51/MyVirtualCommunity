@@ -20,8 +20,8 @@ import {
 import { LocalFilePersistence } from '../src/persistence/local-storage.js';
 
 describe('Milestone 24: First Opportunity-Driven Player Decision', () => {
-  const MORNING_OPEN_TIME = '2026-09-14T09:00:00.000Z';
-  const CLOSING_TIME = '2026-09-14T17:00:00.000Z';
+  const MORNING_OPEN_TIME = '2026-09-14T15:00:00.000Z';
+  const CLOSING_TIME = '2026-09-14T23:00:00.000Z';
 
   function setupWorldAt(timeIso: string): { clock: WorldClock; state: WorldState; sim: Simulation } {
     const clock = WorldClock.create(timeIso);
@@ -128,7 +128,7 @@ describe('Milestone 24: First Opportunity-Driven Player Decision', () => {
   // =========================================================================
   describe('2. Stale Opportunity Rejection & Non-Mutation Invariants', () => {
     test('9-13. Retaining offeringId before 17:00, advancing to 17:00, and verifying authoritative rejection without mutation', () => {
-      const clock = WorldClock.create('2026-09-14T16:59:00.000Z');
+      const clock = WorldClock.create('2026-09-14T22:59:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
       sim.tick();
@@ -284,8 +284,8 @@ describe('Milestone 24: First Opportunity-Driven Player Decision', () => {
         const restoredState = await persistence.load();
         assert.ok(restoredState);
 
-        // Scenario 19: Verify schema remains v14
-        assert.equal(restoredState.version, 14);
+        // Scenario 19: Verify schema remains v18
+        assert.equal(restoredState.version, 18);
         assert.doesNotThrow(() => validateWorldState(restoredState));
 
         // Scenario 17: Verify persistence preserves purchase records and balances

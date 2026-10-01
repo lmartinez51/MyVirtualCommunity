@@ -134,6 +134,24 @@ body {
 .context-restaurant { background: #9a3412; color: #ffedd5; }
 .context-unknown { background: #334155; color: #cbd5e1; }
 
+/* Operational State Badges */
+.operational-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-align: center;
+  max-width: fit-content;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.operational-open { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); border: 1px solid var(--accent-green); }
+.operational-closing-soon { background: rgba(245, 158, 11, 0.2); color: var(--accent-gold); border: 1px solid var(--accent-gold); }
+.operational-closed { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); border: 1px solid var(--accent-red); }
+
 /* Notification Banner */
 .banner {
   padding: 10px 16px;
@@ -448,6 +466,25 @@ body {
   cursor: not-allowed;
 }
 
+.action-button:has(.action-hint) {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.action-label {
+  display: block;
+}
+
+.action-hint {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #38bdf8;
+  opacity: 0.95;
+  letter-spacing: 0.02em;
+}
+
 /* Action Categories */
 .action-enterBuilding, .action-enterRestaurant {
   border-left: 3px solid var(--accent-blue);
@@ -468,6 +505,317 @@ body {
 
 .action-greetAgent, .action-introduceAgent {
   border-left: 3px solid #c084fc;
+}
+
+/* M42 Debug Panel */
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.debug-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.debug-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  letter-spacing: 0.05em;
+}
+
+.debug-value {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.debug-actions-header {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #f59e0b;
+  margin-top: 14px;
+  margin-bottom: 6px;
+  letter-spacing: 0.05em;
+}
+
+.debug-actions-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.debug-action-btn {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 6px 10px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.debug-action-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+}
+
+/* Restaurant Service & Order Experience (Milestone 44) */
+#restaurant-service-panel {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.service-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.service-inquiry-box {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.service-prompt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.service-icon {
+  font-size: 1.5rem;
+}
+
+.service-prompt-text strong {
+  font-size: 0.95rem;
+  color: #fbbf24;
+}
+
+.service-prompt-text p {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.fulfillment-mode-selector {
+  display: flex;
+  gap: 16px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mode-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.mode-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.badge-deferred {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  background: rgba(148, 163, 184, 0.2);
+  color: #94a3b8;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+
+.service-order-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.4);
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-row label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+}
+
+.form-control {
+  background: #0f172a;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 7px 10px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.form-actions {
+  margin-left: auto;
+}
+
+.action-order {
+  background: #059669 !important;
+  color: #ecfdf5 !important;
+  border-color: #10b981 !important;
+}
+
+.action-order:hover {
+  background: #047857 !important;
+}
+
+.active-order-box {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid #38bdf8;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.active-order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.active-order-title {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #38bdf8;
+  letter-spacing: 0.05em;
+}
+
+.order-badge {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+}
+
+.status-preparing {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  border: 1px solid #f59e0b;
+}
+
+.status-ready {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  border: 1px solid #22c55e;
+  animation: pulse 1.5s infinite;
+}
+
+.status-fulfilled {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  border: 1px solid #38bdf8;
+}
+
+.active-order-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.order-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.order-detail-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.order-detail-val {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+.action-collect {
+  background: #2563eb !important;
+  color: #eff6ff !important;
+  border-color: #3b82f6 !important;
+  width: 100%;
+}
+
+.action-collect:hover:not(:disabled) {
+  background: #1d4ed8 !important;
+}
+
+.action-collect:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.player-inventory-box {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.inventory-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.inventory-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inventory-chip {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #bae6fd;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 4px;
 }
 
 /* Footer */

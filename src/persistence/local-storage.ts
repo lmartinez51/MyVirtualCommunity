@@ -9,6 +9,17 @@ import {
   migrateWorldStateV12ToV13,
   validateWorldStateV13,
   migrateWorldStateV13ToV14,
+  validateWorldStateV14,
+  migrateWorldStateV14ToV15,
+  WorldStateV15,
+  validateWorldStateV15,
+  migrateWorldStateV15ToV16,
+  WorldStateV16,
+  validateWorldStateV16,
+  migrateWorldStateV16ToV17,
+  WorldStateV17,
+  validateWorldStateV17,
+  migrateWorldStateV17ToV18,
 } from '../core/world-state.js';
 
 export const DEFAULT_PERSISTENCE_PATH = resolve(process.cwd(), 'data', 'world-state.json');
@@ -71,7 +82,7 @@ export class LocalFilePersistence {
 
     const rawVersion = (parsed as { version?: unknown })?.version;
 
-    // Schema Version 11 -> 12 -> 13 -> 14 Migration Path
+    // Schema Version 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 Migration Path
     if (rawVersion === 11) {
       validateWorldStateV11(parsed);
       const v12 = migrateWorldStateV11ToV12(parsed);
@@ -79,32 +90,104 @@ export class LocalFilePersistence {
       const v13 = migrateWorldStateV12ToV13(v12);
       validateWorldStateV13(v13);
       const v14 = migrateWorldStateV13ToV14(v13);
-      validateWorldState(v14);
-      this.save(v14);
-      return v14;
+      validateWorldStateV14(v14);
+      const v15 = migrateWorldStateV14ToV15(v14);
+      validateWorldStateV15(v15);
+      const v16 = migrateWorldStateV15ToV16(v15);
+      validateWorldStateV16(v16);
+      const v17 = migrateWorldStateV16ToV17(v16);
+      validateWorldStateV17(v17);
+      const v18 = migrateWorldStateV17ToV18(v17);
+      validateWorldState(v18);
+      this.save(v18);
+      return v18;
     }
 
-    // Schema Version 12 -> 13 -> 14 Migration Path
+    // Schema Version 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 Migration Path
     if (rawVersion === 12) {
       validateWorldStateV12(parsed);
       const v13 = migrateWorldStateV12ToV13(parsed);
       validateWorldStateV13(v13);
       const v14 = migrateWorldStateV13ToV14(v13);
-      validateWorldState(v14);
-      this.save(v14);
-      return v14;
+      validateWorldStateV14(v14);
+      const v15 = migrateWorldStateV14ToV15(v14);
+      validateWorldStateV15(v15);
+      const v16 = migrateWorldStateV15ToV16(v15);
+      validateWorldStateV16(v16);
+      const v17 = migrateWorldStateV16ToV17(v16);
+      validateWorldStateV17(v17);
+      const v18 = migrateWorldStateV17ToV18(v17);
+      validateWorldState(v18);
+      this.save(v18);
+      return v18;
     }
 
-    // Schema Version 13 -> 14 Migration Path
+    // Schema Version 13 -> 14 -> 15 -> 16 -> 17 -> 18 Migration Path
     if (rawVersion === 13) {
       validateWorldStateV13(parsed);
       const v14 = migrateWorldStateV13ToV14(parsed);
-      validateWorldState(v14);
-      this.save(v14);
-      return v14;
+      validateWorldStateV14(v14);
+      const v15 = migrateWorldStateV14ToV15(v14);
+      validateWorldStateV15(v15);
+      const v16 = migrateWorldStateV15ToV16(v15);
+      validateWorldStateV16(v16);
+      const v17 = migrateWorldStateV16ToV17(v16);
+      validateWorldStateV17(v17);
+      const v18 = migrateWorldStateV17ToV18(v17);
+      validateWorldState(v18);
+      this.save(v18);
+      return v18;
     }
 
-    // Schema Version 14 Direct Validation Path
+    // Schema Version 14 -> 15 -> 16 -> 17 -> 18 Migration Path
+    if (rawVersion === 14) {
+      validateWorldStateV14(parsed);
+      const v15 = migrateWorldStateV14ToV15(parsed);
+      validateWorldStateV15(v15);
+      const v16 = migrateWorldStateV15ToV16(v15);
+      validateWorldStateV16(v16);
+      const v17 = migrateWorldStateV16ToV17(v16);
+      validateWorldStateV17(v17);
+      const v18 = migrateWorldStateV17ToV18(v17);
+      validateWorldState(v18);
+      this.save(v18);
+      return v18;
+    }
+
+    // Schema Version 15 -> 16 -> 17 -> 18 Migration Path
+    if (rawVersion === 15) {
+      validateWorldStateV15(parsed);
+      const v16 = migrateWorldStateV15ToV16(parsed as WorldStateV15);
+      validateWorldStateV16(v16);
+      const v17 = migrateWorldStateV16ToV17(v16);
+      validateWorldStateV17(v17);
+      const v18 = migrateWorldStateV17ToV18(v17);
+      validateWorldState(v18);
+      this.save(v18);
+      return v18;
+    }
+
+    // Schema Version 16 -> 17 -> 18 Migration Path
+    if (rawVersion === 16) {
+      validateWorldStateV16(parsed);
+      const v17 = migrateWorldStateV16ToV17(parsed as WorldStateV16);
+      validateWorldStateV17(v17);
+      const v18 = migrateWorldStateV17ToV18(v17);
+      validateWorldState(v18);
+      this.save(v18);
+      return v18;
+    }
+
+    // Schema Version 17 -> 18 Migration Path
+    if (rawVersion === 17) {
+      validateWorldStateV17(parsed);
+      const v18 = migrateWorldStateV17ToV18(parsed as WorldStateV17);
+      validateWorldState(v18);
+      this.save(v18);
+      return v18;
+    }
+
+    // Schema Version 18 Direct Validation Path
     validateWorldState(parsed);
 
     return parsed;

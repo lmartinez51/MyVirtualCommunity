@@ -22,10 +22,10 @@ import {
 import { LocalFilePersistence } from '../src/persistence/local-storage.js';
 
 describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
-  const MORNING_OPEN_TIME = '2026-09-14T09:00:00.000Z';
-  const PRE_SHIFT_TIME = '2026-09-14T08:00:00.000Z';
-  const CLOSING_TIME = '2026-09-14T17:00:00.000Z';
-  const POST_SHIFT_TIME = '2026-09-14T20:30:00.000Z';
+  const MORNING_OPEN_TIME = '2026-09-14T15:00:00.000Z';
+  const PRE_SHIFT_TIME = '2026-09-14T14:00:00.000Z';
+  const CLOSING_TIME = '2026-09-14T23:00:00.000Z';
+  const POST_SHIFT_TIME = '2026-09-15T02:30:00.000Z';
 
   function setupWorldAt(timeIso: string): { clock: WorldClock; state: WorldState; sim: Simulation } {
     const clock = WorldClock.create(timeIso);
@@ -180,7 +180,7 @@ describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
       sim.tick();
       const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
       leaveBuilding(state, player.id, 'building:development-building');
-      enterBuilding(state, player.id, 'building:development-residence');
+      player.locationId = 'building:development-residence';
       assert.equal(player.locationId, 'building:development-residence');
 
       const result = inspectCurrentLocation(state, player.id);
@@ -326,7 +326,7 @@ describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
   // =========================================================================
   describe('Stale Opportunity & Authoritative Purchase Invariants', () => {
     test('17. Opportunity observed before 17:00 closing transition', () => {
-      const clock = WorldClock.create('2026-09-14T16:59:00.000Z');
+      const clock = WorldClock.create('2026-09-14T22:59:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state);
       sim.tick();
@@ -342,7 +342,7 @@ describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
     });
 
     test('18. World advances through closing transition, closing restaurant and removing opportunity', () => {
-      const clock = WorldClock.create('2026-09-14T16:59:00.000Z');
+      const clock = WorldClock.create('2026-09-14T22:59:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state);
       sim.tick();
@@ -351,7 +351,7 @@ describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
       const restaurant = state.restaurants.find((r) => r.id === 'restaurant:development-restaurant')!;
       enterRestaurant(state, player.id, restaurant.id);
 
-      clock.advance(60_000); // 17:00:00 UTC
+      clock.advance(60_000); // 17:00:00 local (23:00 UTC)
       sim.tick();
 
       assert.equal(restaurant.operationalState, 'closed');
@@ -364,7 +364,7 @@ describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
     });
 
     test('19. Existing purchaseOffering() rejects the stale purchase attempt after closing', () => {
-      const clock = WorldClock.create('2026-09-14T16:59:00.000Z');
+      const clock = WorldClock.create('2026-09-14T22:59:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state);
       sim.tick();
@@ -383,7 +383,7 @@ describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
     });
 
     test('20. No partial economic mutation occurs on rejected stale purchase', () => {
-      const clock = WorldClock.create('2026-09-14T16:59:00.000Z');
+      const clock = WorldClock.create('2026-09-14T22:59:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state);
       sim.tick();
@@ -448,7 +448,7 @@ describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
         const restoredState = await persistence.load();
         assert.ok(restoredState);
         validateWorldState(restoredState);
-        assert.equal(restoredState.version, 14);
+        assert.equal(restoredState.version, 18);
         assert.equal((restoredState as any).opportunities, undefined);
       } finally {
         if (existsSync(testPath)) {

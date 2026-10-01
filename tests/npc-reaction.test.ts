@@ -278,7 +278,7 @@ describe('Milestone 18-A: First Deterministic NPC Reaction (Reciprocal Greeting)
   // =========================================================================
   describe('NPC State Drives Response Across Canonical Routine', () => {
     test('NPC response transitions deterministically as Simulation executes canonical M15 routine', () => {
-      const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T14:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state);
 
@@ -323,19 +323,19 @@ describe('Milestone 18-A: First Deterministic NPC Reaction (Reciprocal Greeting)
   // 6. Persistence & Schema Validation
   // =========================================================================
   describe('Persistence Roundtrip & Schema Preservation', () => {
-    test('WorldState remains valid schema version 14 before and after greeting', () => {
+    test('WorldState remains valid schema version 18 before and after greeting', () => {
       const { state } = setupWorld();
 
       assert.doesNotThrow(() => validateWorldState(state));
-      assert.equal(state.version, 14);
+      assert.equal(state.version, 18);
 
       greetAgent(state, 'agent:dev-player', 'agent:dev-npc');
 
       assert.doesNotThrow(() => validateWorldState(state));
-      assert.equal(state.version, 14);
+      assert.equal(state.version, 18);
     });
 
-    test('world persists and restores cleanly with schema version 14', async () => {
+    test('world persists and restores cleanly with schema version 18', async () => {
       const tempDir = mkdtempSync(join(tmpdir(), 'm18-reaction-test-'));
       const storagePath = join(tempDir, 'world-state.json');
 
@@ -355,7 +355,7 @@ describe('Milestone 18-A: First Deterministic NPC Reaction (Reciprocal Greeting)
         // Load
         const loadedState = await persistence.load();
         assert.notEqual(loadedState, null);
-        assert.equal(loadedState!.version, 14);
+        assert.equal(loadedState!.version, 18);
 
         assert.doesNotThrow(() => validateWorldState(loadedState!));
 

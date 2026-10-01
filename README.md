@@ -1085,6 +1085,959 @@ restaurant:kentucky-club (Kentucky Club)
 - **Discrete Transitions**: Movement remains instantaneous topological state transitions preserving `worldTime`.
 - **Backward Compatibility**: Synthetic development seed fixtures (`createDevelopmentSeedWorld`) remain 100% intact with zero regressions across pre-existing milestones.
 
+## Milestone 39: Order & Service Fulfillment Foundation
+
+Milestone 39 implements the minimal, deterministic Order & Service Fulfillment Foundation supporting a concrete restaurant counter experience at Kentucky Club:
+
+### 1. Concrete Customer Experience
+```text
+Player (at Kentucky Club)
+  ↓
+inquireRestaurantService(state, customerId, staffNpcId)
+  ↓ Employee Prompt: "Pickup or delivery?"
+placeOrder(state, { customerId, restaurantId, lines, fulfillmentMode: 'pickup' })
+  ↓ Atomic debit/credit + 1:1 PurchaseRecord(s) + Order entity ('preparing')
+Simulation.tick() progresses time past readyAt (+5 min)
+  ↓ Order transitions: 'preparing' -> 'ready'
+collectOrder(state, customerId, orderId)
+  ↓ Order transitions: 'ready' -> 'fulfilled' + 1:1 OwnedItem(s) instantiated in player possession
+```
+
+### 2. Domain Affordances & Operations (`src/core/order.ts`)
+- **Service Affordance Query (`inquireRestaurantService`)**: Authoritative, read-only query returning employee prompt (`"Pickup or delivery?"`), available offerings, supported modes (`['pickup']`), and deferred modes (`['delivery']`) when customer and staff are co-located at an open restaurant.
+- **Explicit Delivery Deferral**: Delivery mode is structurally recognized in the domain schema (`FulfillmentMode = 'pickup' | 'delivery'`), but deferred cleanly with zero economic or entity mutation (`code: 'delivery-mode-deferred'`).
+- **Atomic Order Placement & Settlement (`placeOrder`)**:
+  - Validates customer co-location, restaurant operational state, line quantities, currency alignment, and customer funds.
+  - Atomically debits customer balance, credits restaurant balance, and creates exactly one `PurchaseRecord` per unit ordered (preserving the M33/M37 1:1 cardinality invariant).
+  - Instantiates `Order` entity in `status: 'preparing'` with deterministic `readyAt = createdAt + 5 minutes`.
+- **Deterministic Preparation Progression (`tickOrderPreparation`)**:
+  - Evaluated exclusively during explicit `Simulation.tick()` calls.
+  - Transitions in-flight orders from `'preparing'` to `'ready'` when `worldTime >= readyAt`.
+  - Zero background timers, async event loops, or ungrounded schedulers.
+- **Authoritative Collection & Item Instantiation (`collectOrder`)**:
+  - Enforces customer co-location at restaurant, customer ownership of order, and `order.status === 'ready'`.
+  - Transitions order to `'fulfilled'` (setting `fulfilledAt`).
+  - Instantiates exactly one `OwnedItem` per ordered unit in customer possession (`status: 'available'`), binding `sourcePurchaseId` 1:1 to the corresponding purchase record.
+
+### 3. Reconciled Order ↔ Purchase ↔ Item Cardinality
+- Direction B invariant preserved: While an order is in-flight (`'preparing'` or `'ready'`), its purchases exist in `state.purchases` as pending order fulfillment.
+- Upon collection, each unit receives an `OwnedItem` bound 1:1 to its `PurchaseRecord`. Fulfilled orders satisfy `purchases.length === items.length` per order.
+
+### 4. Schema Migration Version 15 & Persistence
+- `CURRENT_WORLD_STATE_VERSION = 15`.
+- Added `orders: Order[]` collection to `WorldState`.
+- Implemented `WorldStateV14` validator and `migrateWorldStateV14ToV15` migration transform.
+- Updated `LocalFilePersistence.load()` to cascade migrations across v11, v12, v13, and v14 up to v15.
+
+## Milestone 46: Deterministic NPC Decision & Behavior
+
+Milestone 46 explores and validates the boundary between NPC autonomy and World Authority by introducing the first deterministic NPC decision/behavior cycle in MyVirtualCommunity:
+
+```text
+NPC CONTEXT EVALUATION (Pure / Read-Only)
+    ↓
+DETERMINISTIC DECISION ('no-action' | 'npc-schedule-disclosure')
+    ↓
+ACTION PROPOSAL / INVOCATION
+    ↓
+WORLD AUTHORITY (Social Domain / World Core)
+    ↓
+INDEPENDENT VALIDATION & PRECONDITIONS
+    ↓
+ATOMIC STATE TRANSITION (AgentKnowledgeRecord created)
+    ↓
+OBSERVABLE CONSEQUENCE (Client Toast / Retained Epistemic State)
+```
+
+### 1. Bounded Experimental Behavior Rule
+- **Rule**: When an active NPC is co-located with a player with whom they share mutual acquaintance, and the player does not already possess the NPC's work schedule knowledge, the NPC deterministically proposes schedule disclosure.
+- **Architectural Scope**: This is an intentionally bounded experimental behavior rule to validate the decision/proposal/authority boundary without introducing general social intelligence, dialogue trees, LLMs, mood, emotions, beliefs, personality, goal planners, or queue infrastructure.
+
+### 2. Pure Context Evaluation (`evaluateNpcScheduleDisclosureContext`)
+- Evaluates the NPC context against the current WorldState in a pure read-only function with zero side effects, zero disk writes, and zero state mutation.
+- Returns either `'npc-schedule-disclosure'` or `'no-action'`.
+
+### 3. Authoritative Domain Authority (`issueNpcScheduleDisclosure`)
+- The Social Domain / World Core remains the exclusive authority over world state mutation. The NPC proposal is not authoritative.
+- Independently re-validates all domain preconditions:
+  1. NPC existence (`npc-not-found`)
+  2. Player existence (`player-not-found`)
+  3. NPC active state (`npc-not-active`)
+  4. Co-location (`agents-not-co-located`)
+  5. Mutual acquaintance (`not-acquainted`)
+- Upon success, appends exactly one `AgentKnowledgeRecord` with `source: 'npc-initiative'` to the candidate state, establishing clear epistemic provenance distinct from direct player inquiry (`'social-inquiry'`).
+- Failure atomicity: strictly zero state mutations on candidate state if any precondition fails.
+- Commit publication: The simulation/session commit publishes the candidate state only after persistence succeeds (no unpersisted memory commit).
+
+### 4. Simulation Tick Integration & Strict Idempotency
+- Evaluated synchronously in-process during explicit `Simulation.tick()` invocations.
+- Strict idempotency: Once the knowledge record is recorded, subsequent simulation ticks evaluate context to `'no-action'`.
+- Spatial departure and return does not cause re-disclosure due to persistent epistemic retention.
+
+### 5. Schema Version 16 & Cascading Migration
+- Bumped schema version to `16` (`CURRENT_WORLD_STATE_VERSION = 16`).
+- Expanded `KnowledgeSource` type: `'social-inquiry' | 'npc-initiative'`.
+- Implemented `WorldStateV15` schema interface, `validateWorldStateV15`, and `migrateWorldStateV15ToV16`.
+- Updated `LocalFilePersistence.load()` to cascade migrations automatically (`v11 -> v12 -> v13 -> v14 -> v15 -> v16`) with atomic disk writes.
+
+### 6. Client Feedback & Visual Verification
+- Connected to client HUD via `SessionController.stepSimulation` to surface `"Development NPC shared work schedule with you."` notice.
+- Validated through end-to-end browser execution, inspection HUD, subsequent advance idempotency, and page reload state reconciliation.
+
+## Milestone 47: Deterministic NPC Commercial Action
+
+Milestone 47 converts the legacy ambient offering-publication mechanism into an explicitly attributed, deterministic NPC commercial action, establishing the first deterministic commercial decision boundary in MyVirtualCommunity:
+
+```text
+WORLD STATE
+    ↓
+NPC CONTEXT EVALUATION (Pure / Read-Only)
+    ↓
+DETERMINISTIC DECISION ('no-action' | 'make-offering-available')
+    ↓
+EXISTING DOMAIN AUTHORITY (makeDevelopmentOfferingAvailable)
+    ↓
+AUTHORITATIVE PRECONDITION RE-VALIDATION
+    ↓
+PERSISTENT WORLD CONSEQUENCE (state.offerings update)
+    ↓
+CLIENT PROJECTION & HUD NOTIFICATION
+    ↓
+PLAYER OBSERVATION & ECONOMIC AFFORDANCE (Purchase Pan Dulce)
+```
+
+### 1. Concrete Commercial Decision Rule
+- **Rule**: When the development NPC is active (`activityState === 'active'`) and co-located at the development restaurant (`locationId === 'restaurant:development-restaurant'`), the restaurant is open (`operationalState === 'open'`), and the development pastry offering (`offering:development-pastry`) is not currently present in `state.offerings`, the NPC deterministically decides to publish the offering.
+- **Architectural Scope**: Converts ambient world-tick logic into an explicitly attributed NPC decision. Zero generic AI engines, behavior trees, utility scorers, planners, personality, emotion, mood, dialogue engines, proposal queues, or event buses.
+
+### 2. Pure Context Evaluation (`evaluateOfferingPublicationContext`)
+- Pure function in `src/core/simulation.ts` reading candidate `WorldState`, `npcId`, and `restaurantId`.
+- Guarantees zero side-effects, zero state mutation, and returns `'make-offering-available' | 'no-action'`.
+
+### 3. Authoritative Domain Execution (`makeDevelopmentOfferingAvailable`)
+- Existing authoritative domain function in `src/core/world-state.ts` is invoked synchronously by `Simulation.tick()`.
+- Independently re-validates all domain rules:
+  1. NPC existence and type (`agent-not-found`, `agent-not-npc`)
+  2. NPC active state (`npc-not-active`)
+  3. Co-location at restaurant (`npc-not-at-restaurant`)
+  4. Restaurant open operational state (`restaurant-closed`)
+  5. Offering catalog existence and idempotency (`offering-already-available`)
+- Upon success, publishes Pan Dulce offering into `state.offerings` and records transitions in `offeringTransitions` and `npcDecisionTransitions`.
+- Failure atomicity: strictly zero state mutations if any precondition fails.
+
+### 4. Single Causal Trigger Invariant
+- Replaces legacy ambient trigger in `Simulation.tick()` completely.
+- If the NPC is absent, idle, or off-shift, the offering is NOT published.
+
+### 5. Schema Preservation & Persistence
+- Schema Version 16 is preserved with zero schema changes or migrations required (`CURRENT_WORLD_STATE_VERSION = 16`).
+- Published offering survives process termination, restarts, and offline simulation leaps.
+- Downstream economic affordances (purchase, order, item consumption) remain fully functional.
+
+### 6. Client Feedback & Visual Verification
+- Connected to client HUD via `SessionController.stepSimulation` and `ClientSession` to display: `"Development NPC made Pan Dulce available at the restaurant."`
+- Real browser verification conducted with Chrome DevTools MCP validating:
+  1. Initial state (08:00 UTC, closed, dev-npc at home, no pastry)
+  2. Shift progression to 10:00 UTC (counter open, NPC on shift, decision fired, Pan Dulce published)
+  3. Downstream purchase execution ($2.50 debited, inventory updated, "Eat Pan Dulce" button unlocked)
+  4. Persistence reload reconciliation (clean state restoration from disk)
+  5. Strict idempotency upon subsequent simulation advances (no duplicate offerings or duplicate decisions)
+
+## Milestone 48: Schedule-Informed Action Consideration
+
+Milestone 48 implements the smallest concrete realization of the **Agent-Specific Action Consideration** contract in MyVirtualCommunity, proving that an agent's retained declarative knowledge can inform their perception and action consideration without altering physical world authority:
+
+```text
+WORLD STATE
+    +
+AGENT KNOWLEDGE (agent-schedule)
+    ↓
+AGENT-SPECIFIC ACTION CONSIDERATION (Pure / Derived)
+    ↓
+PLAYER DECISION / INTENT
+    ↓
+EXISTING DOMAIN ACTION (enterRestaurant)
+    ↓
+EXISTING SPATIAL AUTHORITY & PRECONDITIONS
+    ↓
+TRANSITION
+```
+
+### 1. Architectural Scope & Epistemic Boundary
+- **Pure Derived Representation**: Action considerations are computed on-demand during read-side projection (`inspectCurrentLocation`) and are **strictly non-authoritative**.
+- **Zero Persistence**: Considerations are never stored in `WorldState` (zero `state.considerations`), never written to disk, and never generate historical event records.
+- **Invariants Proven**:
+  - `ACTION CONSIDERATION ≠ DOMAIN AUTHORIZATION`: A consideration suggests a reason to act, but domain actions (`enterRestaurant`) independently validate all spatial and operational preconditions.
+  - `ACTION CONSIDERATION IS NOT A PRECONDITION`: A player without schedule knowledge can still execute `enterRestaurant` with identical spatial authority.
+  - `SCHEDULE KNOWLEDGE ≠ CURRENT NPC PRESENCE`: The consideration truthfully reflects epistemic schedule awareness (`"Development NPC is scheduled to work now."`), NOT physical presence. Even if the NPC is absent or delayed, the schedule fact remains true.
+  - `EPISTEMIC ASYMMETRY`: In the exact same physical world state, an agent with schedule knowledge receives the action consideration, while an agent without knowledge does not.
+
+### 2. Pure Consideration Evaluator (`src/core/action-consideration.ts`)
+- **`evaluateScheduleInformedRestaurantConsideration(state, playerId, npcId, restaurantId)`**:
+  - Pure function taking `WorldState`, `playerId`, `npcId`, and `restaurantId`.
+  - Type-only import of `WorldState` (`import type { WorldState } from './world-state.js'`) ensuring zero runtime circular dependencies.
+  - Evaluates:
+    1. Player is located at the containing building (`player.locationId === restaurant.buildingId`).
+    2. Player holds verified `agent-schedule` knowledge for the NPC.
+    3. The schedule fact matches the target restaurant (`payload.workplaceId === restaurantId`).
+    4. Current World Time falls within the scheduled working window (using shared `isTimeWithinScheduleInterval`).
+  - Returns `ActionConsideration | null`:
+    ```ts
+    {
+      action: 'enterRestaurant',
+      targetId: 'restaurant:development-restaurant',
+      reason: 'schedule-knowledge',
+      description: 'Development NPC is scheduled to work now.'
+    }
+    ```
+- Shared UTC interval logic extracted to `src/core/development-npc-schedule.ts` (`isTimeWithinScheduleInterval`), eliminating any dependency from action consideration into simulation orchestration.
+
+### 3. Perception & Client Presentation
+- **Perception Integration (`src/core/world-state.ts`)**:
+  - `inspectCurrentLocation` evaluates considerations when the player is located at a building containing a restaurant.
+  - Attaches `actionConsiderations` to `ObservedLocation` and `InspectCurrentLocationResult`.
+- **Client Presentation Shell (`src/client/projections.ts`, `src/client/renderer.ts`)**:
+  - Maps consideration to contextual affordance hint (`affordance.hint`), rendering an informative subtitle under the `Enter Development Restaurant` button.
+  - Exposes consideration in Entity Inspection when inspecting the restaurant entity.
+  - Negative case: when knowledge is absent or outside the schedule window, the hint and inspection note are completely omitted, but the action button remains fully clickable and authoritative.
+
+### 4. Schema Version 16 Preserved
+- Because Action Considerations are purely derived read-side projections, **Schema Version 16 is preserved** (`CURRENT_WORLD_STATE_VERSION = 16`).
+- Zero schema modifications, zero migrations, and zero persistent mutations.
+
+## Milestone 49: Opportunity-Informed Commercial Action Consideration
+
+Milestone 49 extends the Agent-Specific Action Consideration pattern from M48 into the commercial domain, demonstrating that an observable world opportunity (an active pastry offering made available by an NPC) informs an agent's commercial action consideration while leaving existing economic domain authority fully sovereign:
+
+```text
+WORLD STATE (NPC on shift + restaurant open + Pan Dulce published)
+    ↓
+OBSERVABLE OPPORTUNITY (active Pan Dulce offering)
+    ↓
+AGENT-SPECIFIC ACTION CONSIDERATION (purchaseOffering: Pan Dulce)
+    ↓
+PLAYER DECISION / INTENT
+    ↓
+EXISTING ECONOMIC AUTHORITY (purchaseOffering)
+    ↓
+VALIDATED TRANSITION (atomic balance debit + OwnedItem creation)
+```
+
+### 1. Architectural Scope & Epistemic Boundary
+- **Pure Derived Representation**: Action considerations are evaluated dynamically during read-side projection (`inspectCurrentLocation`) and are **strictly non-authoritative**.
+- **Zero Persistence**: Considerations are never stored in `WorldState` (zero `state.considerations`), never persisted to disk, and never generate audit records.
+- **Invariants Proven**:
+  - `CONSIDERATION ≠ AUTHORIZATION`: Consideration answers *"Is purchasing this offering something this agent can reasonably consider in the current context?"*, NOT *"Can the purchase currently succeed?"*. Even if the player has insufficient funds ($0.00 balance), the action consideration is still derived (`considered = true`) because the offering is an active, observable opportunity. Existing `purchaseOffering` independently enforces economic preconditions and rejects unauthorized purchases with `insufficient-funds`.
+  - `CONSIDERATION IS NOT A PRECONDITION`: The existing `purchaseOffering()` domain function remains unchanged and does not require an active consideration to execute.
+  - `STRICT SPATIAL SCOPE`: Commercial considerations are evaluated strictly when the player is co-located inside the restaurant (`player.locationId === restaurant.id`), preventing leakage into building lobbies or street spaces.
+
+### 2. Pure Consideration Evaluator (`src/core/action-consideration.ts`)
+- **`evaluateOpportunityInformedCommercialConsideration(state, playerId, restaurantId, offeringId)`**:
+  - Pure function taking `WorldState`, `playerId`, `restaurantId`, and optional `offeringId`.
+  - Uses type-only import of `WorldState` (`import type { WorldState } from './world-state.js'`), maintaining zero circular dependencies.
+  - Scoped specifically to `DEVELOPMENT_PASTRY_OFFERING_ID` (`'offering:development-pastry'`).
+  - Evaluates:
+    1. Player exists and is located inside the target restaurant.
+    2. Restaurant exists and is currently open (`operationalState === 'open'`).
+    3. The pastry offering exists in `state.offerings` and is active.
+    4. Development NPC is active (`activityState === 'active'`) and co-located at the restaurant.
+  - Returns `ActionConsideration | null`:
+    ```ts
+    {
+      action: 'purchaseOffering',
+      targetId: 'offering:development-pastry',
+      reason: 'active-opportunity',
+      description: 'Development NPC made fresh Pan Dulce available at the restaurant.'
+    }
+    ```
+
+### 3. Perception & Client Presentation
+- **Perception Integration (`src/core/world-state.ts`)**:
+  - `inspectCurrentLocation` evaluates commercial considerations when the player is located inside a restaurant.
+  - Attaches derived considerations to `ObservedLocation.actionConsiderations`.
+- **Client Presentation Shell (`src/client/projections.ts`, `src/client/renderer.ts`)**:
+  - In `createPresentationModel` for `RESTAURANT`, matching considerations are attached to `affordance.hint`.
+  - The UI renders the hint as a subtitle inside the `Buy Pan Dulce ($2.50)` action button using existing `.action-hint` CSS.
+  - `findInspectableEntity` displays `Consideration: Development NPC made fresh Pan Dulce available at the restaurant.` when inspecting the Pan Dulce offering entity.
+
+### 4. Schema Version 16 Preserved
+- Because Action Considerations are purely derived read-side projections, **Schema Version 16 is preserved** (`CURRENT_WORLD_STATE_VERSION = 16`).
+- Zero schema modifications, zero migrations, and zero persistent mutations.
+
+## Milestone 50: Peer-to-Peer Physical Possession Handoff
+
+Milestone 50 introduces the first authoritative peer-to-peer physical possession handoff in MyVirtualCommunity, allowing an agent possessing an available consumable item to transfer physical custody directly to a co-located, acquainted peer:
+
+```text
+Agent A possesses available consumable OwnedItem
+        ↓
+Agent A and Agent B are co-located
+        ↓
+Interpersonal condition satisfied (isAgentAcquainted === true)
+        ↓
+Agent A initiates handoff (transferItemPossession / POST /api/commands/giveItem)
+        ↓
+Authoritative World Core validates 8 deterministic preconditions
+        ↓
+Physical custody transitions (item.ownerAgentId = Agent B)
+        ↓
+Commercial provenance preserved (item.sourcePurchaseId unchanged)
+        ↓
+Authoritative World State persisted atomically to disk (Schema Version 16)
+```
+
+### 1. Semantic Boundary: Possession vs. Legal Ownership
+- **Custody Attribution Only**: `OwnedItem.ownerAgentId` represents current physical custody/possession ('player' | 'npc'). It does **not** represent legal ownership, title, deed, trade rights, lending, collateral, or a generalized inventory system.
+- **Immutable Commercial Provenance**: `item.sourcePurchaseId` permanently points to the original commercial `PurchaseRecord` (`sourcePurchase.playerId`). Following an authorized handoff, `sourcePurchase.playerId` and `item.ownerAgentId` are explicitly permitted to diverge (`sourcePurchase.playerId !== item.ownerAgentId`).
+- **Zero Economic Side Effects**: Physical handoff is purely interpersonal custody transfer. Balances are untouched, no money changes hands, and no commercial ledger records are created or mutated.
+- **Zero Autonomous Consumption**: NPCs do not autonomously consume items in their possession; item custody transitions do not trigger consumption.
+
+### 2. Authoritative Domain Kernel (`src/core/item.ts`)
+- **`transferItemPossession(state, params)`**:
+  - Deterministic precondition verification:
+    1. Sender exists in `state.agents` (`sender-not-found`).
+    2. Recipient exists in `state.agents` (`recipient-not-found`).
+    3. Sender and recipient are distinct (`cannot-transfer-to-self`).
+    4. Both agents are co-located at the exact same location (`agents-not-co-located`).
+    5. Sender and recipient are mutually acquainted (`agents-not-acquainted`).
+    6. Item exists in `state.items` (`item-not-found`).
+    7. Item is currently in the possession of the sender (`item.ownerAgentId === senderId`) (`item-not-in-possession`).
+    8. Item is available (`item.status === 'available'`) (`item-already-consumed`).
+  - Transition:
+    - Atomically updates `item.ownerAgentId = toAgentId`.
+    - Preserves all other item fields (`id`, `offeringId`, `name`, `restaurantId`, `sourcePurchaseId`, `acquiredAt`, `status`, `consumedAt`).
+  - Zero state mutation on any precondition violation.
+
+### 3. Invariant Reconciliation
+- **`validateItemAuthority`**: Relaxed owner check to accept any valid agent (`'player' | 'npc'`), and explicitly removed the requirement that `item.ownerAgentId === sourcePurchase.playerId`.
+- **`validateOrderAuthority`**: Enforces that `sourcePurchaseId` matches an order customer purchase, without requiring current physical custody to remain with the original buyer.
+- **`validateWorldState`**: Verifies valid agent existence for `ownerAgentId` across players and NPCs, and enforces valid purchase provenance while permitting possessor divergence.
+
+### 4. HTTP API & Presentation Shell
+- **API Endpoint**: `POST /api/commands/giveItem` with payload `{ targetAgentId: string, itemId: string }`. Sender identity is authoritatively derived from the session (`state.activePlayerId`).
+- **Contextual Affordances (`src/client/projections.ts`)**:
+  - When the player possesses available items and is co-located with an acquainted agent, generates `Give ${item.name} to ${agent.name}` grouped under `INTERACT`.
+  - Non-acquainted agents or agents not co-located never receive the affordance.
+- **Entity Inspection**:
+  - `ObservableAgent` and `ClientAgentItem` project `possessions?: string[]`.
+  - Inspecting any co-located agent displays their currently held items (e.g. `Possessions: Pan Dulce`).
+
+### 5. Schema Version 16 Preserved
+- `CURRENT_WORLD_STATE_VERSION = 16` remains strictly unchanged.
+- Because `OwnedItem` already supports arbitrary string `ownerAgentId` values, zero migrations are required. Full backward and forward persistence compatibility is maintained.
+
+## Milestone 51: Accompanied Consumable Activity (Shared Refreshment)
+
+Milestone 51 introduces the first accompanied consumable activity in MyVirtualCommunity, allowing a player to enjoy a shared refreshment with an acquainted, co-located Development NPC inside an open development restaurant:
+
+```text
+Player possesses Coffee (offering:development-coffee)
+NPC possesses Pan Dulce (offering:development-pastry)
+        ↓
+Both agents co-located at open restaurant (restaurant:development-restaurant)
+        ↓
+Agents are acquainted
+        ↓
+Player receives action consideration: "Enjoy Refreshment with Development NPC"
+        ↓
+Player initiates accompanied activity (startAccompaniedActivity / POST /api/commands/startAccompaniedActivity)
+        ↓
+Authoritative World Core validates 11 deterministic preconditions
+        ↓
+Both items consumed atomically via Item Authority (consumeOwnedItem)
+        ↓
+Player activity starts: companionAgentId = companionId, duration = 900,000 ms (15 minutes)
+        ↓
+NPC state untouched (no activity queue, no playerActivity, no autonomous consumption)
+        ↓
+15-minute simulation completion records companion in ActivityCompletionRecord
+```
+
+### 1. Concrete Domain Action (`startAccompaniedActivity`)
+- **Domain Function**: `startAccompaniedActivity(state, playerId, companionAgentId)`
+- **Standard Duration**: Exactly 15 minutes (`900_000 ms`), matching the existing M34 consumption standard.
+- **Atomic Item Consumption**: Uses the existing Item Authority `consumeOwnedItem()`. Selects items in deterministic FIFO order. Both items are consumed atomically or the entire action fails with zero state mutation.
+- **11 Deterministic Preconditions**:
+  1. `player-not-found`: Player exists in `state.agents`.
+  2. `player-not-player`: Player must be a player (`player.agentType === 'player'`).
+  3. `companion-not-found`: Companion exists in `state.agents`.
+  4. `cannot-accompany-self`: Player and companion must be distinct (`playerId !== companionAgentId`).
+  5. `restaurant-not-found`: Player's current location must resolve to a valid restaurant.
+  6. `restaurant-closed`: Restaurant must be open (`operationalState === 'open'`).
+  7. `agents-not-co-located`: Both agents must occupy the exact same restaurant.
+  8. `agents-not-acquainted`: Both agents must be acquainted in `state.acquaintances`.
+  9. `item-not-possessed`: Player must possess an available Coffee item (`offering:development-coffee`) from this restaurant.
+  10. `companion-item-not-possessed`: Companion must possess an available Pan Dulce item (`offering:development-pastry`) from this restaurant.
+  11. `player-already-active`: Player must not already have an active activity in flight (`completedAt === null`).
+
+### 2. Architectural Boundaries & Non-Negotiables
+- **Player Activity Remains Player-Specific**: Only the player receives `playerActivity`. The companion NPC does NOT receive `playerActivity`, a task/activity queue, autonomous consumption rules, or hunger/fatigue meters.
+- **Epistemic Isolation**: Zero state mutation to `state.knowledge`. The activity does not generate false knowledge records.
+- **Transactional Candidate-State Pattern**: In `SessionController`, actions are applied to candidate state clones and persisted before being committed to memory. If persistence fails, memory is rolled back.
+
+### 3. Action Consideration & Projections
+- **Action Consideration**: `evaluateAccompaniedConsumableConsideration(state, playerId, companionId, restaurantId)` derives the pure non-authoritative consideration `"Enjoy Refreshment with Development NPC"` (`action: 'startAccompaniedActivity'`, `reason: 'co-located-companion-refreshment'`).
+- **Contextual Affordance**: `accompanied-refreshment-${companion.id}` grouped under `ACT` (`⚡ ACT / COMMERCE`).
+- **HUD Integration**: Renders active accompanied activity and remaining minutes:
+  `agent:dev-player • Having Coffee with Development NPC (15m remaining)`.
+- **Completion Record**: Upon simulation tick completion (after 15 minutes), copies `companionAgentId` into `ActivityCompletionRecord`.
+
+### 4. Schema Version 16 Preserved
+- `CURRENT_WORLD_STATE_VERSION = 16` remains strictly unchanged.
+- `PlayerActivityState` and `ActivityCompletionRecord` add optional `companionAgentId?: string | null`.
+- Zero database migrations required. Complete backward and forward persistence compatibility is maintained.
+
+## Milestone 52: Graceful Restaurant Closure Lifecycle
+
+Milestone 52 introduces the complete, deterministic **Graceful Restaurant Closure Lifecycle** in MyVirtualCommunity, resolving the architectural gap uncovered after M51 where occupants remained indefinitely inside a restaurant after operating hours:
+
+```text
+Restaurant Schedule (UTC):
+  09:00 - 16:45: 'open'          -> Commercial orders, purchases, consumption permitted
+  16:45 - 17:00: 'closing-soon'  -> Amber badge; entry permitted; orders/purchases BLOCKED ('restaurant-closing-soon');
+                                    long activities BLOCKED ('activity-extends-past-closing'); exit consideration active
+  17:00 - 09:00: 'closed'        -> Red badge; entry BLOCKED ('restaurant-closed');
+                                    Simulation tick executes closure egress: all occupants relocated to building lobby
+```
+
+### 1. Concrete Domain Lifecycle & Schedule Evaluation
+- **Operational States**: Extended `RestaurantOperationalState = 'open' | 'closing-soon' | 'closed'`.
+- **Operating Hours**:
+  - `09:00 - 16:45 UTC`: `open`
+  - `16:45 - 17:00 UTC`: `closing-soon`
+  - `17:00 - 09:00 UTC`: `closed`
+- **Scoped Evaluation**: `evaluateDevelopmentRestaurantOperationalRule()` is scoped strictly to `restaurant:development-restaurant`, guaranteeing non-regression of real-world seed venues (e.g. Kentucky Club).
+
+### 2. Closing-Soon Boundary Rules (16:45–17:00 UTC)
+- **Physical Entry & Presence**: Entry and presence are permitted. Existing occupants remain inside without premature ejection.
+- **Commercial Cutoff**: New commercial orders (`placeOrder`) and purchases (`purchaseOffering`) are blocked with code `'restaurant-closing-soon'`.
+- **Activity Cutoff**: New long-running activities extending past 17:00 UTC are blocked with code `'activity-extends-past-closing'`.
+- **In-Flight Grace**: In-flight activities and ready order collections continue naturally.
+- **Action Consideration**: `evaluateRestaurantClosingSoonConsideration()` derives `exitRestaurant` with reason `'restaurant-closing-soon'` and renders an amber `● CLOSING SOON` badge sign.
+
+### 3. Authoritative Spatial Closure-Egress Transition at 17:00 UTC
+- **`executeRestaurantClosureEgress(state, restaurantId)`**:
+  - Authoritatively relocates all lingering occupants (player and NPCs) directly to the containing building lobby (`restaurant.buildingId`, e.g. `building:development-building`).
+  - Integrated into `Simulation.tick()` when a restaurant transitions to or is evaluated as `closed`.
+  - Offline simulation leaps across closure boundaries reconcile disconnected occupants upon disk rehydration.
+
+### 4. Schema Version 16 Preserved
+- `CURRENT_WORLD_STATE_VERSION = 16` remains strictly unchanged.
+- Zero database migrations required. Complete backward and forward persistence compatibility is maintained.
+
+## Milestone 52.1: Deferred Order Pickup Across Closure Lifecycle [CLOSED / VERIFIED]
+
+Milestone 52.1 resolves the graceful reconciliation of uncollected `ready` orders when a restaurant closes, formalizing Deferred Pickup across overnight closure, egress, client reload/reconnect, and next-day reopening:
+
+```text
+Day 1 10:00 UTC          Day 1 17:00 UTC                 Client Reload             Day 2 09:00 UTC
+Order placed & ready ──→ Restaurant Closes          ──→ Reconciles from disk ──→ Restaurant reopens & re-entered
+                         • Occupants egressed           • Pending orders         • Order card renders in service box
+                         • Order remains READY            reconstructed          • collectOrder() succeeds
+                         • Pickup deferred banner       • Outside chips show     • Items transferred to inventory
+                         • Schema V16 preserved           deferred status        • Order status -> fulfilled
+```
+
+### 1. Authoritative Domain State & Projection Boundaries
+- **WorldState.orders**: Sole authoritative source of truth for commercial order contracts.
+- **Authoritative Read Projection**: `InspectCurrentLocationResult` exposes `pendingOrders: ObservablePendingOrder[]` as a player-scoped read projection (analogous to `playerInventory`), strictly separated from spatial room perception (`location: ObservedLocation`).
+- **Unfulfilled Orders Filter**: Projects exclusively orders with `status === 'preparing' | 'ready'`. Completed orders (`status === 'fulfilled'`) are strictly excluded.
+- **Deterministic Presentation Ordering**: Ordered deterministically by `createdAt` ascending, tie-broken by `id` ascending. Tests formally verify this is presentation ordering only and does **not** create FIFO fulfillment restrictions.
+
+### 2. Zero Domain State Mutation on Closure
+- **No Deferred Domain Status**: Uncollected orders remain `ready`. No synthetic `'deferred'`, `'pickup-deferred'`, or `'closed-pickup'` status or schema migration is introduced.
+- **Presentation Mapping**: "Pickup Deferred" is strictly a presentation-layer mapping derived from `Order.status === 'ready'` and `Restaurant.operationalState === 'closed'`.
+- **Precondition Enforcement**: `collectOrder` rejects collection while the venue is closed (`restaurant-closed`) or when the customer is not co-located (`customer-not-co-located`).
+
+### 3. Multiplicity & Multi-Restaurant Isolation
+- **Multiple Simultaneous Orders**: A customer can hold multiple simultaneous unfulfilled orders across different venues.
+- **Contextual UI Filtering**: When inside a restaurant, the service panel displays only orders matching `order.restaurantId === currentRestaurantId`.
+- **Authoritative Collection**: Collection dispatches the exact authoritative `orderId` and verifies co-location at that specific restaurant.
+
+### 4. Verification Baseline
+- **Verification Result**: `M52.1 ARCHITECTURALLY VERIFIED — PASS`.
+- **Automated Tests**: 1,014 tests passing across 316 suites (0 failures).
+- **Dedicated Suite**: `tests/deferred-order-pickup-lifecycle.test.ts` (13 tests verifying domain invariants, non-FIFO fulfillment, multi-restaurant isolation, and full multi-day lifecycle).
+- **Browser Verification**: End-to-end multi-day lifecycle verified with 5 screenshot artifacts via Chrome DevTools MCP.
+
+## Milestone 56: Property & Assignment Foundation [CLOSED / VERIFIED]
+
+Milestone 56 establishes the minimal authoritative **Property & Assignment Foundation**, formalizing persistent Property entities and assignment state cleanly separated from spatial containment topology (`Place` / `Building`), physical agent occupancy, access control, and commercial operations:
+
+```text
+Spatial / Geography Authority           Property Authority               Business / Occupancy / Economy
+    ↓ owns physical topology                ↓ owns property records          ↓
+Place / Building (where it is)    ──→    Property                         ──→   Operating Business, Residents,
+(no reverse property reference)          Assignment                             Visitors, and Wallets
+                                         ↓
+                                         current holder reference
+                                         (or 'unassigned')
+```
+
+### 1. Semantic Domain Separation
+- **Building ≠ Property**: A `Building` represents spatial containment topology. A `Property` is a persistent entity associated with an explicitly designated `Building`. Not every `Building` is a `Property`.
+- **Single Property per Building**: At most one `Property` record may reference a given `Building`. Place entities remain strictly spatial and do not contain reverse `propertyId` references.
+- **Strict Semantics of `unassigned`**: The `unassigned` assignment state means strictly: *no holder is currently assigned to this Property*. It does **not** define or imply public availability, claimability, purchasability, public commons, or immediate assignment.
+- **Legally Neutral Assignment**: M56 does not freeze `Assignment` as a legal title, deed, lease, ownership certificate, or other specific legal instrument. The model records strictly `Property -> Assignment -> current holder reference`.
+- **Assignment ≠ Occupancy / Presence**: An assignment indicates the current holder reference. It does not dictate who is physically present or living in the space (owned by Agent / Spatial Presence).
+- **Assignment ≠ Door Access**: Assignment does not dictate real-time door admission or knocking (owned by local access evaluation).
+- **Assignment ≠ Business Operation**: A commercial property assignment is distinct from commercial businesses operating within that building (owned by Business Authority).
+- **Assignment ≠ Economic Transaction**: Assignment is decoupled from money, pricing, or purchase workflows (owned by Economy Authority).
+
+### 2. Domain Model (`src/core/property.ts`)
+- **Property Entity**:
+  ```typescript
+  export interface Property {
+    readonly id: string;           // e.g. 'property:development-residence'
+    readonly type?: 'property';
+    readonly buildingId: string;   // Foreign key -> Place (type === 'building')
+    readonly propertyType: 'residence' | 'commercial';
+    assignment: PropertyAssignment;
+  }
+  ```
+- **Assignment States**:
+  - `UnassignedPropertyAssignment`: `{ status: 'unassigned' }` (strictly forbids `holder` and `assignedAt`).
+  - `AssignedPropertyAssignment`: `{ status: 'assigned', holder: PropertyHolderReference, assignedAt: string }`.
+- **Holder Polymorphism**: `holderType: 'agent' | 'organization' | 'person'`.
+
+### 3. Canonical Seed World Designated Properties
+All seeded properties begin in the `unassigned` state:
+- **Development Seed World (`juarez-el-paso`)**:
+  - `property:development-residence` (building: `building:development-residence`, type: `residence`)
+  - `property:development-building` (building: `building:development-building`, type: `commercial`)
+  - `property:avenida-juarez-kiosk` (building: `building:avenida-juarez-kiosk`, type: `commercial`)
+- **Real-World Juarez Seed World (`juarez-el-paso`)**:
+  - `property:real-world-residence` (building: `building:real-world-residence`, type: `residence`)
+  - `property:kentucky-club-building` (building: `building:kentucky-club-building`, type: `commercial`)
+
+### 4. Authoritative Invariants & Cross-Domain Isolation
+1. **Single Property per Building Invariant**: Multiple properties referencing the same `buildingId` are strictly rejected by `validatePropertyAuthority`.
+2. **Valid Building Reference Invariant**: Properties must reference an existing `Place` of kind `building`. Referencing streets, neighborhoods, cities, or non-existent places is strictly rejected.
+3. **No Reverse Reference Invariant**: `Place` models contain zero property or assignment fields (`propertyId`, `assignment`, `owner`, `occupant`).
+4. **Boundary Isolation Invariant**: Mutating a property assignment leaves spatial topology, agent locations, restaurant operational state, balances, items, and orders completely unaffected.
+5. **Pure Query Invariant**: Read queries (`getProperty`, `getPropertyByBuildingId`, `isPropertyAssigned`) produce zero state mutation.
+
+### 5. Schema Upgrade & Persistence Cascades (v16 -> v17)
+- **CURRENT_WORLD_STATE_VERSION = 17**: Introduces authoritative `properties: Property[]` collection.
+- **Historical Validator**: `validateWorldStateV16` enforces strict v16 integrity and rejects unexpected `properties` collections.
+- **Cascading Migration**: `migrateWorldStateV16ToV17` automatically creates initial unassigned properties for designated buildings in historical saves.
+- **Persistence Compatibility**: `LocalFilePersistence.load()` cascades all historical saves (v11 through v16) to v17 on load.
+
+## Milestone 57: Site Agent Association Foundation [CLOSED / VERIFIED]
+
+Milestone 57 formalizes the first-class domain concept of a **Site Agent Association**, establishing which Agent is functionally associated with a specific world site/place, and in what authoritative role:
+
+```text
+PLACE / SITE
+    ↓
+SITE AGENT ASSOCIATION (World Core Authority)
+    ↓
+AGENT
+    ↓
+ROLE ('resident' | 'attendant')
+```
+
+### 1. Mandatory Domain Distinctions
+- **WHERE THE AGENT IS (`Agent.locationId`)**: Logical/physical spatial presence owned by Spatial & Movement Authority.
+- **WHAT SITE THE AGENT SERVES (`SiteAgentAssociation`)**: Functional site relationship owned by Site Agent Association Authority.
+- **WHO OWNS THE SITE (`Property.assignment`)**: Property holder assignment owned by Property Authority.
+- **WHO MAY ENTER THE SITE**: Access control and spatial transit policies.
+- **WHAT THE AGENT IS CURRENTLY DOING (`Agent.activityState`)**: Current activity and routine state.
+
+An agent being located at a site does not imply residency or attendance. Conversely, holding an association does not imply physical presence or property ownership.
+
+### 2. Domain Model (`src/core/site-agent-association.ts`)
+```typescript
+export type SiteAgentRole = 'resident' | 'attendant';
+
+export interface SiteAgentAssociation {
+  readonly placeId: string;  // Target Place or Restaurant identifier
+  readonly agentId: string;  // Associated Agent identifier
+  readonly role: SiteAgentRole;
+}
+```
+
+### 3. Resident Cardinality & Invariants
+- **Resident Cardinality**: Strictly maximum **1 resident** per place. World Core validation rejects any state containing multiple residents for the same place (`Place "X" cannot have multiple resident associations`).
+- **Attendant Multiplicity**: Establishments support **0..N attendants** per place.
+- **Tuple Uniqueness**: `(placeId, agentId, role)` must be strictly unique across the collection.
+- **Query Contract**: `getSiteResident(state, placeId)` returns exactly 0 or 1 result (`SiteAgentAssociation | undefined`), backed by the authoritative cardinality invariant.
+- **Referential Integrity**: Associations must reference valid places/restaurants and valid agents; agents cannot masquerade as places and places cannot masquerade as agents.
+
+### 4. Canonical Seeds (Explicit Fixture Definitions)
+- **Development Seed World (`juarez-el-paso`)**:
+  - `building:development-residence` → `agent:dev-npc` (`resident`)
+  - `restaurant:development-restaurant` → `agent:dev-npc` (`attendant`)
+- **Real-World Juarez Seed World (`juarez-el-paso`)**:
+  - `building:real-world-residence` → `agent:real-world-player` (`resident`)
+  - `restaurant:kentucky-club` → `agent:m39-service-staff` (`attendant`)
+
+### 5. Migration Safety (v17 -> v18) — Option B
+- **CURRENT_WORLD_STATE_VERSION = 18**: Introduces `siteAgentAssociations: SiteAgentAssociation[]`.
+- **Option B (No derivable relationship)**: Version 17 did not authoritatively model Site Agent Associations. In accordance with domain separation rules, `migrateWorldStateV17ToV18` produces `siteAgentAssociations: []` rather than inventing associations from entity existence. Migrated states remain structurally and authoritatively valid.
+- **Historical Validator**: `validateWorldStateV17` strictly rejects states that contain `siteAgentAssociations`.
+- **Persistence Compatibility**: `LocalFilePersistence.load()` safely cascades v17 saves to v18 with empty associations.
+
+## Milestone 58: Residential Access Foundation [CLOSED / VERIFIED]
+
+Milestone 58 introduces the first authoritative residential-access rule in World Core:
+> A building that has a `SiteAgentAssociation` with `role: 'resident'` is treated as a residential site. A player may enter it only when its designated resident is currently physically present at that building (`resident.locationId === building.id`).
+
+```text
+Player Intent (enterBuilding)
+    ↓
+Precondition Evaluation (agent, player, building, location, inside)
+    ↓
+Residential Detection (getSiteResident)
+    ├─ No Resident Association ──> Generic Building Entry (Allowed)
+    └─ Resident Association Present
+            ↓
+       Residential Access Evaluation (evaluateResidentialAccess)
+            ├─ Resident Missing / Not Found ──> Denied ('resident-not-found' / 'resident-agent-missing')
+            ├─ Resident Not At Building ─────> Denied ('resident-not-home')
+            └─ Resident Present At Building ──> Allowed ('allowed')
+```
+
+### 1. Pure Domain Evaluator (`src/core/residential-access.ts`)
+- Pure, side-effect-free evaluation:
+  - `evaluateResidentialAccess(state, playerId, buildingId): ResidentialAccessResult`
+  - `isResidentialBuilding(state, buildingId): boolean`
+- Result codes:
+  - `'allowed'`: Resident exists and is physically co-located at the building.
+  - `'resident-not-found'`: The building does not have a designated resident association.
+  - `'resident-agent-missing'`: The associated resident agent ID does not exist in `state.agents`.
+  - `'resident-not-home'`: The designated resident is currently at a different location (`resident.locationId !== buildingId`).
+
+### 2. Authoritative Integration (`src/core/world-state.ts`)
+- `enterBuilding(state, agentId, buildingId)` preserves strict precondition precedence:
+  1. `agent-not-found`
+  2. `agent-not-player`
+  3. `building-not-found`
+  4. `already-inside`
+  5. `invalid-location`
+  6. **Residential Access Gate**: If the building has a designated resident association, evaluate access:
+     - Returns `{ success: false, code: 'resident-not-home' | 'resident-agent-missing', ... }` on failure with **zero state mutation**.
+     - Continues to successful location transition (`agent.locationId = building.id`) when allowed.
+- Non-residential buildings retain generic building entry semantics completely unchanged.
+
+### 3. Strict Domain Boundaries & Invariants
+- **Presence-Based Access Only**: Access depends solely on physical presence (`resident.locationId === buildingId`). No locks, keys, invitations, guest lists, households, permissions, or access-control frameworks.
+- **No Property Conflation**: `Property.assignment` is completely untouched and never consulted for residential access authority.
+- **No Activity State Gating**: NPC `activityState` (e.g. resting/sleeping) does NOT deny or block entry.
+- **Zero Mutation Invariant**: Denied entry leaves all world state, clocks, locations, and inventories 100% unaltered.
+- **Schema Version**: Schema version remains strictly **18** (zero schema changes, zero migrations).
+
+## Milestone 59: Residential Interaction Contract [CLOSED / VERIFIED]
+
+Milestone 59 establishes an authoritative residential interaction boundary in World Core:
+> Direct entry into residential buildings via `enterBuilding` is prohibited (`code: 'residential-interaction-required'`). Entry into a residence requires interacting at the residence (`interactAtResidence`). An admission decision is evaluated deterministically: a visitor is admitted only if the designated resident is physically present at home and acquainted with the visitor.
+
+```text
+CONTACT (interactAtResidence)
+    ↓
+RESIDENTIAL ADMISSION POLICY (evaluateResidentialAdmissionPolicy)
+    ├─ Resident Missing / Not Found ──> Denied ('resident-agent-missing')
+    ├─ Resident Absent from Home ─────> Denied ('resident-not-home')
+    ├─ Unacquainted Stranger ─────────> Denied ('resident-declined-stranger')
+    └─ Resident Present & Acquainted ─> Admitted ('admitted')
+            ↓
+SPATIAL AUTHORITY (transitionAgentLocation)
+    ↓
+Player enters residence
+```
+
+### 1. Residential Admission Policy (`src/core/residential-access.ts`)
+- Pure, side-effect-free evaluator:
+  - `evaluateResidentialAdmissionPolicy(isResidentHome, isAcquainted, residentId, buildingId): ResidentialAdmissionPolicyResult`
+- Result codes:
+  - `'admitted'`: Resident is present at home and acquainted with visitor.
+  - `'resident-not-home'`: Resident is not currently at home.
+  - `'resident-declined-stranger'`: Resident is at home, but visitor is not recognized (stranger).
+
+### 2. Residential Interaction Function (`src/core/world-state.ts`)
+- `interactAtResidence(state, playerId, buildingId): InteractAtResidenceResult`
+- Evaluates 9 deterministic preconditions in strict order:
+  1. `player-not-found`: Player exists in `state.agents`.
+  2. `player-not-player`: Requesting agent has `agentType: 'player'`.
+  3. `building-not-found`: Target exists in `state.places` and is a `building`.
+  4. `building-not-residential`: Building has a designated `resident` association (`isResidentialBuilding(state, buildingId)`).
+  5. `already-inside`: Player is not already inside the target building (`player.locationId !== building.id`).
+  6. `player-not-at-building-access-context`: Player is at containing street (`player.locationId === building.parentId`).
+  7. `resident-agent-missing`: Resident agent entity exists in `state.agents`.
+  8. `resident-not-home`: Designated resident is currently at home (`resident.locationId === building.id`).
+  9. `resident-declined-stranger`: Player and resident are acquainted (`isAgentAcquainted(state, playerId, resident.id)`).
+- On admission approval, delegates spatial movement to canonical `transitionAgentLocation(state, playerId, building.id)`.
+- Zero state mutation on any precondition failure or admission rejection.
+
+### 3. Direct Entry Prohibition (`enterBuilding`)
+- `enterBuilding` on a residential building returns `{ success: false, code: 'residential-interaction-required', ... }`.
+- Non-residential buildings enter freely without requiring residential interaction.
+
+### 4. Client & Server Integration
+- Street perception projects `isResidential: true` on child building summaries (`ObservablePlaceSummary`).
+- Client presentation models generate `interactAtResidence` affordance (`group: 'INTERACT'`, `label: 'Knock at ...'`) for residential buildings on streets.
+- Server HTTP route `/api/commands/interactAtResidence` and session controller dispatch the command sequentially with full ACID validation and persistence.
+
+### 5. Architectural Invariants Preserved
+- **Strict Co-location**: `greetAgent()` and `introduceToAgent()` co-location rules remain strictly untouched.
+- **No AI / Psychology**: No consent flags, willingness, mood, or sleep state modeled.
+- **Spatial Authority**: Spatial transitions executed exclusively through `transitionAgentLocation()`.
+- **Schema Version**: Schema version remains strictly **18** (zero migrations, zero persistence changes).
+
+## Milestone 60: NPC Presence & Observation Boundary [CLOSED / VERIFIED]
+
+Milestone 60 formalizes the authoritative co-presence and observation boundary in World Core without premature domain abstraction or speculative encounter systems:
+> A player can observe an NPC when that NPC is actually present in the player's current authoritative spatial context, and the player can use existing social interaction commands (`greetAgent`, `introduceToAgent`) against that NPC.
+
+```text
+CO-PRESENCE (areAgentsCoLocated)
+    agentA.locationId === agentB.locationId
+    ↓
+OBSERVATION (getCoLocatedAgents / inspectCurrentLocation)
+    authoritative world facts projected through perception
+    ↓
+SOCIAL INTERACTION (greetAgent, introduceToAgent)
+    explicit commands validated by existing Social Domain Authority
+    ↓
+NPC AI (Future non-authoritative cognitive consumer)
+```
+
+### 1. Pure Co-Location Domain Helpers (`src/core/world-state.ts`)
+- **Topological Co-Presence Predicate**:
+  - `areAgentsCoLocated(state, agentIdA, agentIdB): boolean`
+  - Answers strictly: *Are these two agents currently occupying the same authoritative topological location?*
+  - Pure function, zero state mutation, handles non-existent or invalid agent IDs safely returning `false`.
+- **Co-Located Agent Observation**:
+  - `getCoLocatedAgents(state, observerAgentId): ObservableAgent[]`
+  - Answers strictly: *Which agents currently share the observer's authoritative location and can therefore participate in mutual observation/social interaction?*
+  - Projects co-located agents into read-only `ObservableAgent` summaries (`id`, `name`, `agentType`, `isAcquainted`, `possessions`) while strictly withholding internal agent state (`balanceMinor`, `activityState`, `activitySince`, `playerActivity`).
+- **Inspection Integration**:
+  - `inspectCurrentLocation(state, playerId)` delegates step 4 directly to `getCoLocatedAgents(state, player.id)`, preserving existing perception contracts.
+
+### 2. Schedule-Driven Presence & Natural Dispersal
+- NPCs progress along their deterministic schedules via `Simulation.tick()`.
+- Co-presence and observation automatically establish and dissolve as a natural consequence of spatial transitions:
+  - When an NPC commutes onto a street, players on that street immediately co-locate and observe the NPC.
+  - When an NPC transitions to work at a venue, co-presence on the street ends and requires interior entry to re-establish.
+
+### 3. Social Interaction Integration
+- Social commands (`greetAgent`, `introduceToAgent`) continue using existing Social Domain Authority requiring topological co-presence (`player.locationId === npc.locationId`).
+- Co-located interaction succeeds and generates canonical `Acquaintance` records and contextual responses.
+- Non-co-located interaction deterministically rejects with `agents-not-co-located`.
+
+### 4. Client & Server Integration
+- Client presentation model (`createPresentationModel`) surfaces co-located agents and generates interactive affordances (`GREET`, `INTRODUCE`) when co-present.
+- Non-co-located agents are excluded from client observation and affordance generation.
+
+### 5. Architectural Invariants Preserved
+- **No Encounter Subsystem**: Zero `EncounterContext`, `EncounterRecord`, `state.encounters`, or `/api/encounters` introduced.
+- **No Semantics Conflation**: Co-presence evaluates topological node equality (`locationId === locationId`); observation projects through perception.
+- **No AI / Psychology**: Zero LLM dynamic dialogue, mood, emotions, or ungrounded cognition.
+- **Schema Version**: Schema version remains strictly **18** (zero migrations, zero schema changes).
+
+## Milestone 61: NPC Behavioral State & Intent Foundation [CLOSED / VERIFIED]
+
+Milestone 61 establishes a pure, derived behavioral interpretation layer for the existing deterministic NPC schedule in MyVirtualCommunity, without introducing NPC autonomy, AI, goals-as-memory, planning, personality, emotions, or a behavior-tree engine:
+
+```text
+CURRENT WORLD FACTS
+        ↓
+DETERMINISTIC SCHEDULE / EXISTING AUTHORITATIVE STATE
+        ↓
+DERIVED NPC BEHAVIORAL STATE (evaluateNpcBehavioralState)
+        ↓
+READ-ONLY CONTEXT PROJECTION (inspectNpcContext)
+        ↓
+FUTURE NON-AUTHORITATIVE COGNITIVE CONSUMER
+```
+
+### 1. Pure Derived Routine & Intent Interpretation (`src/core/npc-behavior.ts`)
+- **Deterministic Routine Phase Derivation**:
+  - `evaluateNpcBehavioralState(state, npcId): DeriveNpcBehavioralStateResult`
+  - `deriveNpcBehavioralState(state, npcId): NpcBehavioralState | null`
+  - Derives the 5 canonical phases of Elena Morales (`agent:dev-npc`) from `worldTime` evaluated in authoritative local Civil Time (`America/Ciudad_Juarez`):
+    - `08:00` Local (Morning Rest): `routinePhase = 'resting'`, `intent = 'rest_at_home'`, `destinationId = 'building:development-residence'`, `activity = 'Resting at home'`
+    - `08:45` Local (Morning Commute): `routinePhase = 'commuting'`, `intent = 'commute_to_work'`, `destinationId = 'restaurant:development-restaurant'`, `activity = 'Commuting to work'`
+    - `09:30` Local (Work Shift): `routinePhase = 'working'`, `intent = 'perform_work_shift'`, `destinationId = 'restaurant:development-restaurant'`, `activity = 'Working at restaurant'`
+    - `18:00` Local (Evening Promenade): `routinePhase = 'promenading'`, `intent = 'walk_neighborhood'`, `destinationId = 'street:avenida-juarez'`, `activity = 'Walking along Avenida Juárez'`
+    - `21:00` Local (Night Rest): `routinePhase = 'resting'`, `intent = 'rest_at_home'`, `destinationId = 'building:development-residence'`, `activity = 'Resting at home'`
+- **Deterministic Intent Semantics**:
+  - `NpcIntentType` (`'rest_at_home' | 'commute_to_work' | 'perform_work_shift' | 'walk_neighborhood'`) represents strictly the deterministic objective implied by the NPC's current routine phase. It does NOT represent autonomous agency, psychological intent, or independently chosen goals.
+- **Pure Evaluation Invariant**:
+  - Pure calculation with zero state mutations, zero database writes, and zero side-effects.
+  - Returns explicit failure codes for invalid agent IDs (`npc-not-found`), player IDs (`agent-not-npc`), or unconfigured NPCs (`no-schedule-defined`).
+
+### 2. Read-Only Situational Context Projection (`inspectNpcContext`)
+- `inspectNpcContext(state, npcId): InspectNpcContextResult`
+- Serves as the future hand-off boundary between World Core and a non-authoritative cognitive layer.
+- Projections returned:
+  - `agent`: Observed NPC identity (`id`, `name`, `agentType`, `activityState`, `activitySince`)
+  - `location`: Observed location (`id`, `name`, `type`)
+  - `behavioralState`: Derived behavioral state (`routinePhase`, `intent`, `destinationId`, `activity`)
+  - `coLocatedAgents`: Co-located agents via `getCoLocatedAgents()`
+  - `siteAssociations`: First-class site-agent associations via `getAgentSiteAssociations()`
+  - `temporalContext`: Authoritative local civil time via `resolvePlayerTemporalContext()`
+
+### 3. Social Interaction Grounding (`greetAgent`)
+- `greetAgent(state, playerId, npcId)` refactored to select dialogue dynamically based on `deriveNpcBehavioralState(state, npcId)?.routinePhase`:
+  - Working at restaurant: `"Welcome. I'm working here today."` (acquainted: `"Welcome back. Good to see you again. I'm working here today."`)
+  - Resting at home: `"Hello. I'm resting at home right now."` (acquainted: `"Hello again. Good to see you. I'm resting at home right now."`)
+  - Commuting on street: `"Good morning. On my way to the restaurant."` (acquainted: `"Good morning again. On my way to the restaurant."`)
+  - Promenading on Avenida Juárez: `"Good evening. It's pleasant to walk down Avenida Juárez after work."` (acquainted: `"Good evening again. It's pleasant to walk down Avenida Juárez after work."`)
+  - Retains backward-compatible fallback for legacy unacquainted/acquainted building contexts.
+
+### 4. Architectural Invariants Preserved
+- **Zero Schema Changes**: Schema version remains strictly **18** (`CURRENT_WORLD_STATE_VERSION = 18`). Zero migrations added.
+- **Zero Behavioral Persistence**: No `state.npcBehavior`, `state.npcIntents`, `state.goals`, `state.plans`, or behavioral fields stored on `Agent`.
+- **Zero AI / Psychology**: No LLM, no cognitive loop, no prompts, no memory systems, no emotional vectors.
+- **Business Authority Maintained**: Commercial service affordances still strictly evaluate `agent.activityState === 'active'` and site associations; derived behavioral state does not bypass business authority.
+
+## Milestone 62: NPC Routine Action Execution Foundation [CLOSED / VERIFIED]
+
+Milestone 62 establishes the deterministic execution layer for an NPC's derived routine behavior, linking derived behavioral interpretation directly to existing domain authority and state transitions:
+
+```text
+World Time
+    ↓
+Deterministic NPC Schedule
+    ↓
+M61 Behavioral Interpretation (evaluateNpcBehavioralState)
+    ↓
+M62 Routine Action (deriveNpcRoutineAction)
+    ↓
+Existing Authority (Spatial Authority: transitionAgentLocation)
+    ↓
+Existing State Transition
+    ↓
+Updated World State
+```
+
+### 1. Minimal Routine Action Model (`src/core/npc-behavior.ts`)
+- **Deterministic Action Types (`NpcRoutineActionType`)**:
+  - `'stay-at-home'`: Resting at residence (`building:development-residence`)
+  - `'commute-to-work'`: Commuting to workplace via Development Street (`street:development-street`)
+  - `'work-at-restaurant'`: Working shift at Development Restaurant (`restaurant:development-restaurant`)
+  - `'walk-neighborhood'`: Evening walk along Avenida Juárez (`street:avenida-juarez`)
+- **Action Structure (`NpcRoutineAction`)**:
+  - `npcId`: Target NPC identifier
+  - `actionType`: `NpcRoutineActionType`
+  - `targetLocationId`: Authoritative target place or restaurant identifier
+  - `requiresMovement`: `agent.locationId !== targetLocationId`
+  - `routinePhase`: Associated `NpcRoutinePhase`
+  - `description`: Human-readable description of the routine action
+- **Pure Derivation Functions**:
+  - `evaluateNpcRoutineAction(state, npcId): EvaluateNpcRoutineActionResult`
+  - `deriveNpcRoutineAction(state, npcId): NpcRoutineAction | null`
+  - Zero state mutation, zero disk writes, pure projection from world time and authoritative schedule fixtures.
+
+### 2. Spatial Authority Execution (`executeNpcRoutineAction`)
+- `executeNpcRoutineAction(state, npcId, providedAction?): ExecuteNpcRoutineActionResult`
+- Executes routine spatial movement strictly through Spatial Authority (`transitionAgentLocation`).
+- Zero direct mutation of `agent.locationId` from the action execution layer.
+- Idempotency: If `agent.locationId === action.targetLocationId`, returns `already-at-destination` with `changed: false` and zero mutation.
+- Atomic failure: Invalid destinations or nonexistent entities fail through Spatial Authority with descriptive errors and zero state mutation.
+- Full topological cycle verified:
+  ```text
+  residence -> development street -> development restaurant -> avenida Juárez -> residence
+  ```
+
+### 3. Domain Boundaries & Invariants Preserved
+- **Spatial Authority Preservation**: Movement remains an authoritative state transition across existing topological places and restaurants. Zero coordinates, vectors, pathfinding, navigation graphs, or NavMesh.
+- **Business Authority Independence**: Routine action execution into the restaurant (`work-at-restaurant`) does NOT grant commercial authority or force service affordances. `inquireRestaurantService()` continues to strictly require `isRestaurantOpen()` and `staff.activityState === 'active'`.
+- **Zero Action Persistence**: Routine actions are derived at runtime and never persisted in `WorldState` or `Agent` records.
+- **Schema Version**: Schema version remains strictly **18** (`CURRENT_WORLD_STATE_VERSION = 18`). Zero schema changes or migrations.
+- **Zero AI / Autonomous Planning**: No BehaviorTree, Blackboard, GoalSystem, Planner, UtilityAI, or NPCBrain abstractions.
+- **Offline Continuity**: Multi-hour or multi-day `WorldClock.advance()` evaluates and executes immediately without replaying intermediate visual steps.
+
+## Milestone 63: Simulation Routine Execution Integration [CLOSED / VERIFIED]
+
+Milestone 63 unifies simulation-driven NPC movement with the M61/M62 behavioral execution foundation, eliminating the legacy direct-location mutation path in `Simulation.tick()`:
+
+```text
+World Time
+    ↓
+Simulation.tick()
+    ↓
+Deterministic NPC Schedule
+    ↓
+M61 Behavioral Interpretation (evaluateNpcBehavioralState)
+    ↓
+M62 Routine Action (deriveNpcRoutineAction)
+    ↓
+executeNpcRoutineAction()
+    ↓
+Spatial Authority (transitionAgentLocation)
+    ↓
+World State
+```
+
+### 1. Unified Movement Execution Path (`src/core/simulation.ts`)
+- Replaces legacy direct assignment `agent.locationId = targetLocationId` inside `Simulation.tick()` with `executeNpcRoutineAction(this.state, agent.id)`.
+- Eliminates redundant parallel spatial integrity guards in simulation by delegating directly to Spatial Authority (`transitionAgentLocation`).
+- Preserves the existing `npcLocationTransitions` projection structure (`agentId`, `previousLocationId`, `newLocationId`, `changed`) and console logging formatting.
+- Safely handles routine execution failures by preserving existing location without state corruption.
+
+### 2. Architectural Invariants Preserved
+- **Zero Direct Location Mutation**: `Simulation.tick()` contains zero direct assignments to `agent.locationId`. All routine movement passes strictly through Spatial Authority.
+- **Preserved Simulation Behaviors**: Agent activity state transitions (`activityState`, `activitySince`), offering retirement (Milestone 19-A), restaurant operational updates, closure-egress processing (Milestone 52), and commercial actions (Milestone 46/47) remain completely intact and independent.
+- **Offline Simulation Continuity**: Multi-hour and multi-day leaps via `WorldClock.advance()` resolve deterministically in a single tick without step-by-step playback.
+- **Schema Version**: Schema version remains strictly **18** (`CURRENT_WORLD_STATE_VERSION = 18`). Zero schema migrations or entity modifications.
+- **Zero AI / Autonomous Planning**: No BehaviorTree, Blackboard, GoalSystem, Planner, UtilityAI, or NPCBrain abstractions.
+
+## Milestone 64: Deterministic NPC Routine Generalization [CLOSED / VERIFIED]
+
+Milestone 64 generalizes the deterministic NPC routine execution pipeline so that it is demonstrably independent from any specific NPC fixture, proving that multiple NPCs execute their individual deterministic schedules through the exact same execution pipeline without building a generic NPC framework:
+
+```text
+WorldClock
+    ↓
+Simulation.tick()
+    ↓
+Deterministic Schedule Definition (findNpcSchedule)
+    ↓
+M61 Behavioral Interpretation (evaluateNpcBehavioralState)
+    ↓
+M62 Routine Action (evaluateNpcRoutineAction)
+    ↓
+executeNpcRoutineAction()
+    ↓
+Spatial Authority (transitionAgentLocation)
+    ↓
+World State
+```
+
+### 1. Declarative Routine Schedule Definition (`src/core/development-npc-schedule.ts`)
+- **`DeterministicNpcSchedule`**: Minimal declarative interface modeling an NPC's schedule boundaries:
+  - `npcId`: Target agent identifier
+  - `residenceId`: Resting location
+  - `commuteLocationId`: Route used during transit
+  - `workplaceId`: Work destination
+  - `recreationLocationId`: Promenade / recreation destination
+  - Shift timing: `shiftStartHour`, `shiftEndHour`, `commuteLeadMinutes`
+  - Recreation timing: `recreationStartHour`, `recreationEndHour`
+  - Descriptive labels: `actionDescriptions`, `activityLabels`
+- **Immutable Schedule Fixtures**: `DETERMINISTIC_NPC_SCHEDULES` statically defines:
+  - **Elena Morales (`agent:dev-npc`)**: Shift 09:00–17:00, commute lead 30m (08:30), promenade 17:00–20:30.
+  - **Secondary Development NPC (`agent:secondary-dev-npc`)**: Shift 11:00–16:00, commute lead 30m (10:30), promenade 08:30–10:30.
+- **Pure Lookup Functions**: `findNpcSchedule(npcId)` and `hasNpcRoutineSchedule(npcId)` replace hardcoded identity checks. Unregistered NPCs cleanly return `null` / `no-schedule-defined`.
+
+### 2. Pure Behavioral & Routine Derivation Generalization (`src/core/npc-behavior.ts`)
+- **`evaluateNpcBehavioralState`**: Dynamically evaluates routine phase (`'resting' | 'commuting' | 'working' | 'promenading'`), intent (`NpcIntentType`), destination, and activity label using the NPC's resolved schedule instead of hardcoded Elena constants.
+- **`evaluateNpcRoutineAction`**: Maps routine phases to executable actions (`'stay-at-home' | 'commute-to-work' | 'work-at-restaurant' | 'walk-neighborhood'`) and target locations based on the NPC's configured schedule.
+- Preserves 100% backwards compatibility for Elena Morales down to character-exact strings.
+
+### 3. Unified Simulation Routine Execution (`src/core/simulation.ts`)
+- Replaces identity-gated `if (agent.id === 'agent:dev-npc')` inside `Simulation.tick()` with `if (npcSchedule !== null)`.
+- Any NPC in `state.agents` with a defined schedule is executed through the shared routine execution pipeline: `findNpcSchedule()` $\rightarrow$ `evaluateNpcBehavioralState()` $\rightarrow$ `evaluateNpcRoutineAction()` $\rightarrow$ `executeNpcRoutineAction()` $\rightarrow$ `transitionAgentLocation()`.
+- **Shift-Aware Activity State**: Derives `activityState` (`active` vs `idle`) per NPC based on each agent's configured `[shiftStartHour, shiftEndHour)` interval.
+
+### 4. Architectural Invariants Preserved
+- **Zero Identity-Specific Execution Branching**: Simulation contains zero `if (agent.id === ...)` checks in the routine execution pipeline.
+- **Business Authority Non-Bypassing**: Operating hours and closure-egress rules apply consistently. Scheduled shifts harmonize with restaurant operational state.
+- **Spatial Authority as Sole Mutation Path**: Zero direct `locationId` assignments. Invalid destinations fail safely through Spatial Authority with locations preserved.
+- **Offline Simulation Continuity**: Multi-hour leaps resolve both NPCs deterministically in a single tick.
+- **Schema Version**: Schema version remains strictly **18** (`CURRENT_WORLD_STATE_VERSION = 18`). Zero migrations or persistent behavioral fields.
+
 ## Getting Started
 
 ### 1. Install Dependencies
@@ -1095,7 +2048,7 @@ npm install
 
 ### 2. Run Tests
 
-Executes all **automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, inventory, activity lifecycle, epistemic retention, business authority, asset/property/inventory authority, and real-world spatial foundation tests across 44 test suites**:
+Executes all **automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, inventory, activity lifecycle, epistemic retention, business authority, asset/property/inventory authority, real-world spatial foundation, property assignment foundation, site-agent association, residential access foundation, residential interaction contract, NPC presence & observation boundary, NPC behavioral state & intent foundation, NPC routine action execution foundation, simulation routine execution integration, and deterministic NPC routine generalization tests across 77 test suites (1,315 tests)**:
 
 ```bash
 npm test
@@ -1127,7 +2080,7 @@ npm run start
 
 ### 6. Interactive Visual Client Browser Server
 
-Launches the world server and advances the clock to 10:00 UTC so that venues, shifts, and offerings are active, ready for browser interaction on `http://127.0.0.1:3000`:
+Launches the world server and advances the clock to 16:00 UTC (10:00 AM local civil time in Ciudad Juárez) so that venues, shifts, and offerings are active, ready for browser interaction on `http://127.0.0.1:3000`:
 
 ```bash
 npx tsx scripts/start-browser-server.ts
@@ -1135,7 +2088,7 @@ npx tsx scripts/start-browser-server.ts
 
 ### 7. Run All Demonstrations
 
-Executes all 31 automated milestone demonstration scripts sequentially:
+Executes all automated milestone demonstration scripts sequentially:
 
 ```bash
 npm run demo:all
@@ -1181,6 +2134,14 @@ Each demonstration script exercises a complete, self-contained milestone slice w
 | `npm run demo:business-domain-authority` | M36 Business | Authoritative business operational transitions, domain isolation, and precondition enforcement |
 | `npm run demo:asset-property-inventory-authority` | M37 Inventory | Authoritative item possession transitions, query functions, and domain boundary enforcement |
 | `npm run demo:real-world-spatial-foundation` | M38 Spatial | Real-world Ciudad Juárez street fragment and residential-to-restaurant flow |
+| `npm run demo:order-fulfillment-foundation` | M39 Fulfillment | Order inquiry, deferred delivery, atomic pickup placement, time progression, collection, and persistence |
+| `npm run demo:site-agent-association` | M57 Association | First-class site-agent functional associations, role cardinality, and domain independence |
+| `npm run demo:residential-access` | M58 Access | Presence-based residential access evaluation, schedule-linked entry, and state isolation |
+| `npm run demo:residential-interaction` | M59 Interaction | Residential interaction requirement, acquaintance admission policy, and spatial transition |
+| `npm run demo:npc-presence-observation` | M60 Presence | Authoritative co-presence, observation projection, schedule-driven transitions, and social interaction |
+| `npm run demo:npc-behavior` | M61 Behavior | Pure derived routine phases, deterministic intent interpretation, context projection, and grounded dialogue |
+| `npm run demo:npc-routine-execution` | M62 Action | Deterministic routine action derivation, topological cycle execution, and spatial authority |
+| `npm run demo:npc-routine-generalization` | M64 Generalization | Multi-NPC deterministic routine generalization, shared execution pipeline, and distinct schedules |
 
 ---
 

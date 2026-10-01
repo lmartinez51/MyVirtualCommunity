@@ -4,7 +4,7 @@ import { DEFAULT_SERVER_PORT, DEFAULT_SERVER_HOST } from './server/config.js';
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : DEFAULT_SERVER_PORT;
 const host = process.env.HOST || DEFAULT_SERVER_HOST;
 
-const server = createWorldServer({ silent: false });
+const server = createWorldServer({ silent: false, enableRealTimeDriver: true });
 
 async function main(): Promise<void> {
   await server.start(port, host);

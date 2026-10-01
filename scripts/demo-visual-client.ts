@@ -72,10 +72,11 @@ async function runDemo(): Promise<void> {
     assert.equal(state.model?.context, 'BUILDING');
     console.log(`[CLIENT] Re-entered building: ${state.model.locationName}`);
 
-    // Advance world time to 10:00 UTC so restaurant is open [09:00, 17:00 UTC)
+    // Advance world time to 16:00 UTC (corresponding to 10:00 AM local civil time in Ciudad Juárez, America/Ciudad_Juarez, UTC-6)
+    // so the restaurant is open [08:00, 22:00) and the NPC shift is active [09:00, 17:00).
     const current = new Date(state.model.worldTime);
     const target = new Date(current);
-    target.setUTCHours(10, 0, 0, 0);
+    target.setUTCHours(16, 0, 0, 0);
     if (target.getTime() <= current.getTime()) {
       target.setUTCDate(target.getUTCDate() + 1);
     }

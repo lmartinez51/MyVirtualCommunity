@@ -14,7 +14,14 @@ function bootstrapClient(): void {
   const apiClient = new ApiClient();
   const session = new ClientSession(apiClient);
   const renderer = new WorldRenderer();
-  new InputController(session, renderer);
+  const inputController = new InputController(session, renderer);
+
+  // Expose session, renderer, and input on window for diagnostic access in browser environment
+  if (typeof window !== 'undefined') {
+    (window as any).__mvc_session = session;
+    (window as any).__mvc_renderer = renderer;
+    (window as any).__mvc_input = inputController;
+  }
 
   // Subscribe renderer to session state changes
   session.subscribe((state) => {

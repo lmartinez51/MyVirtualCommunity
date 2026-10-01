@@ -20,7 +20,7 @@ import { Simulation } from '../src/core/simulation.js';
 import { LocalFilePersistence } from '../src/persistence/local-storage.js';
 
 describe('Milestone 34: Migration v12 -> v13 & Non-Fabrication Invariants', () => {
-  const BASE_TIME = '2026-09-14T09:00:00.000Z';
+  const BASE_TIME = '2026-09-14T15:00:00.000Z';
 
   function createSampleV12State(): WorldStateV12 {
     const clock = WorldClock.create(BASE_TIME);
@@ -275,16 +275,16 @@ describe('Milestone 34: Migration v12 -> v13 & Non-Fabrication Invariants', () =
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 14);
+        assert.equal(loaded.version, 18);
         assert.doesNotThrow(() => validateWorldState(loaded));
         assert.equal(loaded.activityCompletions.length, 1);
         assert.equal(loaded.activityCompletions[0].id, 'coffee-completion:1');
 
-        // Fresh persistence instance verifies disk file was saved at version 14
+        // Fresh persistence instance verifies disk file was saved at version 18
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 14);
+        assert.equal(reloaded.version, 18);
       } finally {
         if (existsSync(testFile)) {
           unlinkSync(testFile);

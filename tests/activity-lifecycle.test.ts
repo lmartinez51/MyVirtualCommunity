@@ -20,13 +20,13 @@ import { LocalFilePersistence } from '../src/persistence/local-storage.js';
 import { createPresentationModel } from '../src/client/projections.js';
 
 describe('Milestone 34: Unified Consumable Activity Lifecycle', () => {
-  const OPEN_TIME = '2026-09-14T09:00:00.000Z';
+  const OPEN_TIME = '2026-09-14T15:00:00.000Z';
 
   function setupOpenWorld() {
     const clock = WorldClock.create(OPEN_TIME);
     const state = createInitialWorldState(clock);
     const sim = new Simulation(clock, state, { silent: true });
-    sim.tick(); // Open restaurant at 09:00 UTC
+    sim.tick(); // Open restaurant at 09:00 local
     const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
     enterRestaurant(state, player.id, 'restaurant:development-restaurant');
     return { clock, state, sim, player };
@@ -111,7 +111,7 @@ describe('Milestone 34: Unified Consumable Activity Lifecycle', () => {
         offeringId: 'offering:development-pastry',
         restaurantId: 'restaurant:development-restaurant',
         status: 'available',
-        acquiredAt: '2026-09-14T09:05:00.000Z',
+        acquiredAt: '2026-09-14T15:05:00.000Z',
         consumedAt: null,
       };
       const itemB: OwnedItem = {
@@ -120,7 +120,7 @@ describe('Milestone 34: Unified Consumable Activity Lifecycle', () => {
         offeringId: 'offering:development-pastry',
         restaurantId: 'restaurant:development-restaurant',
         status: 'available',
-        acquiredAt: '2026-09-14T09:01:00.000Z', // Oldest
+        acquiredAt: '2026-09-14T15:01:00.000Z', // Oldest
         consumedAt: null,
       };
       const itemC: OwnedItem = {
@@ -129,7 +129,7 @@ describe('Milestone 34: Unified Consumable Activity Lifecycle', () => {
         offeringId: 'offering:development-pastry',
         restaurantId: 'restaurant:development-restaurant',
         status: 'available',
-        acquiredAt: '2026-09-14T09:01:00.000Z', // Same acquiredAt as item 1, higher ID
+        acquiredAt: '2026-09-14T15:01:00.000Z', // Same acquiredAt as item 1, higher ID
         consumedAt: null,
       };
 
@@ -168,7 +168,7 @@ describe('Milestone 34: Unified Consumable Activity Lifecycle', () => {
         offeringId: 'offering:development-pastry',
         restaurantId: 'restaurant:development-restaurant',
         status: 'available',
-        acquiredAt: '2026-09-14T09:00:00.000Z',
+        acquiredAt: '2026-09-14T15:00:00.000Z',
         consumedAt: null,
       };
       const item2: OwnedItem = {
@@ -177,7 +177,7 @@ describe('Milestone 34: Unified Consumable Activity Lifecycle', () => {
         offeringId: 'offering:development-pastry',
         restaurantId: 'restaurant:development-restaurant',
         status: 'available',
-        acquiredAt: '2026-09-14T09:00:00.000Z',
+        acquiredAt: '2026-09-14T15:00:00.000Z',
         consumedAt: null,
       };
 
@@ -207,13 +207,13 @@ describe('Milestone 34: Unified Consumable Activity Lifecycle', () => {
       assert.equal(player.playerActivity?.completedAt, null);
       assert.equal(state.activityCompletions.length, 0);
 
-      // Advance past the 15-minute mark to 09:20:00 UTC (late tick)
-      clock.advance(6 * 60_000); // Now 09:20:00 UTC
+      // Advance past the 15-minute mark to 15:20:00 UTC (late tick)
+      clock.advance(6 * 60_000); // Now 15:20:00 UTC
       const tick2 = sim.tick();
       assert.equal(tick2.playerActivityTransitions.length, 1);
 
-      // Theoretical boundary timestamp must be 09:15:00.000Z (startedAt + 15 min), NOT 09:20:00.000Z
-      const expectedCompletedAt = '2026-09-14T09:15:00.000Z';
+      // Theoretical boundary timestamp must be 15:15:00.000Z (startedAt + 15 min), NOT 15:20:00.000Z
+      const expectedCompletedAt = '2026-09-14T15:15:00.000Z';
       assert.equal(player.playerActivity?.completedAt, expectedCompletedAt);
       assert.equal(state.activityCompletions.length, 1);
 
@@ -387,7 +387,7 @@ describe('Milestone 34: Unified Consumable Activity Lifecycle', () => {
         const restored1 = persistence1.load()!;
         assert.ok(restored1);
         validateWorldState(restored1);
-        assert.equal(restored1.version, 14);
+        assert.equal(restored1.version, 18);
         const restoredPlayer = restored1.agents.find((a) => a.id === player.id)!;
         assert.equal(restoredPlayer.playerActivity?.activity, 'eating-pastry');
         assert.equal(restoredPlayer.playerActivity?.durationMs, 900_000);
@@ -409,7 +409,7 @@ describe('Milestone 34: Unified Consumable Activity Lifecycle', () => {
         const restored2 = persistence2.load()!;
         assert.ok(restored2);
         validateWorldState(restored2);
-        assert.equal(restored2.version, 14);
+        assert.equal(restored2.version, 18);
         assert.equal(restored2.activityCompletions.length, 1);
         assert.equal(restored2.activityCompletions[0].activity, 'eating-pastry');
       } finally {

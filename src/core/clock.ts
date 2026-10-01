@@ -62,11 +62,37 @@ export class WorldClock {
   }
 
   /**
+   * Advances the authoritative World Clock directly to an absolute target instant in epoch milliseconds.
+   * Enforces monotonicity: target time must be >= current time.
+   *
+   * @param targetEpochMs Target instant in epoch milliseconds. Must be a finite number >= current time.
+   * @returns Updated World Time in ISO-8601 format.
+   */
+  public advanceTo(targetEpochMs: number): string {
+    if (!Number.isFinite(targetEpochMs)) {
+      throw new RangeError(
+        `Target time must be a finite number. Received: ${targetEpochMs}`
+      );
+    }
+    if (targetEpochMs < this._epochMs) {
+      throw new RangeError(
+        `World time monotonicity violation: cannot advance backward from ${new Date(this._epochMs).toISOString()} to ${new Date(targetEpochMs).toISOString()}`
+      );
+    }
+
+    this._epochMs = targetEpochMs;
+    return this.getTime();
+  }
+
+  /**
    * Restores authoritative World Time from a persisted ISO-8601 timestamp.
+   * In production, World Time is monotonic and cannot move backward.
+   * allowRegression must be explicitly set to true if used in test fixture resets.
    *
    * @param isoTime Persisted ISO-8601 timestamp string.
+   * @param options Options permitting backward reset in test environments.
    */
-  public restore(isoTime: string): void {
+  public restore(isoTime: string, options?: { allowRegression?: boolean }): void {
     if (typeof isoTime !== 'string' || isoTime.trim() === '') {
       throw new Error(`Invalid ISO-8601 timestamp string: "${isoTime}"`);
     }
@@ -74,6 +100,12 @@ export class WorldClock {
     const parsed = Date.parse(isoTime);
     if (Number.isNaN(parsed)) {
       throw new Error(`Failed to parse ISO-8601 timestamp: "${isoTime}"`);
+    }
+
+    if (parsed < this._epochMs && !options?.allowRegression) {
+      throw new RangeError(
+        `World time monotonicity violation: cannot regress World Time from ${new Date(this._epochMs).toISOString()} to ${new Date(parsed).toISOString()} without explicit allowRegression`
+      );
     }
 
     this._epochMs = parsed;

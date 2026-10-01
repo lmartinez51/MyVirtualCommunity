@@ -30,7 +30,7 @@ try {
   const state = createInitialWorldState(clock);
   validateWorldState(state);
 
-  assert.equal(state.version, 14);
+  assert.equal(state.version, 15);
   assert.ok(Array.isArray(state.knowledge));
   assert.equal(state.knowledge.length, 0);
 
@@ -160,7 +160,7 @@ try {
   const restoredState = persistenceB.load();
 
   assert.ok(restoredState);
-  assert.equal(restoredState.version, 14);
+  assert.equal(restoredState.version, 15);
   assert.equal(restoredState.knowledge.length, 1);
   validateWorldState(restoredState);
 

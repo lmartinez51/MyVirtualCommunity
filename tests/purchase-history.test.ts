@@ -20,8 +20,8 @@ import { Simulation } from '../src/core/simulation.js';
 import { LocalFilePersistence } from '../src/persistence/local-storage.js';
 
 function setupOpenWorld() {
-  // 09:00:00 UTC -> development restaurant is open
-  const clock = WorldClock.create('2026-09-14T09:00:00.000Z');
+  // 09:00:00 local (15:00:00 UTC) -> development restaurant is open
+  const clock = WorldClock.create('2026-09-14T15:00:00.000Z');
   const state = createInitialWorldState(clock);
   const sim = new Simulation(clock, state, { silent: true });
   sim.tick(); // transition restaurant from closed to open
@@ -60,7 +60,7 @@ describe('Milestone 13: First Persistent Historical Event (Coffee Purchase)', ()
       const record = state.purchases[0];
 
       assert.equal(record.id, 'purchase:1');
-      assert.equal(record.worldTime, '2026-09-14T09:00:00.000Z');
+      assert.equal(record.worldTime, '2026-09-14T15:00:00.000Z');
       assert.equal(record.playerId, 'agent:dev-player');
       assert.equal(record.restaurantId, 'restaurant:development-restaurant');
       assert.equal(record.offeringId, 'offering:development-coffee');
@@ -693,32 +693,32 @@ describe('Milestone 13: First Persistent Historical Event (Coffee Purchase)', ()
   // 9. Schema Version 10 Strictness
   // =========================================================================
   describe('9. Schema Version Strictness', () => {
-    test('validateWorldState accepts valid version 14 state and rejects version 13, 12, 11 and 10', () => {
+    test('validateWorldState accepts valid version 18 state and rejects version 13, 12, 11 and 10', () => {
       const { state } = setupOpenWorld();
 
-      assert.equal(state.version, 14);
+      assert.equal(state.version, 18);
       assert.doesNotThrow(() => validateWorldState(state));
 
       // Downgrade version to 10
       const v10Candidate = { ...state, version: 10 };
       assert.throws(
         () => validateWorldState(v10Candidate),
-        /Unsupported WorldState version: 10\. Expected version 14/
+        /Unsupported WorldState version: 10\. Expected version 18/
       );
       const v11Candidate = { ...state, version: 11 };
       assert.throws(
         () => validateWorldState(v11Candidate),
-        /Unsupported WorldState version: 11\. Expected version 14/
+        /Unsupported WorldState version: 11\. Expected version 18/
       );
       const v12Candidate = { ...state, version: 12 };
       assert.throws(
         () => validateWorldState(v12Candidate),
-        /Unsupported WorldState version: 12\. Expected version 14/
+        /Unsupported WorldState version: 12\. Expected version 18/
       );
       const v13Candidate = { ...state, version: 13 };
       assert.throws(
         () => validateWorldState(v13Candidate),
-        /Unsupported WorldState version: 13\. Expected version 14/
+        /Unsupported WorldState version: 13\. Expected version 18/
       );
     });
 

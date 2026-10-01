@@ -6,15 +6,32 @@ import {
   makeDevelopmentOfferingAvailable,
   retireDevelopmentOffering,
   transitionRestaurantOperationalState,
+  executeRestaurantClosureEgress,
+  type ClosureEgressTransitionResult,
+  isAgentAcquainted,
+  issueNpcScheduleDisclosure,
+  type IssueNpcScheduleDisclosureResultCode,
+  type MakeDevelopmentOfferingAvailableResultCode,
 } from './world-state.js';
 import { ActivityState } from './entities/agent.js';
 import {
   RestaurantOperationalState,
   evaluateDevelopmentRestaurantOperationalRule,
 } from './entities/restaurant.js';
-import { DEVELOPMENT_NPC_WORK_SCHEDULE } from './development-npc-schedule.js';
+import {
+  DEVELOPMENT_NPC_WORK_SCHEDULE,
+  isTimeWithinScheduleInterval,
+  findNpcSchedule,
+} from './development-npc-schedule.js';
+import { deriveCivilTime, resolveLocationTimeZone } from './civil-time.js';
+import { tickOrderPreparation, OrderPreparationTransition } from './order.js';
+import { executeNpcRoutineAction } from './npc-behavior.js';
 
-export { evaluateDevelopmentRestaurantOperationalRule };
+export {
+  evaluateDevelopmentRestaurantOperationalRule,
+  type OrderPreparationTransition,
+  type ClosureEgressTransitionResult,
+};
 
 export interface ActiveInterval {
   startHourUtc: number;
@@ -36,56 +53,60 @@ export const DEFAULT_DEVELOPMENT_ACTIVE_INTERVAL: ActiveInterval = {
 /**
  * Evaluates whether a given ISO-8601 World Time falls within the development active interval.
  *
- * Exact boundary: [startHourUtc:00:00.000Z, endHourUtc:00:00.000Z)
+ * Evaluates against the derived local CivilTime in the specified IANA timezone.
+ *
+ * Exact boundary: [startHour:00:00.000, endHour:00:00.000)
  */
 export function evaluateDevelopmentActivityRule(
   isoTime: string,
-  interval: ActiveInterval = DEFAULT_DEVELOPMENT_ACTIVE_INTERVAL
+  intervalOrTimeZone: ActiveInterval | string = DEFAULT_DEVELOPMENT_ACTIVE_INTERVAL,
+  explicitTimeZone?: string
 ): boolean {
-  const date = new Date(isoTime);
-  const timeOfDayMs =
-    date.getUTCHours() * 3600_000 +
-    date.getUTCMinutes() * 60_000 +
-    date.getUTCSeconds() * 1000 +
-    date.getUTCMilliseconds();
+  let interval: ActiveInterval = DEFAULT_DEVELOPMENT_ACTIVE_INTERVAL;
+  let timeZone: string | undefined;
 
-  const startMs = interval.startHourUtc * 3600_000;
-  const endMs = interval.endHourUtc * 3600_000;
+  if (typeof intervalOrTimeZone === 'string') {
+    timeZone = intervalOrTimeZone;
+  } else {
+    interval = intervalOrTimeZone;
+    timeZone = explicitTimeZone;
+  }
 
-  return timeOfDayMs >= startMs && timeOfDayMs < endMs;
+  if (!timeZone || typeof timeZone !== 'string') {
+    throw new Error('timeZone is required to evaluate activity rule');
+  }
+  return isTimeWithinScheduleInterval(isoTime, interval.startHourUtc, interval.endHourUtc, timeZone);
 }
 
 /**
  * Concrete multi-phase deterministic NPC location routine rule fixture (Milestone 22).
  *
  * Evaluates the deterministic target location for the development NPC across the neighborhood:
- * - [00:00, 08:30) UTC: 'building:development-residence' (Home / Rest)
- * - [08:30, 09:00) UTC: 'street:development-street' (Morning Commute)
- * - [09:00, 17:00) UTC: 'restaurant:development-restaurant' (Work Shift)
- * - [17:00, 20:30) UTC: 'street:avenida-juarez' (Evening Promenade)
- * - [20:30, 24:00) UTC: 'building:development-residence' (Home / Night)
+ * - [00:00, 08:30) Local: 'building:development-residence' (Home / Rest)
+ * - [08:30, 09:00) Local: 'street:development-street' (Morning Commute)
+ * - [09:00, 17:00) Local: 'restaurant:development-restaurant' (Work Shift)
+ * - [17:00, 20:30) Local: 'street:avenida-juarez' (Evening Promenade)
+ * - [20:30, 24:00) Local: 'building:development-residence' (Home / Night)
  *
- * Exact millisecond boundaries:
- * - < 08:30:00.000                -> 'building:development-residence'
- * - 08:30:00.000 - 08:59:59.999   -> 'street:development-street'
- * - 09:00:00.000 - 16:59:59.999   -> 'restaurant:development-restaurant'
- * - 17:00:00.000 - 20:29:59.999   -> 'street:avenida-juarez'
- * - >= 20:30:00.000               -> 'building:development-residence'
+ * Evaluates against local CivilTime in the specified IANA timezone.
  *
  * Invariant: Pure deterministic evaluation with zero state mutation.
  */
-export function evaluateDevelopmentNpcLocationRule(isoTime: string): string {
-  const date = new Date(isoTime);
+export function evaluateDevelopmentNpcLocationRule(isoTime: string, timeZone: string): string {
+  if (!timeZone || typeof timeZone !== 'string') {
+    throw new Error('timeZone is required to evaluate NPC location rule');
+  }
+  const civil = deriveCivilTime(isoTime, timeZone);
   const timeOfDayMs =
-    date.getUTCHours() * 3600_000 +
-    date.getUTCMinutes() * 60_000 +
-    date.getUTCSeconds() * 1000 +
-    date.getUTCMilliseconds();
+    civil.hour * 3600_000 +
+    civil.minute * 60_000 +
+    civil.second * 1000 +
+    civil.millisecond;
 
-  const commuteStartMs = 8 * 3600_000 + 30 * 60_000;  // 08:30:00.000 UTC (30,600,000 ms)
-  const workStartMs = DEVELOPMENT_NPC_WORK_SCHEDULE.shiftStartHourUtc * 3600_000;
-  const eveningStartMs = DEVELOPMENT_NPC_WORK_SCHEDULE.shiftEndHourUtc * 3600_000;
-  const homeReturnMs = 20 * 3600_000 + 30 * 60_000;   // 20:30:00.000 UTC (73,800,000 ms)
+  const commuteStartMs = 8 * 3600_000 + 30 * 60_000;  // 08:30:00.000 (30,600,000 ms)
+  const workStartMs = DEVELOPMENT_NPC_WORK_SCHEDULE.shiftStartHour * 3600_000;
+  const eveningStartMs = DEVELOPMENT_NPC_WORK_SCHEDULE.shiftEndHour * 3600_000;
+  const homeReturnMs = 20 * 3600_000 + 30 * 60_000;   // 20:30:00.000 (73,800,000 ms)
 
   if (timeOfDayMs < commuteStartMs) {
     return 'building:development-residence';
@@ -140,6 +161,23 @@ export interface OfferingTransitionResult {
   action: 'made-available' | 'retired';
 }
 
+export type NpcDecisionType = 'npc-schedule-disclosure' | 'make-offering-available';
+
+/**
+ * Reports the outcome of a deterministic NPC decision evaluation during tick (Milestone 46 & 47).
+ * Only emitted when an eligible NPC decision rule fires (no-action is suppressed).
+ */
+export interface NpcDecisionTransitionResult {
+  npcId: string;
+  playerId?: string;
+  restaurantId?: string;
+  decision: NpcDecisionType;
+  success: boolean;
+  code: IssueNpcScheduleDisclosureResultCode | MakeDevelopmentOfferingAvailableResultCode;
+  knowledgeRecordId?: string;
+  offeringId?: string;
+}
+
 export interface TickResult {
   worldTime: string;
   transitions: TransitionResult[];
@@ -147,6 +185,64 @@ export interface TickResult {
   playerActivityTransitions?: PlayerActivityTransitionResult[];
   npcLocationTransitions?: NpcLocationTransitionResult[];
   offeringTransitions?: OfferingTransitionResult[];
+  orderTransitions?: OrderPreparationTransition[];
+  npcDecisionTransitions?: NpcDecisionTransitionResult[];
+  closureEgressTransitions?: ClosureEgressTransitionResult[];
+}
+
+/**
+ * Pure context evaluation: reads NPC and player world state to determine
+ * whether the NPC-schedule-disclosure preconditions are satisfied.
+ *
+ * ZERO state mutation. Returns a typed decision value.
+ * This function does NOT authorize or execute any action.
+ */
+export function evaluateNpcScheduleDisclosureContext(
+  state: WorldState,
+  npcId: string,
+  playerId: string
+): 'npc-schedule-disclosure' | 'no-action' {
+  const npc = state.agents.find((a) => a.id === npcId);
+  const player = state.agents.find((a) => a.id === playerId);
+  if (!npc || !player) return 'no-action';
+  if (npc.agentType !== 'npc' || player.agentType !== 'player') return 'no-action';
+  if (npc.activityState !== 'active') return 'no-action';
+  if (npc.locationId !== player.locationId) return 'no-action';
+  if (!isAgentAcquainted(state, playerId, npcId)) return 'no-action';
+  const hasRecord = state.knowledge.some(
+    (k) => k.agentId === playerId && k.factType === 'agent-schedule' && k.subjectId === npcId
+  );
+  return hasRecord ? 'no-action' : 'npc-schedule-disclosure';
+}
+
+/**
+ * Pure context evaluation: reads NPC and restaurant world state to determine
+ * whether the commercial offering publication preconditions are satisfied (Milestone 47).
+ *
+ * ZERO state mutation. Returns a typed decision value.
+ * This function does NOT authorize or execute any action.
+ */
+export function evaluateOfferingPublicationContext(
+  state: WorldState,
+  npcId: string,
+  restaurantId: string
+): 'make-offering-available' | 'no-action' {
+  const npc = state.agents.find((a) => a.id === npcId);
+  if (!npc || npc.agentType !== 'npc' || npc.activityState !== 'active') {
+    return 'no-action';
+  }
+  const restaurant = state.restaurants.find((r) => r.id === restaurantId);
+  if (!restaurant || (restaurant.operationalState !== 'open' && restaurant.operationalState !== 'closing-soon')) {
+    return 'no-action';
+  }
+  if (npc.locationId !== restaurant.id) {
+    return 'no-action';
+  }
+  const hasOffering = state.offerings.some((o) => o.id === DEVELOPMENT_PASTRY_OFFERING_ID);
+  if (hasOffering) {
+    return 'no-action';
+  }
+  return 'make-offering-available';
 }
 
 export interface SimulationOptions {
@@ -193,6 +289,8 @@ export class Simulation {
     const transitions: TransitionResult[] = [];
     const npcLocationTransitions: NpcLocationTransitionResult[] = [];
     const offeringTransitions: OfferingTransitionResult[] = [];
+    const npcDecisionTransitions: NpcDecisionTransitionResult[] = [];
+    const closureEgressTransitions: ClosureEgressTransitionResult[] = [];
 
     for (const agent of this.state.agents) {
       // Player isolation: Simulation rules apply strictly to NPC agents
@@ -200,11 +298,22 @@ export class Simulation {
         continue;
       }
 
+      const agentTimeZone = resolveLocationTimeZone(this.state, agent.locationId);
+      const npcSchedule = findNpcSchedule(agent.id);
+
+      const activeInterval: ActiveInterval = npcSchedule
+        ? {
+            startHourUtc: npcSchedule.shiftStartHour,
+            endHourUtc: npcSchedule.shiftEndHour,
+          }
+        : (this.options.activeInterval ?? DEFAULT_DEVELOPMENT_ACTIVE_INTERVAL);
+
       const shouldBeActive = this.options.activityEvaluator
         ? this.options.activityEvaluator(worldTime)
         : evaluateDevelopmentActivityRule(
             worldTime,
-            this.options.activeInterval ?? DEFAULT_DEVELOPMENT_ACTIVE_INTERVAL
+            activeInterval,
+            agentTimeZone
           );
 
       // Milestone 19-A: Deterministic offering retirement when NPC shift ends
@@ -278,60 +387,43 @@ export class Simulation {
         }
       }
 
-      // Concrete M22 deterministic NPC spatial routine
-      const targetLocationId = evaluateDevelopmentNpcLocationRule(worldTime);
+      // Milestone 63 / 64: Deterministic NPC Routine Execution Integration
+      // Executes routine actions for any NPC with a defined deterministic schedule:
+      // Simulation.tick() -> Deterministic Schedule -> M61 Behavioral Interpretation -> M62 Routine Action -> executeNpcRoutineAction() -> transitionAgentLocation() -> World State
+      if (npcSchedule !== null) {
+        const execResult = executeNpcRoutineAction(this.state, agent.id);
 
-      // Verify spatial integrity: target must resolve to an existing Place or Restaurant
-      const isValidLocation =
-        this.state.places.some((p) => p.id === targetLocationId) ||
-        this.state.restaurants.some((r) => r.id === targetLocationId);
-
-      const previousLocationId = agent.locationId;
-
-      if (!isValidLocation) {
-        // Spatial integrity guard: preserve existing location; never corrupt world state
-        npcLocationTransitions.push({
-          agentId: agent.id,
-          previousLocationId,
-          newLocationId: previousLocationId,
-          changed: false,
-        });
-        if (!this.options.silent) {
-          console.warn(
-            `[SIMULATION] NPC location rule evaluated to non-existent location "${targetLocationId}". Preserving "${previousLocationId}".`
-          );
-        }
-      } else {
-        const isLocationChanged = previousLocationId !== targetLocationId;
-
-        if (isLocationChanged) {
-          agent.locationId = targetLocationId;
+        if (execResult.success) {
           npcLocationTransitions.push({
             agentId: agent.id,
-            previousLocationId,
-            newLocationId: targetLocationId,
-            changed: true,
+            previousLocationId: execResult.previousLocationId,
+            newLocationId: execResult.currentLocationId,
+            changed: execResult.changed,
           });
 
           if (!this.options.silent) {
             console.log(`SIMULATION TICK`);
             console.log(`WORLD TIME: ${worldTime}`);
             console.log(`NPC ${agent.id}`);
-            console.log(`LOCATION: ${previousLocationId} -> ${targetLocationId}`);
+            if (execResult.changed) {
+              console.log(`LOCATION: ${execResult.previousLocationId} -> ${execResult.currentLocationId}`);
+            } else {
+              console.log(`LOCATION: ${execResult.previousLocationId} (unchanged)`);
+            }
           }
         } else {
+          // Spatial integrity guard: preserve existing location if routine execution fails
           npcLocationTransitions.push({
             agentId: agent.id,
-            previousLocationId,
-            newLocationId: previousLocationId,
+            previousLocationId: agent.locationId,
+            newLocationId: agent.locationId,
             changed: false,
           });
 
           if (!this.options.silent) {
-            console.log(`SIMULATION TICK`);
-            console.log(`WORLD TIME: ${worldTime}`);
-            console.log(`NPC ${agent.id}`);
-            console.log(`LOCATION: ${previousLocationId} (unchanged)`);
+            console.warn(
+              `[SIMULATION] NPC routine action execution failed for "${agent.id}": ${execResult.message}. Preserving "${agent.locationId}".`
+            );
           }
         }
       }
@@ -340,9 +432,13 @@ export class Simulation {
     const restaurantTransitions: RestaurantTransitionResult[] = [];
 
     for (const restaurant of this.state.restaurants) {
+      if (!this.options.restaurantEvaluator && restaurant.id !== 'restaurant:development-restaurant') {
+        continue;
+      }
+      const restaurantTimeZone = resolveLocationTimeZone(this.state, restaurant.id);
       const targetState: RestaurantOperationalState = this.options.restaurantEvaluator
         ? this.options.restaurantEvaluator(worldTime)
-        : evaluateDevelopmentRestaurantOperationalRule(worldTime);
+        : evaluateDevelopmentRestaurantOperationalRule(worldTime, restaurantTimeZone);
 
       const transitionResult = transitionRestaurantOperationalState(
         this.state,
@@ -372,41 +468,105 @@ export class Simulation {
           console.log(`OPERATIONAL: ${previousState} (unchanged)`);
         }
       }
+
+      // Milestone 52: Explicit authorized closure-egress transition for lingering occupants
+      if (restaurant.operationalState === 'closed') {
+        const egressResults = executeRestaurantClosureEgress(this.state, restaurant.id);
+        if (egressResults.length > 0) {
+          closureEgressTransitions.push(...egressResults);
+          if (!this.options.silent) {
+            for (const eg of egressResults) {
+              console.log(
+                `[SIMULATION TICK] CLOSURE EGRESS: Agent ${eg.agentId} relocated from closed restaurant ${eg.restaurantId} to building ${eg.newLocationId}`
+              );
+            }
+          }
+        }
+      }
     }
 
-    // Milestone 19-A: Deterministic offering availability during active NPC shift
-    // When the development NPC is active and located at the development restaurant,
-    // and the restaurant is open, make the development pastry offering available if not already present.
+    // Milestone 47: Deterministic NPC Commercial Action (replaces Milestone 19-A ambient trigger)
+    // Evaluate NPC offering publication context for dev-npc at development-restaurant
     const devNpc = this.state.agents.find((a) => a.id === 'agent:dev-npc');
     const devRestaurant = this.state.restaurants.find(
       (r) => r.id === 'restaurant:development-restaurant'
     );
-    if (
-      devNpc &&
-      devNpc.agentType === 'npc' &&
-      devNpc.activityState === 'active' &&
-      devNpc.locationId === 'restaurant:development-restaurant' &&
-      devRestaurant &&
-      devRestaurant.operationalState === 'open' &&
-      !this.state.offerings.some((o) => o.id === DEVELOPMENT_PASTRY_OFFERING_ID)
-    ) {
-      const makeResult = makeDevelopmentOfferingAvailable(
+    if (devNpc && devRestaurant) {
+      const offeringDecision = evaluateOfferingPublicationContext(
         this.state,
         devNpc.id,
         devRestaurant.id
       );
-      if (makeResult.success && makeResult.offeringId) {
-        offeringTransitions.push({
+
+      if (offeringDecision === 'make-offering-available') {
+        const makeResult = makeDevelopmentOfferingAvailable(
+          this.state,
+          devNpc.id,
+          devRestaurant.id
+        );
+
+        if (makeResult.success && makeResult.offeringId) {
+          offeringTransitions.push({
+            npcId: devNpc.id,
+            restaurantId: devRestaurant.id,
+            offeringId: makeResult.offeringId,
+            action: 'made-available',
+          });
+          if (!this.options.silent) {
+            console.log(`SIMULATION TICK`);
+            console.log(`WORLD TIME: ${worldTime}`);
+            console.log(`NPC ${devNpc.id}`);
+            console.log(`OFFERING MADE AVAILABLE: ${makeResult.offeringId}`);
+          }
+        }
+
+        npcDecisionTransitions.push({
           npcId: devNpc.id,
           restaurantId: devRestaurant.id,
+          decision: 'make-offering-available',
+          success: makeResult.success,
+          code: makeResult.code,
           offeringId: makeResult.offeringId,
-          action: 'made-available',
         });
-        if (!this.options.silent) {
+
+        if (!this.options.silent && makeResult.success) {
           console.log(`SIMULATION TICK`);
           console.log(`WORLD TIME: ${worldTime}`);
-          console.log(`NPC ${devNpc.id}`);
-          console.log(`OFFERING MADE AVAILABLE: ${makeResult.offeringId}`);
+          console.log(`NPC ${devNpc.id} DECISION: make-offering-available -> ${makeResult.code}`);
+        }
+      }
+    }
+
+    // Milestone 46: Bounded experimental deterministic NPC decision
+    // Evaluate NPC schedule disclosure context for dev-npc and active player
+    const targetPlayer = this.state.agents.find((a) => a.agentType === 'player');
+    if (devNpc && targetPlayer) {
+      const decision = evaluateNpcScheduleDisclosureContext(
+        this.state,
+        devNpc.id,
+        targetPlayer.id
+      );
+
+      if (decision === 'npc-schedule-disclosure') {
+        const disclosureResult = issueNpcScheduleDisclosure(
+          this.state,
+          devNpc.id,
+          targetPlayer.id
+        );
+
+        npcDecisionTransitions.push({
+          npcId: devNpc.id,
+          playerId: targetPlayer.id,
+          decision: 'npc-schedule-disclosure',
+          success: disclosureResult.success,
+          code: disclosureResult.code,
+          knowledgeRecordId: disclosureResult.knowledgeRecord?.id,
+        });
+
+        if (!this.options.silent && disclosureResult.success) {
+          console.log(`SIMULATION TICK`);
+          console.log(`WORLD TIME: ${worldTime}`);
+          console.log(`NPC ${devNpc.id} DECISION: npc-schedule-disclosure -> ${disclosureResult.code}`);
         }
       }
     }
@@ -437,6 +597,7 @@ export class Simulation {
             itemId: activity.itemId,
             startedAt: activity.startedAt,
             completedAt: theoreticalCompletedAt,
+            companionAgentId: activity.companionAgentId ?? null,
           };
           this.state.activityCompletions.push(completionRecord);
 
@@ -457,6 +618,19 @@ export class Simulation {
       }
     }
 
+    // Milestone 39: Progress in-flight order preparation
+    const orderTransitions: OrderPreparationTransition[] = Array.isArray(this.state.orders)
+      ? tickOrderPreparation(this.state as any, worldTime)
+      : [];
+
+    if (!this.options.silent && orderTransitions.length > 0) {
+      for (const ot of orderTransitions) {
+        console.log(
+          `[order] ${ot.orderId} transitioned: ${ot.previousStatus} -> ${ot.newStatus} (readyAt: ${ot.readyAt})`
+        );
+      }
+    }
+
     return {
       worldTime,
       transitions,
@@ -464,6 +638,11 @@ export class Simulation {
       playerActivityTransitions,
       npcLocationTransitions,
       offeringTransitions,
+      orderTransitions,
+      npcDecisionTransitions:
+        npcDecisionTransitions.length > 0 ? npcDecisionTransitions : undefined,
+      closureEgressTransitions:
+        closureEgressTransitions.length > 0 ? closureEgressTransitions : undefined,
     };
   }
 }

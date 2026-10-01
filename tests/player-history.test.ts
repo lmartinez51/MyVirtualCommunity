@@ -20,7 +20,7 @@ import {
 import { LocalFilePersistence } from '../src/persistence/local-storage.js';
 
 describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectPlayerHistory)', () => {
-  const OPEN_TIME = '2026-09-14T09:00:00.000Z';
+  const OPEN_TIME = '2026-09-14T15:00:00.000Z';
 
   function setupWorldWithPurchasesAndCompletions(): {
     clock: WorldClock;
@@ -85,7 +85,7 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
       assert.equal(completion.playerId, 'agent:dev-player');
       assert.equal(completion.restaurantId, 'restaurant:development-restaurant');
       assert.equal(completion.startedAt, OPEN_TIME);
-      assert.equal(completion.completedAt, '2026-09-14T09:15:00.000Z');
+      assert.equal(completion.completedAt, '2026-09-14T15:15:00.000Z');
     });
 
     test('a valid player with no records receives empty arrays', () => {
@@ -207,7 +207,7 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
           playerId: 'agent:dev-player',
           restaurantId: 'restaurant:development-restaurant',
           startedAt: OPEN_TIME,
-          completedAt: '2026-09-14T09:15:00.000Z',
+          completedAt: '2026-09-14T15:15:00.000Z',
         },
         {
           id: 'coffee-completion:2',
@@ -217,7 +217,7 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
           playerId: 'agent:other-player',
           restaurantId: 'restaurant:development-restaurant',
           startedAt: OPEN_TIME,
-          completedAt: '2026-09-14T09:15:00.000Z',
+          completedAt: '2026-09-14T15:15:00.000Z',
         }
       );
 
@@ -267,7 +267,7 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
       assert.equal(result.history.purchases[0].worldTime, OPEN_TIME);
 
       // Historical completion record must still reflect recorded completion time
-      assert.equal(result.history.coffeeCompletions[0].completedAt, '2026-09-14T09:15:00.000Z');
+      assert.equal(result.history.coffeeCompletions[0].completedAt, '2026-09-14T15:15:00.000Z');
     });
 
     test('preserves deterministic append order of multiple historical records', () => {
@@ -345,7 +345,7 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
 
       assert.equal(state.activityCompletions.length, 1);
       assert.equal(state.activityCompletions[0].id, 'activity-completion:1');
-      assert.equal(state.activityCompletions[0].completedAt, '2026-09-14T09:15:00.000Z');
+      assert.equal(state.activityCompletions[0].completedAt, '2026-09-14T15:15:00.000Z');
     });
   });
 
@@ -374,7 +374,7 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
         const stateB = persistenceB.load();
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
-        assert.equal(stateB.version, 14);
+        assert.equal(stateB.version, 18);
 
         // Inspect Session B
         const resultB = inspectPlayerHistory(stateB, 'agent:dev-player');

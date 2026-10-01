@@ -23,7 +23,7 @@ describe('Offline Simulation Reconstruction', () => {
   test('demonstrates offline reconstruction: runtime lifecycle independent state evolution', () => {
     // --- RUNTIME SESSION A ---
     {
-      const clockA = WorldClock.create('2026-09-14T08:00:00.000Z');
+      const clockA = WorldClock.create('2026-09-14T14:00:00.000Z');
       const stateA = createInitialWorldState(clockA);
       const persistenceA = new LocalFilePersistence(testFilePath);
       const simulationA = new Simulation(clockA, stateA, { silent: true });
@@ -31,13 +31,13 @@ describe('Offline Simulation Reconstruction', () => {
       const npcA = stateA.agents.find((a) => a.id === 'agent:dev-npc')!;
       assert.equal(npcA.activityState, 'idle');
 
-      // Advance logical World Time by 2 hours -> 10:00:00 UTC (active interval)
+      // Advance logical World Time by 2 hours -> 10:00:00 local (16:00 UTC, active interval)
       clockA.advance(2 * 3600_000);
-      assert.equal(clockA.getTime(), '2026-09-14T10:00:00.000Z');
+      assert.equal(clockA.getTime(), '2026-09-14T16:00:00.000Z');
 
       const tickA = simulationA.tick();
       assert.equal(npcA.activityState, 'active');
-      assert.equal(npcA.activitySince, '2026-09-14T10:00:00.000Z');
+      assert.equal(npcA.activitySince, '2026-09-14T16:00:00.000Z');
       assert.equal(tickA.transitions[0].changed, true);
 
       persistenceA.save(snapshotWorldState(clockA, stateA));
@@ -48,37 +48,37 @@ describe('Offline Simulation Reconstruction', () => {
       const persistenceB = new LocalFilePersistence(testFilePath);
       const stateB = persistenceB.load();
       assert.ok(stateB !== null);
-      assert.equal(stateB.version, 14);
-      assert.equal(stateB.worldTime, '2026-09-14T10:00:00.000Z');
+      assert.equal(stateB.version, 18);
+      assert.equal(stateB.worldTime, '2026-09-14T16:00:00.000Z');
 
-      // Verify exact reconstructed NPC presence and location from disk (at 10:00 UTC, active routine placed NPC at restaurant)
+      // Verify exact reconstructed NPC presence and location from disk (at 10:00 local, active routine placed NPC at restaurant)
       const npcB = stateB.agents.find((a) => a.id === 'agent:dev-npc')!;
       assert.equal(npcB.activityState, 'active');
-      assert.equal(npcB.activitySince, '2026-09-14T10:00:00.000Z');
+      assert.equal(npcB.activitySince, '2026-09-14T16:00:00.000Z');
       assert.equal(npcB.locationId, 'restaurant:development-restaurant');
 
-      // Verify restaurant operational state reconstructed from disk (10:00 UTC is open)
+      // Verify restaurant operational state reconstructed from disk (10:00 local is open)
       assert.equal(stateB.restaurants[0].operationalState, 'open');
-      assert.equal(stateB.restaurants[0].operationalSince, '2026-09-14T10:00:00.000Z');
+      assert.equal(stateB.restaurants[0].operationalSince, '2026-09-14T16:00:00.000Z');
 
       const clockB = WorldClock.create(stateB.worldTime);
-      assert.equal(clockB.getTime(), '2026-09-14T10:00:00.000Z');
+      assert.equal(clockB.getTime(), '2026-09-14T16:00:00.000Z');
 
       const simulationB = new Simulation(clockB, stateB, { silent: true });
 
-      // Advance logical World Time by 8 hours -> 18:00:00 UTC (inactive interval)
+      // Advance logical World Time by 8 hours -> 18:00:00 local (00:00 UTC next day, inactive interval)
       clockB.advance(8 * 3600_000);
-      assert.equal(clockB.getTime(), '2026-09-14T18:00:00.000Z');
+      assert.equal(clockB.getTime(), '2026-09-15T00:00:00.000Z');
 
       const tickB = simulationB.tick();
       assert.equal(npcB.activityState, 'idle');
-      assert.equal(npcB.activitySince, '2026-09-14T18:00:00.000Z');
+      assert.equal(npcB.activitySince, '2026-09-15T00:00:00.000Z');
       assert.equal(npcB.locationId, 'street:avenida-juarez');
       assert.equal(tickB.transitions[0].changed, true);
 
-      // Verify restaurant transitioned to closed at 18:00 UTC
+      // Verify restaurant transitioned to closed at 18:00 local
       assert.equal(stateB.restaurants[0].operationalState, 'closed');
-      assert.equal(stateB.restaurants[0].operationalSince, '2026-09-14T18:00:00.000Z');
+      assert.equal(stateB.restaurants[0].operationalSince, '2026-09-15T00:00:00.000Z');
       assert.equal(tickB.restaurantTransitions[0].changed, true);
 
       persistenceB.save(snapshotWorldState(clockB, stateB));
@@ -89,17 +89,17 @@ describe('Offline Simulation Reconstruction', () => {
       const persistenceC = new LocalFilePersistence(testFilePath);
       const stateC = persistenceC.load();
       assert.ok(stateC !== null);
-      assert.equal(stateC.version, 14);
-      assert.equal(stateC.worldTime, '2026-09-14T18:00:00.000Z');
+      assert.equal(stateC.version, 18);
+      assert.equal(stateC.worldTime, '2026-09-15T00:00:00.000Z');
 
       const npcC = stateC.agents.find((a) => a.id === 'agent:dev-npc')!;
       assert.equal(npcC.activityState, 'idle');
-      assert.equal(npcC.activitySince, '2026-09-14T18:00:00.000Z');
+      assert.equal(npcC.activitySince, '2026-09-15T00:00:00.000Z');
       assert.equal(npcC.locationId, 'street:avenida-juarez');
 
       // Verify restaurant remains closed with operationalSince intact
       assert.equal(stateC.restaurants[0].operationalState, 'closed');
-      assert.equal(stateC.restaurants[0].operationalSince, '2026-09-14T18:00:00.000Z');
+      assert.equal(stateC.restaurants[0].operationalSince, '2026-09-15T00:00:00.000Z');
 
       // Verify all other entities remained completely stable
       assert.equal(stateC.places.length, 8);

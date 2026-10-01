@@ -22,7 +22,7 @@ import {
 } from '../src/core/world-state.js';
 
 describe('Milestone 37: Asset, Property and Inventory Authority (AUD-03)', () => {
-  const OPEN_TIME = '2026-09-14T09:00:00.000Z';
+  const OPEN_TIME = '2026-09-14T15:00:00.000Z';
   const COFFEE_OFFERING = 'offering:development-coffee';
   const PASTRY_OFFERING = 'offering:development-pastry';
   const RESTAURANT_ID = 'restaurant:development-restaurant';
@@ -31,7 +31,7 @@ describe('Milestone 37: Asset, Property and Inventory Authority (AUD-03)', () =>
     const clock = WorldClock.create(OPEN_TIME);
     const state = createInitialWorldState(clock);
     const sim = new Simulation(clock, state, { silent: true });
-    sim.tick(); // Open restaurant at 09:00 UTC
+    sim.tick(); // Open restaurant at 09:00 Local
 
     const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
     enterRestaurant(state, player.id, RESTAURANT_ID, { silent: true });
@@ -130,12 +130,14 @@ describe('Milestone 37: Asset, Property and Inventory Authority (AUD-03)', () =>
       }
     });
 
-    it('Unrepresented concepts (Vehicles, Real Estate Property, Stock Inventory, General Physical Condition, Economic Valuation) are strictly absent', () => {
+    it('Unrepresented concepts (Vehicles, Property Deeds, Stock Inventory, General Physical Condition, Economic Valuation) are strictly absent', () => {
       const clock = WorldClock.create(OPEN_TIME);
       const state = createInitialWorldState(clock);
 
       assert.equal((state as any).vehicles, undefined);
-      assert.equal((state as any).properties, undefined);
+      assert.ok(Array.isArray(state.properties));
+      assert.equal((state as any).propertyDeeds, undefined);
+      assert.equal((state as any).realEstateValuation, undefined);
       assert.equal((state as any).businessInventory, undefined);
       assert.equal((state as any).warehouseStock, undefined);
     });
@@ -308,12 +310,20 @@ describe('Milestone 37: Asset, Property and Inventory Authority (AUD-03)', () =>
       );
     });
 
-    it('rejects item referencing NPC ownerAgentId (current scope limitation: acquisition limited to player agents)', () => {
+    it('accepts item referencing NPC ownerAgentId (Milestone 50: NPC possession enabled)', () => {
       const { state } = setupOpenWorldWithPurchasedItem();
       (state.items[0] as any).ownerAgentId = 'agent:dev-npc';
+      assert.doesNotThrow(() => validateItemAuthority(state));
+    });
+
+    it('rejects item referencing agent with invalid agentType', () => {
+      const { state } = setupOpenWorldWithPurchasedItem();
+      const fakeAgent = { ...state.agents[0], id: 'agent:alien', agentType: 'alien' as any };
+      state.agents.push(fakeAgent);
+      (state.items[0] as any).ownerAgentId = 'agent:alien';
       assert.throws(
         () => validateItemAuthority(state),
-        /Item Authority Invariant Violated: item "item:1" ownerAgentId "agent:dev-npc" is not a player/
+        /Item Authority Invariant Violated: item "item:1" ownerAgentId "agent:alien" has invalid agentType/
       );
     });
 
@@ -453,7 +463,7 @@ describe('Milestone 37: Asset, Property and Inventory Authority (AUD-03)', () =>
       const serialized = JSON.stringify(state);
       const loaded = JSON.parse(serialized) as WorldState;
       assert.ok(loaded);
-      assert.equal(loaded.version, 14);
+      assert.equal(loaded.version, 18);
 
       const restoredItem = getOwnedItem(loaded, itemId)!;
       assert.ok(restoredItem);

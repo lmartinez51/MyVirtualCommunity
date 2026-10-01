@@ -353,7 +353,7 @@ describe('Milestone 35: Authoritative Knowledge Acquisition & Epistemic Retentio
         const persistenceB = new LocalFilePersistence(testFile);
         const stateB = persistenceB.load();
         assert.ok(stateB !== null);
-        assert.strictEqual(stateB.version, 14);
+        assert.strictEqual(stateB.version, 18);
         assert.doesNotThrow(() => validateWorldState(stateB));
 
         // Verify restored knowledge

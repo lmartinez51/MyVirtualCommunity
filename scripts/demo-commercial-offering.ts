@@ -29,7 +29,7 @@ const stateA = createInitialWorldState(clockA);
 const persistenceA = new LocalFilePersistence(demoPath);
 const simA = new Simulation(clockA, stateA);
 
-assert.equal(stateA.version, 14);
+assert.equal(stateA.version, 15);
 console.log(`World ID:      ${stateA.worldId}`);
 console.log(`World Version: ${stateA.version}`);
 console.log(`World Time:    ${clockA.getTime()}`);
@@ -108,7 +108,7 @@ assert.equal(rawPlayer.inventory, undefined);
 assert.equal(rawRestaurant.revenue, undefined);
 assert.equal(rawRestaurant.balance, undefined);
 assert.equal(rawRestaurant.inventory, undefined);
-assert.equal(rawState.orders, undefined);
+assert.deepEqual(rawState.orders, []);
 assert.deepEqual(rawState.purchases, []);
 assert.equal(rawState.transactions, undefined);
 console.log('Confirmed: Zero economic, transaction, wallet, inventory, or order state exists.');
@@ -128,7 +128,7 @@ const persistenceB = new LocalFilePersistence(demoPath);
 const stateB = persistenceB.load()!;
 assert.ok(stateB !== null);
 validateWorldState(stateB);
-assert.equal(stateB.version, 14);
+assert.equal(stateB.version, 15);
 console.log(`Session B Restored World Version: ${stateB.version}`);
 console.log(`Session B Restored World Time:    ${stateB.worldTime}`);
 

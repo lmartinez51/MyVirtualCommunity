@@ -233,17 +233,17 @@ describe('Commercial Offering (Milestone 7)', () => {
   });
 
   describe('WorldState Integration & Global Uniqueness', () => {
-    test('version 14 accepts valid offerings', () => {
+    test('version 18 accepts valid offerings', () => {
       const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
       const state = createInitialWorldState(clock);
 
-      assert.equal(state.version, 14);
+      assert.equal(state.version, 18);
       assert.doesNotThrow(() => validateWorldState(state));
     });
 
-    test('rejects versions 1 through 13 explicitly', () => {
+    test('rejects versions 1 through 17 explicitly', () => {
       const seed = createDevelopmentSeedWorld();
-      for (let v = 1; v <= 13; v++) {
+      for (let v = 1; v <= 17; v++) {
         const state = {
           worldId: 'juarez-el-paso',
           version: v,
@@ -256,7 +256,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
         assert.throws(
           () => validateWorldState(state),
-          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 14`)
+          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 18`)
         );
       }
     });
@@ -275,7 +275,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
       const invalidState = {
         worldId: 'juarez-el-paso',
-        version: 14,
+        version: 18,
         worldTime: '2026-09-14T08:00:00.000Z',
         places: seed.places,
         restaurants: seed.restaurants,
@@ -286,6 +286,9 @@ describe('Commercial Offering (Milestone 7)', () => {
         acquaintances: [],
         items: [],
         knowledge: [],
+        orders: [],
+        properties: seed.properties,
+        siteAgentAssociations: seed.siteAgentAssociations,
       };
 
       assert.throws(
@@ -307,7 +310,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
       const invalidState = {
         worldId: 'juarez-el-paso',
-        version: 14,
+        version: 18,
         worldTime: '2026-09-14T08:00:00.000Z',
         places: seed.places,
         restaurants: seed.restaurants,
@@ -318,6 +321,9 @@ describe('Commercial Offering (Milestone 7)', () => {
         acquaintances: [],
         items: [],
         knowledge: [],
+        orders: [],
+        properties: seed.properties,
+        siteAgentAssociations: seed.siteAgentAssociations,
       };
 
       assert.throws(
@@ -358,7 +364,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
         assert.ok(restoredState !== null);
         assert.doesNotThrow(() => validateWorldState(restoredState));
-        assert.equal(restoredState.version, 14);
+        assert.equal(restoredState.version, 18);
         assert.deepEqual(restoredState.offerings, state.offerings);
       } finally {
         if (existsSync(testPath)) {
@@ -373,7 +379,7 @@ describe('Commercial Offering (Milestone 7)', () => {
         const seed = createDevelopmentSeedWorld();
         const corruptState = {
           worldId: 'juarez-el-paso',
-          version: 14,
+          version: 18,
           worldTime: '2026-09-14T08:00:00.000Z',
           places: seed.places,
           restaurants: seed.restaurants,
@@ -383,6 +389,9 @@ describe('Commercial Offering (Milestone 7)', () => {
           acquaintances: [],
           items: [],
           knowledge: [],
+          orders: [],
+          properties: seed.properties,
+          siteAgentAssociations: seed.siteAgentAssociations,
           offerings: [
             {
               id: 'offering:bad-price',
@@ -441,7 +450,8 @@ describe('Commercial Offering (Milestone 7)', () => {
 
     test('returns offerings regardless of whether restaurant is open or closed', () => {
       // 08:00 UTC -> closed
-      const clockClosed = WorldClock.create('2026-09-14T08:00:00.000Z');
+      // 08:00 local (14:00 UTC) -> closed
+      const clockClosed = WorldClock.create('2026-09-14T14:00:00.000Z');
       const stateClosed = createInitialWorldState(clockClosed);
       assert.equal(stateClosed.restaurants[0].operationalState, 'closed');
 
@@ -449,8 +459,8 @@ describe('Commercial Offering (Milestone 7)', () => {
       assert.equal(closedOfferings.length, 1);
       assert.equal(closedOfferings[0].id, 'offering:development-coffee');
 
-      // 09:00 UTC -> open
-      const clockOpen = WorldClock.create('2026-09-14T09:00:00.000Z');
+      // 09:00 local (15:00 UTC) -> open
+      const clockOpen = WorldClock.create('2026-09-14T15:00:00.000Z');
       const stateOpen = createInitialWorldState(clockOpen);
       assert.equal(stateOpen.restaurants[0].operationalState, 'open');
 
@@ -462,7 +472,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
   describe('Operational State Independence', () => {
     test('closing and reopening restaurant via simulation tick does not mutate offering data', () => {
-      const clock = WorldClock.create('2026-09-14T09:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T15:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state);
 
@@ -496,7 +506,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
   describe('M6 Integration: Restaurant Entry & Offering Inspection', () => {
     test('player enters restaurant while open and can inspect offerings without economic mutation', () => {
-      const clock = WorldClock.create('2026-09-14T09:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T15:00:00.000Z');
       const state = createInitialWorldState(clock);
 
       const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
@@ -522,7 +532,7 @@ describe('Commercial Offering (Milestone 7)', () => {
       assert.equal('wallet' in player, false);
       assert.equal('balance' in player, false);
       assert.equal('inventory' in player, false);
-      assert.equal('orders' in state, false);
+      assert.deepEqual(state.orders, []);
       assert.equal('transactions' in state, false);
     });
   });
@@ -534,7 +544,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
       const rawState = state as Record<string, unknown>;
       assert.equal(rawState.economy, undefined);
-      assert.equal(rawState.orders, undefined);
+      assert.deepEqual(rawState.orders, []);
       assert.deepEqual(rawState.purchases, []);
       assert.equal(rawState.transactions, undefined);
       assert.equal(rawState.inventory, undefined);

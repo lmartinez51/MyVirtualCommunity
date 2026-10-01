@@ -42,7 +42,7 @@ console.log(`NPC Location & State:  ${npc.locationId} (${npc.activityState})`);
 console.log(`Restaurant Status:     ${restaurant.operationalState}`);
 console.log(`Available Offerings:   ${state.offerings.map((o) => o.name).join(', ')}`);
 
-assert.equal(state.version, 14);
+assert.equal(state.version, 15);
 assert.equal(player.locationId, 'building:development-building');
 assert.equal(npc.locationId, 'building:development-residence');
 assert.equal(npc.activityState, 'idle');
@@ -192,7 +192,7 @@ console.log(`Offerings in Restored: ${loaded.offerings.map((o) => o.name).join('
 console.log(`Historical Purchases:  ${loaded.purchases.length}`);
 console.log(`Historical Offering:   ${loaded.purchases[0].offeringId}`);
 
-assert.equal(loaded.version, 14);
+assert.equal(loaded.version, 15);
 assert.doesNotThrow(() => validateWorldState(loaded));
 assert.ok(!loaded.offerings.some((o) => o.id === DEVELOPMENT_PASTRY_OFFERING_ID));
 assert.equal(loaded.purchases.length, 1);

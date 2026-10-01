@@ -67,7 +67,7 @@ describe('Milestone 29: Controlled Local Runtime, Session Boundary & Persistence
       assert.equal(data.success, true);
       assert.equal(data.result.ready, true);
       assert.equal(data.result.worldId, 'juarez-el-paso');
-      assert.equal(data.result.schemaVersion, 14);
+      assert.equal(data.result.schemaVersion, 18);
       assert.equal(data.result.activePlayerId, 'agent:dev-player');
       assert.equal(data.result.status, 'RUNNING');
       assert.ok(typeof data.result.worldTime === 'string');
@@ -458,12 +458,12 @@ describe('Milestone 29: Controlled Local Runtime, Session Boundary & Persistence
 
   describe('Milestone 29 Correction A: Read-Only Schedule Query & Route Enforcement', () => {
     test('1. GET /api/schedule returns schedule facts for acquainted, co-located NPC with zero disk writes', async () => {
-      // Advance world time to 10:00 UTC (NPC works at restaurant:development-restaurant, restaurant open)
+      // Advance world time to 10:00 Local (16:00 UTC) (NPC works at restaurant:development-restaurant, restaurant open)
       const statusRes = await fetch(`${baseUrl}/api/status`);
       const statusData = (await statusRes.json()) as { result: { worldTime: string } };
       const current = new Date(statusData.result.worldTime);
       const target = new Date(current);
-      target.setUTCHours(10, 0, 0, 0);
+      target.setUTCHours(16, 0, 0, 0);
       if (target.getTime() <= current.getTime()) {
         target.setUTCDate(target.getUTCDate() + 1);
       }
@@ -572,12 +572,12 @@ describe('Milestone 29: Controlled Local Runtime, Session Boundary & Persistence
 
   describe('Milestone 29 Correction B: Authoritative Purchase Ledger & Economic Integrity', () => {
     async function setupPlayerInOpenRestaurant() {
-      // Advance world time to 10:00 UTC (restaurant open in 09:00-17:00 UTC window)
+      // Advance world time to 10:00 Local (16:00 UTC) (restaurant open in 09:00-17:00 local window)
       const statusRes = await fetch(`${baseUrl}/api/status`);
       const statusData = (await statusRes.json()) as { result: { worldTime: string } };
       const current = new Date(statusData.result.worldTime);
       const target = new Date(current);
-      target.setUTCHours(10, 0, 0, 0);
+      target.setUTCHours(16, 0, 0, 0);
       if (target.getTime() <= current.getTime()) {
         target.setUTCDate(target.getUTCDate() + 1);
       }

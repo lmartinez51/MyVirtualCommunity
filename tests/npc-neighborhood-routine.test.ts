@@ -29,99 +29,99 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
   describe('Phase Interval Boundaries (Millisecond Precision)', () => {
     test('08:29:59.999 UTC evaluates to building:development-residence (home/rest)', () => {
       assert.equal(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T08:29:59.999Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T08:29:59.999Z', 'UTC'),
         'building:development-residence'
       );
       assert.equal(
-        evaluateDevelopmentActivityRule('2026-09-14T08:29:59.999Z'),
+        evaluateDevelopmentActivityRule('2026-09-14T08:29:59.999Z', 'UTC'),
         false
       );
     });
 
     test('08:30:00.000 UTC evaluates to street:development-street (morning commute)', () => {
       assert.equal(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T08:30:00.000Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T08:30:00.000Z', 'UTC'),
         'street:development-street'
       );
       assert.equal(
-        evaluateDevelopmentActivityRule('2026-09-14T08:30:00.000Z'),
+        evaluateDevelopmentActivityRule('2026-09-14T08:30:00.000Z', 'UTC'),
         false
       );
     });
 
     test('08:59:59.999 UTC evaluates to street:development-street (morning commute)', () => {
       assert.equal(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T08:59:59.999Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T08:59:59.999Z', 'UTC'),
         'street:development-street'
       );
       assert.equal(
-        evaluateDevelopmentActivityRule('2026-09-14T08:59:59.999Z'),
+        evaluateDevelopmentActivityRule('2026-09-14T08:59:59.999Z', 'UTC'),
         false
       );
     });
 
     test('09:00:00.000 UTC evaluates to restaurant:development-restaurant (work shift)', () => {
       assert.equal(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T09:00:00.000Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T09:00:00.000Z', 'UTC'),
         'restaurant:development-restaurant'
       );
       assert.equal(
-        evaluateDevelopmentActivityRule('2026-09-14T09:00:00.000Z'),
+        evaluateDevelopmentActivityRule('2026-09-14T09:00:00.000Z', 'UTC'),
         true
       );
     });
 
     test('16:59:59.999 UTC evaluates to restaurant:development-restaurant (work shift)', () => {
       assert.equal(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T16:59:59.999Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T16:59:59.999Z', 'UTC'),
         'restaurant:development-restaurant'
       );
       assert.equal(
-        evaluateDevelopmentActivityRule('2026-09-14T16:59:59.999Z'),
+        evaluateDevelopmentActivityRule('2026-09-14T16:59:59.999Z', 'UTC'),
         true
       );
     });
 
     test('17:00:00.000 UTC evaluates to street:avenida-juarez (evening promenade)', () => {
       assert.equal(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T17:00:00.000Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T17:00:00.000Z', 'UTC'),
         'street:avenida-juarez'
       );
       assert.equal(
-        evaluateDevelopmentActivityRule('2026-09-14T17:00:00.000Z'),
+        evaluateDevelopmentActivityRule('2026-09-14T17:00:00.000Z', 'UTC'),
         false
       );
     });
 
     test('20:29:59.999 UTC evaluates to street:avenida-juarez (evening promenade)', () => {
       assert.equal(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T20:29:59.999Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T20:29:59.999Z', 'UTC'),
         'street:avenida-juarez'
       );
       assert.equal(
-        evaluateDevelopmentActivityRule('2026-09-14T20:29:59.999Z'),
+        evaluateDevelopmentActivityRule('2026-09-14T20:29:59.999Z', 'UTC'),
         false
       );
     });
 
     test('20:30:00.000 UTC evaluates to building:development-residence (home/night)', () => {
       assert.equal(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T20:30:00.000Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T20:30:00.000Z', 'UTC'),
         'building:development-residence'
       );
       assert.equal(
-        evaluateDevelopmentActivityRule('2026-09-14T20:30:00.000Z'),
+        evaluateDevelopmentActivityRule('2026-09-14T20:30:00.000Z', 'UTC'),
         false
       );
     });
 
     test('23:59:59.999 UTC evaluates to building:development-residence (home/night)', () => {
       assert.equal(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T23:59:59.999Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T23:59:59.999Z', 'UTC'),
         'building:development-residence'
       );
       assert.equal(
-        evaluateDevelopmentActivityRule('2026-09-14T23:59:59.999Z'),
+        evaluateDevelopmentActivityRule('2026-09-14T23:59:59.999Z', 'UTC'),
         false
       );
     });
@@ -132,7 +132,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
   // =========================================================================
   describe('Full 24-Hour Multi-Tick Cycle', () => {
     test('simulation accurately executes complete 24-hour routine cycle', () => {
-      const clock = WorldClock.create('2026-09-14T00:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T06:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
       const npc = state.agents.find((a) => a.id === 'agent:dev-npc')!;
@@ -142,7 +142,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       assert.equal(npc.locationId, 'building:development-residence');
       assert.equal(npc.activityState, 'idle');
 
-      // Advance to 08:30:00.000 UTC (Commute begins)
+      // Advance to 08:30:00.000 Local (14:30:00.000Z) (Commute begins)
       clock.advance(8 * 3600_000 + 30 * 60_000);
       const tickCommute = sim.tick();
       assert.equal(npc.locationId, 'street:development-street');
@@ -155,7 +155,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       assert.equal(commuteTransition.newLocationId, 'street:development-street');
       assert.equal(commuteTransition.changed, true);
 
-      // Advance to 09:00:00.000 UTC (Work begins)
+      // Advance to 09:00:00.000 Local (15:00:00.000Z) (Work begins)
       clock.advance(30 * 60_000);
       const tickWork = sim.tick();
       assert.equal(npc.locationId, 'restaurant:development-restaurant');
@@ -168,7 +168,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       assert.equal(workTransition.newLocationId, 'restaurant:development-restaurant');
       assert.equal(workTransition.changed, true);
 
-      // Advance to 13:00:00.000 UTC (Mid-shift tick)
+      // Advance to 13:00:00.000 Local (19:00:00.000Z) (Mid-shift tick)
       clock.advance(4 * 3600_000);
       const tickMid = sim.tick();
       assert.equal(npc.locationId, 'restaurant:development-restaurant');
@@ -179,7 +179,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       assert.ok(midTransition);
       assert.equal(midTransition.changed, false);
 
-      // Advance to 17:00:00.000 UTC (Evening promenade begins)
+      // Advance to 17:00:00.000 Local (23:00:00.000Z) (Evening promenade begins)
       clock.advance(4 * 3600_000);
       const tickEvening = sim.tick();
       assert.equal(npc.locationId, 'street:avenida-juarez');
@@ -192,7 +192,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       assert.equal(eveningTransition.newLocationId, 'street:avenida-juarez');
       assert.equal(eveningTransition.changed, true);
 
-      // Advance to 20:30:00.000 UTC (Return home)
+      // Advance to 20:30:00.000 Local (Return home)
       clock.advance(3 * 3600_000 + 30 * 60_000);
       const tickHome = sim.tick();
       assert.equal(npc.locationId, 'building:development-residence');
@@ -205,7 +205,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       assert.equal(homeTransition.newLocationId, 'building:development-residence');
       assert.equal(homeTransition.changed, true);
 
-      // Advance to 23:30:00.000 UTC (Night at home)
+      // Advance to 23:30:00.000 Local (Night at home)
       clock.advance(3 * 3600_000);
       const tickNight = sim.tick();
       assert.equal(npc.locationId, 'building:development-residence');
@@ -223,7 +223,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
   // =========================================================================
   describe('activitySince Invariant Across Location Transitions', () => {
     test('activitySince changes ONLY when activityState changes, not on location movement', () => {
-      const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T14:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
       const npc = state.agents.find((a) => a.id === 'agent:dev-npc')!;
@@ -231,7 +231,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       const initialActivitySince = npc.activitySince;
       assert.equal(npc.activityState, 'idle');
 
-      // 1. Advance to 08:30 UTC: NPC moves to street:development-street, but activity remains idle
+      // 1. Advance to 08:30 Local: NPC moves to street:development-street, but activity remains idle
       clock.advance(30 * 60_000);
       sim.tick();
       assert.equal(npc.locationId, 'street:development-street');
@@ -242,45 +242,45 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
         'activitySince must NOT change during idle-to-idle location movement'
       );
 
-      // 2. Advance to 09:00 UTC: NPC moves to restaurant AND activity becomes active
+      // 2. Advance to 09:00 Local: NPC moves to restaurant AND activity becomes active
       clock.advance(30 * 60_000);
       sim.tick();
       assert.equal(npc.locationId, 'restaurant:development-restaurant');
       assert.equal(npc.activityState, 'active');
       assert.equal(
         npc.activitySince,
-        '2026-09-14T09:00:00.000Z',
+        '2026-09-14T15:00:00.000Z',
         'activitySince MUST update when activityState changes to active'
       );
 
-      // 3. Advance to 12:00 UTC: NPC remains active at restaurant
+      // 3. Advance to 12:00 Local: NPC remains active at restaurant
       clock.advance(3 * 3600_000);
       sim.tick();
       assert.equal(
         npc.activitySince,
-        '2026-09-14T09:00:00.000Z',
+        '2026-09-14T15:00:00.000Z',
         'activitySince must remain unchanged while active state persists'
       );
 
-      // 4. Advance to 17:00 UTC: NPC moves to Avenida Juárez AND activity becomes idle
+      // 4. Advance to 17:00 Local: NPC moves to Avenida Juárez AND activity becomes idle
       clock.advance(5 * 3600_000);
       sim.tick();
       assert.equal(npc.locationId, 'street:avenida-juarez');
       assert.equal(npc.activityState, 'idle');
       assert.equal(
         npc.activitySince,
-        '2026-09-14T17:00:00.000Z',
+        '2026-09-14T23:00:00.000Z',
         'activitySince MUST update when activityState changes to idle'
       );
 
-      // 5. Advance to 20:30 UTC: NPC moves from Avenida Juárez to residence (idle to idle)
+      // 5. Advance to 20:30 Local: NPC moves from Avenida Juárez to residence (idle to idle)
       clock.advance(3 * 3600_000 + 30 * 60_000);
       sim.tick();
       assert.equal(npc.locationId, 'building:development-residence');
       assert.equal(npc.activityState, 'idle');
       assert.equal(
         npc.activitySince,
-        '2026-09-14T17:00:00.000Z',
+        '2026-09-14T23:00:00.000Z',
         'activitySince must NOT change when moving between idle locations'
       );
     });
@@ -290,18 +290,18 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
   // 4. M19 Offering Lifecycle Integration & Ordering
   // =========================================================================
   describe('Offering Lifecycle Integration & Temporal Ordering', () => {
-    test('at 09:00 UTC tick, offering becomes available when restaurant opens and NPC arrives', () => {
-      const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
+    test('at 09:00 Local tick, offering becomes available when restaurant opens and NPC arrives', () => {
+      const clock = WorldClock.create('2026-09-14T14:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
 
-      // Before 09:00 UTC, Pan Dulce is not in state.offerings
+      // Before 09:00 Local, Pan Dulce is not in state.offerings
       assert.equal(state.offerings.some((o) => o.id === 'offering:development-pastry'), false);
 
-      clock.advance(3600_000); // 09:00 UTC
+      clock.advance(3600_000); // 09:00 Local (15:00 UTC)
       sim.tick();
 
-      // At 09:00 UTC, NPC arrives and makes Pan Dulce available
+      // At 09:00 Local, NPC arrives and makes Pan Dulce available
       const pastry = state.offerings.find((o) => o.id === 'offering:development-pastry');
       assert.ok(pastry);
       assert.equal(pastry.name, 'Pan Dulce');
@@ -312,15 +312,15 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       assert.equal(state.agents[1].activityState, 'active');
     });
 
-    test('at 17:00 UTC tick, offering is retired while NPC is at restaurant before moving to Avenida Juárez', () => {
-      const clock = WorldClock.create('2026-09-14T09:00:00.000Z');
+    test('at 17:00 Local tick, offering is retired while NPC is at restaurant before moving to Avenida Juárez', () => {
+      const clock = WorldClock.create('2026-09-14T15:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
       sim.tick(); // Open restaurant & make offering available
 
       assert.equal(state.offerings.some((o) => o.id === 'offering:development-pastry'), true);
 
-      // Advance to 17:00 UTC (closing time)
+      // Advance to 17:00 Local (23:00 UTC, closing time)
       clock.advance(8 * 3600_000);
       const tickResult = sim.tick();
 
@@ -345,13 +345,13 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
     });
 
     test('offline multi-hour skip across 17:00 retires offering and places NPC at correct phase location', () => {
-      const clock = WorldClock.create('2026-09-14T12:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T18:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
       sim.tick(); // Active midday - offering made available
       assert.equal(state.offerings.some((o) => o.id === 'offering:development-pastry'), true);
 
-      // Skip 7 hours to 19:00 UTC (skipping 17:00 boundary in single tick)
+      // Skip 7 hours to 19:00 Local (skipping 17:00 boundary in single tick)
       clock.advance(7 * 3600_000);
       sim.tick();
 
@@ -369,7 +369,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
   // =========================================================================
   describe('Contextual Greetings Across All Routine Phases', () => {
     test('NPC at restaurant:development-restaurant (active) returns "Welcome. I\'m working here today."', () => {
-      const clock = WorldClock.create('2026-09-14T10:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T16:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
       sim.tick();
@@ -384,7 +384,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
     });
 
     test('NPC at building:development-residence (idle) returns "Hello. I\'m resting at home right now."', () => {
-      const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T14:00:00.000Z');
       const state = createInitialWorldState(clock);
 
       // Co-locate player at residence
@@ -396,7 +396,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
     });
 
     test('NPC at street:development-street (idle) returns "Good morning. On my way to the restaurant."', () => {
-      const clock = WorldClock.create('2026-09-14T08:45:00.000Z');
+      const clock = WorldClock.create('2026-09-14T14:45:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
       sim.tick();
@@ -410,7 +410,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
     });
 
     test('NPC at street:avenida-juarez (idle) returns "Good evening. It\'s pleasant to walk down Avenida Juárez after work."', () => {
-      const clock = WorldClock.create('2026-09-14T18:00:00.000Z');
+      const clock = WorldClock.create('2026-09-15T00:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
       sim.tick();
@@ -427,7 +427,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
     });
 
     test('NPC at building:development-building (idle) returns "Hello. I\'m around the building today."', () => {
-      const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T14:00:00.000Z');
       const state = createInitialWorldState(clock);
 
       // Explicitly co-locate both at building:development-building
@@ -440,7 +440,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
     });
 
     test('fallback returns "Hello there." when context does not match any specific rule', () => {
-      const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T14:00:00.000Z');
       const state = createInitialWorldState(clock);
 
       // Co-locate both at kiosk (no custom rule defined)
@@ -458,17 +458,17 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
   // =========================================================================
   describe('Dynamic World Perception Across All Routine Locations', () => {
     test('player perceives NPC at each scheduled location when co-located', () => {
-      const clock = WorldClock.create('2026-09-14T07:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T13:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
 
-      // Phase 1: 07:00 UTC at residence
+      // Phase 1: 07:00 Local at residence
       transitionAgentLocation(state, 'agent:dev-player', 'building:development-residence');
       const inspect1 = inspectCurrentLocation(state, 'agent:dev-player');
       assert.equal(inspect1.success, true);
       assert.ok(inspect1.location?.agents.some((a) => a.id === 'agent:dev-npc'));
 
-      // Phase 2: 08:35 UTC on Development Street
+      // Phase 2: 08:35 Local on Development Street
       clock.advance(95 * 60_000);
       sim.tick();
       transitionAgentLocation(state, 'agent:dev-player', 'street:development-street');
@@ -476,7 +476,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       assert.equal(inspect2.success, true);
       assert.ok(inspect2.location?.agents.some((a) => a.id === 'agent:dev-npc'));
 
-      // Phase 3: 11:00 UTC inside Restaurant
+      // Phase 3: 11:00 Local inside Restaurant
       clock.advance(145 * 60_000);
       sim.tick();
       transitionAgentLocation(state, 'agent:dev-player', 'building:development-building');
@@ -485,7 +485,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       assert.equal(inspect3.success, true);
       assert.ok(inspect3.location?.agents.some((a) => a.id === 'agent:dev-npc'));
 
-      // Phase 4: 18:00 UTC on Avenida Juárez
+      // Phase 4: 18:00 Local on Avenida Juárez
       clock.advance(7 * 3600_000);
       sim.tick();
       transitionAgentLocation(state, 'agent:dev-player', 'street:avenida-juarez');
@@ -493,7 +493,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       assert.equal(inspect4.success, true);
       assert.ok(inspect4.location?.agents.some((a) => a.id === 'agent:dev-npc'));
 
-      // Phase 5: 21:00 UTC back at residence
+      // Phase 5: 21:00 Local back at residence
       clock.advance(3 * 3600_000);
       sim.tick();
       transitionAgentLocation(state, 'agent:dev-player', 'building:development-residence');
@@ -503,7 +503,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
     });
 
     test('player does NOT perceive NPC when located at a different place', () => {
-      const clock = WorldClock.create('2026-09-14T18:00:00.000Z');
+      const clock = WorldClock.create('2026-09-15T00:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
       sim.tick(); // NPC is on Avenida Juárez
@@ -524,7 +524,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
   // =========================================================================
   describe('Player Isolation Invariant', () => {
     test('simulation ticks across all phases never mutate player location, balances, or history', () => {
-      const clock = WorldClock.create('2026-09-14T00:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T06:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
       const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
@@ -555,7 +555,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       const storagePath = join(tempDir, 'world-state.json');
 
       try {
-        const clock = WorldClock.create('2026-09-14T18:00:00.000Z');
+        const clock = WorldClock.create('2026-09-15T00:00:00.000Z');
         const state = createInitialWorldState(clock);
         const sim = new Simulation(clock, state, { silent: true });
         sim.tick();
@@ -571,13 +571,13 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
         const loadedState = await persistence.load();
         assert.ok(loadedState !== null);
         assert.equal(loadedState.version, CURRENT_WORLD_STATE_VERSION);
-        assert.equal(loadedState.version, 14);
+        assert.equal(loadedState.version, 18);
         assert.doesNotThrow(() => validateWorldState(loadedState));
 
         const loadedNpc = loadedState.agents.find((a) => a.id === 'agent:dev-npc')!;
         assert.equal(loadedNpc.locationId, 'street:avenida-juarez');
         assert.equal(loadedNpc.activityState, 'idle');
-        assert.equal(loadedNpc.activitySince, '2026-09-14T18:00:00.000Z');
+        assert.equal(loadedNpc.activitySince, '2026-09-15T00:00:00.000Z');
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
@@ -588,7 +588,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
       const storagePath = join(tempDir, 'world-state.json');
 
       try {
-        const clock = WorldClock.create('2026-09-14T08:40:00.000Z');
+        const clock = WorldClock.create('2026-09-14T14:40:00.000Z');
         const state = createInitialWorldState(clock);
         const sim = new Simulation(clock, state, { silent: true });
         sim.tick();
@@ -601,7 +601,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
 
         const loadedState = await persistence.load();
         assert.ok(loadedState !== null);
-        assert.equal(loadedState.version, 14);
+        assert.equal(loadedState.version, 18);
         assert.doesNotThrow(() => validateWorldState(loadedState));
 
         const loadedNpc = loadedState.agents.find((a) => a.id === 'agent:dev-npc')!;

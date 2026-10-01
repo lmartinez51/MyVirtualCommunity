@@ -9,15 +9,26 @@ const controller = new WorldSessionController({
   silent: false,
 });
 
-// Advance time to 10:00 UTC so restaurant and NPC shift are open and active
+// Advance world time to 16:00 UTC (corresponding to 10:00 AM local civil time in Ciudad Juárez, America/Ciudad_Juarez, UTC-6)
+// so the development restaurant is open [08:00, 22:00) and the NPC shift is active [09:00, 17:00).
 const current = new Date(controller.getStatus().worldTime);
 const target = new Date(current);
-target.setUTCHours(10, 0, 0, 0);
+target.setUTCHours(16, 0, 0, 0);
 if (target.getTime() <= current.getTime()) {
   target.setUTCDate(target.getUTCDate() + 1);
 }
 const advanceDurationMs = target.getTime() - current.getTime();
 await controller.stepSimulation(advanceDurationMs);
+
+// Move player to Development Street for the visual slice starting point
+try {
+  await controller.executeCommand({
+    commandName: 'leaveBuilding',
+    payload: {},
+  });
+} catch {
+  // If already outside, proceed
+}
 
 const server = createWorldServer({ controller, silent: false });
 const info = await server.start(3000, '127.0.0.1');

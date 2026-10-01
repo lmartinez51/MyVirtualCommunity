@@ -40,6 +40,14 @@
     "demo:business-domain-authority": "tsx scripts/demo-business-domain-authority.ts",
     "demo:asset-property-inventory-authority": "tsx scripts/demo-asset-property-inventory-authority.ts",
     "demo:real-world-spatial-foundation": "tsx scripts/demo-real-world-spatial-foundation.ts",
+    "demo:order-fulfillment-foundation": "tsx scripts/demo-order-fulfillment-foundation.ts",
+    "demo:site-agent-association": "tsx scripts/demo-site-agent-association.ts",
+    "demo:residential-access": "tsx scripts/demo-residential-access.ts",
+    "demo:residential-interaction": "tsx scripts/demo-residential-interaction.ts",
+    "demo:npc-presence-observation": "tsx scripts/demo-npc-presence-observation.ts",
+    "demo:npc-behavior": "tsx scripts/demo-npc-behavior.ts",
+    "demo:npc-routine-execution": "tsx scripts/demo-npc-routine-execution.ts",
+    "demo:npc-routine-generalization": "tsx scripts/demo-npc-routine-generalization.ts",
     "demo:all": "node -e \"const fs=require('fs'); const cp=require('child_process'); const pkg=JSON.parse(fs.readFileSync('package.json')); const demos=Object.keys(pkg.scripts).filter(k=>k.startsWith('demo:')&&k!=='demo:all'); for(const d of demos){ console.log('\\n>>> '+d); cp.execSync('npm run '+d, {stdio:'inherit'}); }\""
   },
   "devDependencies": {

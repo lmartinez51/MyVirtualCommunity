@@ -11,17 +11,20 @@ import {
   exitRestaurant,
   leaveBuilding,
   enterBuilding,
+  interactAtResidence,
   traverseToStreet,
   inspectCurrentLocation,
   validateWorldState,
   snapshotWorldState,
+  getCanonicalAgentPair,
+  getAcquaintanceId,
   WorldState,
 } from '../src/core/world-state.js';
 import { Place } from '../src/core/entities/geography.js';
 import { LocalFilePersistence } from '../src/persistence/local-storage.js';
 
 describe('Milestone 20-A: Intra-Neighborhood Street Traversal & Multi-Building Movement', () => {
-  const OPEN_TIME = '2026-09-14T09:00:00.000Z';
+  const OPEN_TIME = '2026-09-14T15:00:00.000Z';
 
   function setupWorldWithPlayerOnStreet(): {
     clock: WorldClock;
@@ -295,11 +298,17 @@ describe('Milestone 20-A: Intra-Neighborhood Street Traversal & Multi-Building M
       assert.equal(leaveB1.success, true);
       assert.equal(player.locationId, 'street:development-street');
 
-      // 3. Enter Development Residence (second building on same street)
-      const enterB2 = enterBuilding(state, player.id, 'building:development-residence');
+      // 3. Enter Development Residence (second building on same street - requires acquaintance under M59)
+      const [first, second] = getCanonicalAgentPair(player.id, 'agent:dev-npc');
+      state.acquaintances.push({
+        id: getAcquaintanceId(first, second),
+        agentIds: [first, second],
+        establishedAt: state.worldTime,
+      });
+      state.agents.find((a) => a.id === 'agent:dev-npc')!.locationId = 'building:development-residence';
+      const enterB2 = interactAtResidence(state, player.id, 'building:development-residence');
       assert.equal(enterB2.success, true);
       assert.equal(enterB2.buildingId, 'building:development-residence');
-      assert.equal(enterB2.streetId, 'street:development-street');
       assert.equal(player.locationId, 'building:development-residence');
 
       // 4. Leave Development Residence -> back to Development Street
@@ -387,8 +396,15 @@ describe('Milestone 20-A: Intra-Neighborhood Street Traversal & Multi-Building M
       assert.equal(r3.success, true);
       assert.equal(player.locationId, 'street:development-street');
 
-      // 4. Enter Building 2 (Residence)
-      const r4 = enterBuilding(state, player.id, 'building:development-residence');
+      // 4. Enter Building 2 (Residence - requires acquaintance and interaction under M59)
+      const [first4, second4] = getCanonicalAgentPair(player.id, 'agent:dev-npc');
+      state.acquaintances.push({
+        id: getAcquaintanceId(first4, second4),
+        agentIds: [first4, second4],
+        establishedAt: state.worldTime,
+      });
+      state.agents.find((a) => a.id === 'agent:dev-npc')!.locationId = 'building:development-residence';
+      const r4 = interactAtResidence(state, player.id, 'building:development-residence');
       assert.equal(r4.success, true);
       assert.equal(player.locationId, 'building:development-residence');
 
@@ -456,7 +472,7 @@ describe('Milestone 20-A: Intra-Neighborhood Street Traversal & Multi-Building M
   // =========================================================================
   describe('Simulation Isolation', () => {
     test('simulation ticks do not alter player location on sibling street', () => {
-      const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
+      const clock = WorldClock.create('2026-09-14T14:00:00.000Z');
       const state = createInitialWorldState(clock);
       const leaveResult = leaveBuilding(state, 'agent:dev-player', 'building:development-building');
       assert.equal(leaveResult.success, true);
@@ -505,7 +521,7 @@ describe('Milestone 20-A: Intra-Neighborhood Street Traversal & Multi-Building M
 
         const loadedState = persistence.load();
         assert.ok(loadedState !== null);
-        assert.equal(loadedState.version, 14);
+        assert.equal(loadedState.version, 18);
         validateWorldState(loadedState);
 
         const loadedPlayer = loadedState.agents.find((a) => a.id === 'agent:dev-player')!;
@@ -531,7 +547,7 @@ describe('Milestone 20-A: Intra-Neighborhood Street Traversal & Multi-Building M
 
         const loadedState = persistence.load();
         assert.ok(loadedState !== null);
-        assert.equal(loadedState.version, 14);
+        assert.equal(loadedState.version, 18);
         validateWorldState(loadedState);
 
         const loadedPlayer = loadedState.agents.find((a) => a.id === 'agent:dev-player')!;

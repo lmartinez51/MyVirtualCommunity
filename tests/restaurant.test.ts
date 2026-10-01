@@ -43,6 +43,23 @@ describe('Restaurant', () => {
     assert.doesNotThrow(() => validateRestaurants(restaurants, validBuildingIds));
   });
 
+  test('validates a restaurant with operationalState closing-soon', () => {
+    const restaurants: Restaurant[] = [
+      {
+        id: 'restaurant:development-restaurant',
+        type: 'restaurant',
+        name: 'Development Restaurant',
+        buildingId: 'building:development-building',
+        operationalState: 'closing-soon',
+        operationalSince: '2026-09-14T16:45:00.000Z',
+        balanceMinor: 500,
+        currency: 'USD',
+      },
+    ];
+
+    assert.doesNotThrow(() => validateRestaurants(restaurants, validBuildingIds));
+  });
+
   test('rejects restaurant referencing a non-existent building', () => {
     const restaurants: Restaurant[] = [
       {
@@ -93,7 +110,7 @@ describe('Restaurant', () => {
 
     assert.throws(
       () => validateRestaurants(restaurants, validBuildingIds),
-      /Invalid operationalState: "busy" for restaurant "restaurant:development-restaurant"\. Expected 'open' or 'closed'\./
+      /Invalid operationalState: "busy" for restaurant "restaurant:development-restaurant"\. Expected 'open', 'closing-soon', or 'closed'\./
     );
   });
 
@@ -243,22 +260,28 @@ describe('Restaurant', () => {
     );
   });
 
-  test('evaluates exact [09:00, 17:00) UTC interval boundaries for development restaurant operational rule', () => {
+  test('evaluates exact [09:00, 16:45, 17:00) UTC interval boundaries for development restaurant operational rule', () => {
     // 08:59 UTC -> closed
-    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T08:59:00.000Z'), 'closed');
-    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T08:59:59.999Z'), 'closed');
+    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T08:59:00.000Z', 'UTC'), 'closed');
+    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T08:59:59.999Z', 'UTC'), 'closed');
 
     // 09:00 UTC -> open
-    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T09:00:00.000Z'), 'open');
+    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T09:00:00.000Z', 'UTC'), 'open');
 
     // 10:00 UTC -> open
-    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T10:00:00.000Z'), 'open');
+    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T10:00:00.000Z', 'UTC'), 'open');
 
-    // 16:59 UTC -> open
-    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T16:59:59.999Z'), 'open');
+    // 16:44:59.999 UTC -> open
+    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T16:44:59.999Z', 'UTC'), 'open');
+
+    // 16:45:00 UTC -> closing-soon
+    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T16:45:00.000Z', 'UTC'), 'closing-soon');
+
+    // 16:59 UTC -> closing-soon
+    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T16:59:59.999Z', 'UTC'), 'closing-soon');
 
     // 17:00 UTC -> closed
-    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T17:00:00.000Z'), 'closed');
-    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T17:00:00.001Z'), 'closed');
+    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T17:00:00.000Z', 'UTC'), 'closed');
+    assert.equal(evaluateDevelopmentRestaurantOperationalRule('2026-09-14T17:00:00.001Z', 'UTC'), 'closed');
   });
 });

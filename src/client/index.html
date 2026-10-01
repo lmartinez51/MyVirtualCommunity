@@ -22,6 +22,14 @@
         <span id="hud-time" class="hud-value">---</span>
       </div>
       <div class="hud-item">
+        <span class="hud-label">LOCAL TIME</span>
+        <span id="hud-civil-time" class="hud-value">---</span>
+      </div>
+      <div class="hud-item" id="hud-restaurant-item" style="display: none;">
+        <span class="hud-label">RESTAURANT</span>
+        <span id="hud-restaurant-status" class="operational-badge">---</span>
+      </div>
+      <div class="hud-item">
         <span class="hud-label">CURRENT LOCATION</span>
         <span id="hud-location" class="hud-value">---</span>
       </div>
@@ -78,12 +86,150 @@
       </section>
     </div>
 
+    <!-- Restaurant Service & Order Experience (Milestone 44) -->
+    <section id="restaurant-service-panel" class="info-card hidden">
+      <div class="panel-header">
+        <h2>Restaurant Service Counter</h2>
+        <span id="service-counter-status" class="panel-hint">Authoritative Service &amp; Orders</span>
+      </div>
+
+      <div class="service-content">
+        <!-- Service inquiry banner -->
+        <div id="service-inquiry-box" class="service-inquiry-box">
+          <div class="service-prompt-row">
+            <span class="service-icon">☕</span>
+            <div class="service-prompt-text">
+              <strong id="service-prompt-title">Service Counter</strong>
+              <p id="service-prompt-desc">Step up to the counter to place an order.</p>
+            </div>
+          </div>
+          <div class="fulfillment-mode-selector">
+            <label class="mode-option active">
+              <input type="radio" name="order-fulfillment-mode" value="pickup" checked>
+              <span>Pickup (Ready in 5m)</span>
+            </label>
+            <label class="mode-option disabled" title="Deferred to future logistics milestones">
+              <input type="radio" name="order-fulfillment-mode" value="delivery" disabled>
+              <span>Delivery <span class="badge-deferred">Deferred</span></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Order form -->
+        <div id="service-order-form" class="service-order-form">
+          <div class="form-row">
+            <label for="order-offering-select">SELECT OFFERING:</label>
+            <select id="order-offering-select" class="form-control"></select>
+          </div>
+          <div class="form-row">
+            <label for="order-quantity-input">QUANTITY:</label>
+            <input id="order-quantity-input" type="number" class="form-control" min="1" max="10" value="1">
+          </div>
+          <div class="form-row form-actions">
+            <button id="order-submit-btn" class="action-button action-order">Place Order (Pickup)</button>
+          </div>
+        </div>
+
+        <!-- Active order card -->
+        <div id="service-active-order-box" class="active-order-box hidden">
+          <div class="active-order-header">
+            <span class="active-order-title">ACTIVE ORDER</span>
+            <span id="active-order-status-badge" class="order-badge status-preparing">PREPARING</span>
+          </div>
+          <div class="active-order-details">
+            <div class="order-detail-item">
+              <span class="order-detail-label">ORDER ID:</span>
+              <span id="active-order-id" class="order-detail-val">---</span>
+            </div>
+            <div class="order-detail-item">
+              <span class="order-detail-label">TOTAL:</span>
+              <span id="active-order-total" class="order-detail-val">---</span>
+            </div>
+            <div class="order-detail-item">
+              <span class="order-detail-label">READY AT:</span>
+              <span id="active-order-ready-at" class="order-detail-val">---</span>
+            </div>
+          </div>
+          <div class="active-order-actions">
+            <button id="order-collect-btn" class="action-button action-collect" disabled>Collect Order</button>
+          </div>
+        </div>
+
+        <!-- Possessions / Player Inventory -->
+        <div class="player-inventory-box">
+          <div class="inventory-header">
+            <span>PLAYER POSSESSIONS</span>
+            <span class="panel-hint">Authoritative OwnedItems</span>
+          </div>
+          <div id="player-inventory-list" class="inventory-chips">None</div>
+        </div>
+      </div>
+    </section>
+
     <section id="action-panel">
       <div class="panel-header">
         <h2>Contextual Affordances</h2>
         <span class="panel-hint">Grouped presentation of available authoritative commands</span>
       </div>
       <div id="action-buttons" class="action-grid"></div>
+    </section>
+
+    <!-- Development & Architectural Observer Debug Panel (Milestone 42/44) -->
+    <section id="debug-panel" class="info-card">
+      <div class="panel-header">
+        <h2>Architectural Observer (M42 Debug Panel)</h2>
+        <span class="panel-hint">Authoritative World Core state verification</span>
+      </div>
+      <div class="debug-grid">
+        <div class="debug-item">
+          <span class="debug-label">WORLD TIME:</span>
+          <span id="debug-world-time" class="debug-value">---</span>
+        </div>
+        <div class="debug-item">
+          <span class="debug-label">CURRENT PLAYER PLACE:</span>
+          <span id="debug-player-place" class="debug-value">---</span>
+        </div>
+        <div class="debug-item">
+          <span class="debug-label">SELECTED DESTINATION:</span>
+          <span id="debug-selected-destination" class="debug-value">None</span>
+        </div>
+        <div class="debug-item">
+          <span class="debug-label">LAST COMMAND:</span>
+          <span id="debug-last-command" class="debug-value">None</span>
+        </div>
+        <div class="debug-item">
+          <span class="debug-label">COMMAND RESULT:</span>
+          <span id="debug-command-result" class="debug-value">---</span>
+        </div>
+        <div class="debug-item">
+          <span class="debug-label">LAST ERROR:</span>
+          <span id="debug-last-error" class="debug-value">None</span>
+        </div>
+      </div>
+      <div class="debug-actions-header">DEVELOPMENT SIMULATION &amp; ORDER DIAGNOSTICS:</div>
+      <div class="debug-actions-grid">
+        <button id="debug-btn-invalid-move" class="debug-action-btn" title="Development-only diagnostic action">
+          [DEV] Test Invalid Transition (non-existent building)
+        </button>
+        <button id="debug-advance-to-open" class="debug-action-btn" title="Advances world time so restaurant is open and staff is active">
+          [DEV] Advance Time to 16:00 UTC (Open Restaurant &amp; Position Staff)
+        </button>
+        <button id="debug-advance-prep" class="debug-action-btn" title="Advances simulation by 5 minutes (ORDER_PREPARATION_DURATION_MS)">
+          [DEV] Advance Simulation 5 Mins (Order Ready)
+        </button>
+        <button id="debug-test-invalid-qty" class="debug-action-btn" title="Tests invalid quantity rejection (HTTP 400)">
+          [DEV] Test Invalid Quantity (Qty 0)
+        </button>
+        <button id="debug-test-insufficient-funds" class="debug-action-btn" title="Tests insufficient funds rejection (HTTP 422)">
+          [DEV] Test Insufficient Funds (Qty 5)
+        </button>
+        <button id="debug-test-delivery-mode" class="debug-action-btn" title="Tests delivery mode deferred rejection (HTTP 422)">
+          [DEV] Test Delivery Mode (Deferred)
+        </button>
+        <button id="debug-test-invalid-collect" class="debug-action-btn" title="Tests premature collection rejection (HTTP 422)">
+          [DEV] Test Collect while Preparing
+        </button>
+      </div>
     </section>
 
     <footer id="app-footer">

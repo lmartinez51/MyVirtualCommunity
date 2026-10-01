@@ -82,11 +82,11 @@ export function transitionRestaurantOperationalState(
   }
 
   // 2. Validate targetState
-  if (targetState !== 'open' && targetState !== 'closed') {
+  if (targetState !== 'open' && targetState !== 'closing-soon' && targetState !== 'closed') {
     return {
       success: false,
       code: 'invalid-target-state',
-      message: `Invalid operational state: "${targetState}". Expected 'open' or 'closed'.`,
+      message: `Invalid operational state: "${targetState}". Expected 'open', 'closing-soon', or 'closed'.`,
       restaurantId,
       previousState: restaurant.operationalState,
       changed: false,
@@ -149,9 +149,18 @@ export function isRestaurantOpen(state: BusinessWorldState, restaurantId: string
 }
 
 /**
+ * Authoritative query: evaluates whether a restaurant is physically accessible (open or closing-soon).
+ * Pure query, zero state mutation.
+ */
+export function isRestaurantAccessible(state: BusinessWorldState, restaurantId: string): boolean {
+  const restaurant = state.restaurants.find((r) => r.id === restaurantId);
+  return restaurant !== undefined && (restaurant.operationalState === 'open' || restaurant.operationalState === 'closing-soon');
+}
+
+/**
  * Authoritative business domain validator.
  * Validates all business domain invariants across WorldState:
- * 1. Operational states are strictly 'open' | 'closed'.
+ * 1. Operational states are strictly 'open' | 'closing-soon' | 'closed'.
  * 2. OperationalSince timestamps are valid and <= state.worldTime.
  * 3. Restaurants reference existing buildings in state.places.
  * 4. Offerings reference existing restaurants in state.restaurants.
@@ -171,7 +180,11 @@ export function validateBusinessAuthority(state: BusinessWorldState): void {
       );
     }
 
-    if (restaurant.operationalState !== 'open' && restaurant.operationalState !== 'closed') {
+    if (
+      restaurant.operationalState !== 'open' &&
+      restaurant.operationalState !== 'closing-soon' &&
+      restaurant.operationalState !== 'closed'
+    ) {
       throw new Error(
         `Business Authority Invariant Violated: restaurant "${restaurant.id}" has invalid operationalState "${restaurant.operationalState}"`
       );

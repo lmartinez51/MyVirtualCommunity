@@ -43,7 +43,7 @@ console.log(`Initial World Time: ${stateA.worldTime}`);
 console.log(`Player Location:    ${playerA.locationId}`);
 console.log(`NPC Location:       ${npcA.locationId} (${npcA.activityState})`);
 console.log(`Restaurant Status:  ${restaurantA.operationalState}`);
-assert.equal(stateA.version, 14);
+assert.equal(stateA.version, 15);
 assert.equal(playerA.locationId, 'building:development-building');
 assert.equal(npcA.locationId, 'building:development-residence');
 assert.equal(npcA.activityState, 'idle');
@@ -204,7 +204,7 @@ console.log(`Restored Time:      ${stateB.worldTime}`);
 console.log(`Restored Player:    ${playerB.locationId}`);
 console.log(`Restored NPC:       ${npcB.locationId} (${npcB.activityState})`);
 
-assert.equal(stateB.version, 14);
+assert.equal(stateB.version, 15);
 assert.equal(playerB.locationId, 'street:avenida-juarez');
 assert.equal(npcB.locationId, 'street:avenida-juarez');
 assert.equal(npcB.activityState, 'idle');

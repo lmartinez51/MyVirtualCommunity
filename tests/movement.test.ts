@@ -20,7 +20,7 @@ import {
 import { LocalFilePersistence } from '../src/persistence/local-storage.js';
 
 describe('Milestone 10: Leaving & Spatial Movement', () => {
-  const OPEN_TIME = '2026-09-14T09:00:00.000Z';
+  const OPEN_TIME = '2026-09-14T15:00:00.000Z';
 
   function setupWorldWithPlayerInOpenRestaurant(): {
     clock: WorldClock;
@@ -410,12 +410,12 @@ describe('Milestone 10: Leaving & Spatial Movement', () => {
       const testFile = join(tmpDir, 'world-state.json');
 
       try {
-        // --- 1. Bootstrap world at 08:00 UTC ---
-        const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
+        // --- 1. Bootstrap world at 08:00 local (14:00 UTC) ---
+        const clock = WorldClock.create('2026-09-14T14:00:00.000Z');
         const state = createInitialWorldState(clock);
         const sim = new Simulation(clock, state, { silent: true });
 
-        // --- 2. Advance to 09:00 UTC (restaurant opens) & tick ---
+        // --- 2. Advance to 09:00 local (15:00 UTC) (restaurant opens) & tick ---
         clock.advance(60 * 60_000);
         sim.tick();
         const restaurant = state.restaurants.find((r) => r.id === 'restaurant:development-restaurant')!;
@@ -441,7 +441,7 @@ describe('Milestone 10: Leaving & Spatial Movement', () => {
         clock.advance(15 * 60_000);
         const tickRes = sim.tick();
         assert.equal(tickRes.playerActivityTransitions?.length, 1);
-        assert.equal(player.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
+        assert.equal(player.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z');
 
         // --- 8. Spatial movement after coffee completion: Exit Restaurant ---
         const timeBeforeMovement = clock.getTime();
@@ -463,7 +463,7 @@ describe('Milestone 10: Leaving & Spatial Movement', () => {
 
         // Verify activity state survived unchanged
         assert.equal(player.playerActivity?.activity, 'having-coffee');
-        assert.equal(player.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
+        assert.equal(player.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z');
 
         // --- 11. Persistence Roundtrip ---
         const persistenceA = new LocalFilePersistence(testFile);
@@ -475,11 +475,11 @@ describe('Milestone 10: Leaving & Spatial Movement', () => {
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
 
-        assert.equal(stateB.version, 14);
+        assert.equal(stateB.version, 18);
         const playerB = stateB.agents.find((a) => a.id === 'agent:dev-player')!;
         assert.equal(playerB.locationId, 'neighborhood:development-neighborhood');
         assert.equal(playerB.playerActivity?.activity, 'having-coffee');
-        assert.equal(playerB.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
+        assert.equal(playerB.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z');
         assert.equal(playerB.balanceMinor, 1500);
       } finally {
         if (existsSync(tmpDir)) {

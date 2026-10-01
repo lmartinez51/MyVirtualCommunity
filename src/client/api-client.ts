@@ -154,4 +154,32 @@ export class ApiClient {
   public async getSchedule(targetAgentId: string): Promise<ApiResult<any>> {
     return this.get(`/api/schedule?targetAgentId=${encodeURIComponent(targetAgentId)}`);
   }
+
+  public async getRestaurantService(staffNpcId: string): Promise<ApiResult<any>> {
+    return this.get(`/api/service?staffNpcId=${encodeURIComponent(staffNpcId)}`);
+  }
+
+  public async stepSimulation(advanceDurationMs: number): Promise<ApiResult<any>> {
+    const url = `${this.baseUrl}/api/simulation/step`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ advanceDurationMs }),
+      });
+      return await this.parseResponse(response);
+    } catch (err) {
+      return {
+        success: false,
+        status: 0,
+        error: {
+          code: 'network-error',
+          message: err instanceof Error ? err.message : 'Network connection failed',
+        },
+      };
+    }
+  }
 }

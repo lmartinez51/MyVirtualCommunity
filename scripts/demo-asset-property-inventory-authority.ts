@@ -152,7 +152,7 @@ try {
   validateItemAuthority(restored);
   validateWorldState(restored);
 
-  assert.equal(restored.version, 14);
+  assert.equal(restored.version, 15);
   assert.equal(restored.items.length, 1);
   const restoredItem = getOwnedItem(restored, item.id)!;
   assert.ok(restoredItem);

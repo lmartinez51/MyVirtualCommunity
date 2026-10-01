@@ -29,7 +29,7 @@ console.log('=== STEP 1: Bootstrapping world at 08:00:00 UTC (Pre-Shift) ===');
 const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
 const state = createInitialWorldState(clock);
 validateWorldState(state);
-assert.equal(state.version, 14);
+assert.equal(state.version, 15);
 
 const sim = new Simulation(clock, state);
 
@@ -175,7 +175,7 @@ console.log(`Saved world state to: ${demoPath}`);
 const restoredState = await persistence.load();
 assert.ok(restoredState);
 validateWorldState(restoredState);
-assert.equal(restoredState.version, 14);
+assert.equal(restoredState.version, 15);
 console.log(`Restored World State Version: ${restoredState.version}`);
 console.log(`Persisted Opportunity Field:  ${(restoredState as any).opportunities ?? 'undefined (not persisted)'}`);
 assert.equal((restoredState as any).opportunities, undefined);

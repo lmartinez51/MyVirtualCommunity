@@ -3,6 +3,8 @@ import { readFileSync, existsSync, statSync } from 'node:fs';
 import { resolve, extname } from 'node:path';
 import { WorldSessionController, SessionControllerOptions } from './session-controller.js';
 import { DEFAULT_SERVER_PORT, DEFAULT_SERVER_HOST } from './config.js';
+import { TemporalRuntimeAuthority } from './temporal-runtime-authority.js';
+import { RealTimeSource, SystemRealTimeSource } from './time-source.js';
 
 const STATIC_MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -23,6 +25,9 @@ export interface WorldServerOptions {
   port?: number;
   host?: string;
   silent?: boolean;
+  enableRealTimeDriver?: boolean;
+  timeSource?: RealTimeSource;
+  reconciliationCadenceMs?: number;
 }
 
 export interface ServerInfo {
@@ -40,6 +45,14 @@ const ALLOWED_COMMANDS: Record<string, CommandValidator> = {
     validate: (body) => {
       if (typeof body.buildingId !== 'string' || body.buildingId.trim() === '') {
         return { valid: false, error: 'Command "enterBuilding" requires a non-empty string "buildingId"' };
+      }
+      return { valid: true };
+    },
+  },
+  interactAtResidence: {
+    validate: (body) => {
+      if (typeof body.buildingId !== 'string' || body.buildingId.trim() === '') {
+        return { valid: false, error: 'Command "interactAtResidence" requires a non-empty string "buildingId"' };
       }
       return { valid: true };
     },
@@ -135,6 +148,38 @@ const ALLOWED_COMMANDS: Record<string, CommandValidator> = {
       return { valid: true };
     },
   },
+  startAccompaniedActivity: {
+    validate: (body) => {
+      if (typeof body.companionAgentId !== 'string' || body.companionAgentId.trim() === '') {
+        return {
+          valid: false,
+          error: 'Command "startAccompaniedActivity" requires a non-empty string "companionAgentId"',
+        };
+      }
+      const forbiddenKeys = [
+        'purchaseId',
+        'itemId',
+        'amountMinor',
+        'currency',
+        'offeringId',
+        'restaurantId',
+        'consumedAt',
+        'startedAt',
+        'completedAt',
+        'durationMs',
+        'playerId',
+      ];
+      for (const key of forbiddenKeys) {
+        if (key in body) {
+          return {
+            valid: false,
+            error: `Command "startAccompaniedActivity" forbids client-supplied economic fact "${key}"`,
+          };
+        }
+      }
+      return { valid: true };
+    },
+  },
   greetAgent: {
     validate: (body) => {
       if (typeof body.targetAgentId !== 'string' || body.targetAgentId.trim() === '') {
@@ -147,6 +192,53 @@ const ALLOWED_COMMANDS: Record<string, CommandValidator> = {
     validate: (body) => {
       if (typeof body.targetAgentId !== 'string' || body.targetAgentId.trim() === '') {
         return { valid: false, error: 'Command "introduceAgent" requires a non-empty string "targetAgentId"' };
+      }
+      return { valid: true };
+    },
+  },
+  giveItem: {
+    validate: (body) => {
+      if (typeof body.targetAgentId !== 'string' || body.targetAgentId.trim() === '') {
+        return { valid: false, error: 'Command "giveItem" requires a non-empty string "targetAgentId"' };
+      }
+      if (typeof body.itemId !== 'string' || body.itemId.trim() === '') {
+        return { valid: false, error: 'Command "giveItem" requires a non-empty string "itemId"' };
+      }
+      return { valid: true };
+    },
+  },
+  placeOrder: {
+    validate: (body) => {
+      if (typeof body.restaurantId !== 'string' || body.restaurantId.trim() === '') {
+        return { valid: false, error: 'Command "placeOrder" requires a non-empty string "restaurantId"' };
+      }
+      if (!Array.isArray(body.lines) || body.lines.length === 0) {
+        return { valid: false, error: 'Command "placeOrder" requires a non-empty array "lines"' };
+      }
+      for (let i = 0; i < body.lines.length; i++) {
+        const line = body.lines[i];
+        if (!line || typeof line !== 'object') {
+          return { valid: false, error: `Command "placeOrder" line at index ${i} must be an object` };
+        }
+        if (typeof line.offeringId !== 'string' || line.offeringId.trim() === '') {
+          return { valid: false, error: `Command "placeOrder" line at index ${i} requires non-empty string "offeringId"` };
+        }
+        if (typeof line.quantity !== 'number' || !Number.isInteger(line.quantity) || line.quantity < 1) {
+          return { valid: false, error: `Command "placeOrder" line at index ${i} requires positive integer "quantity"` };
+        }
+      }
+      if (body.fulfillmentMode !== undefined) {
+        if (typeof body.fulfillmentMode !== 'string' || body.fulfillmentMode.trim() === '') {
+          return { valid: false, error: 'Command "placeOrder" fulfillmentMode must be a non-empty string if provided' };
+        }
+      }
+      return { valid: true };
+    },
+  },
+  collectOrder: {
+    validate: (body) => {
+      if (typeof body.orderId !== 'string' || body.orderId.trim() === '') {
+        return { valid: false, error: 'Command "collectOrder" requires a non-empty string "orderId"' };
       }
       return { valid: true };
     },
@@ -170,20 +262,50 @@ export class WorldHttpServer {
   private readonly controller: WorldSessionController;
   private readonly server: NodeServer;
   private readonly silent: boolean;
+  private readonly temporalAuthority: TemporalRuntimeAuthority | null = null;
   private isListening: boolean = false;
   private isStopping: boolean = false;
   private serverInfo: ServerInfo | null = null;
 
   constructor(options: WorldServerOptions = {}) {
     this.silent = options.silent ?? false;
+    const effectiveTimeSource =
+      options.timeSource ?? (options.enableRealTimeDriver ? new SystemRealTimeSource() : undefined);
+
+    const controllerOptions: SessionControllerOptions = {
+      silent: this.silent,
+      timeSource: effectiveTimeSource,
+      ...(options.controllerOptions ?? {}),
+    };
+    if (effectiveTimeSource && !controllerOptions.timeSource) {
+      controllerOptions.timeSource = effectiveTimeSource;
+    }
+
     this.controller =
-      options.controller ?? new WorldSessionController(options.controllerOptions ?? { silent: this.silent });
+      options.controller ?? new WorldSessionController(controllerOptions);
+
+    if (effectiveTimeSource && !this.controller.getTimeSource()) {
+      this.controller.setTimeSource(effectiveTimeSource);
+    }
+
+    if (options.enableRealTimeDriver) {
+      this.temporalAuthority = new TemporalRuntimeAuthority({
+        controller: this.controller,
+        timeSource: effectiveTimeSource,
+        cadenceMs: options.reconciliationCadenceMs,
+        silent: this.silent,
+      });
+    }
 
     this.server = createServer((req, res) => this.handleRequest(req, res));
   }
 
   public getController(): WorldSessionController {
     return this.controller;
+  }
+
+  public getTemporalAuthority(): TemporalRuntimeAuthority | null {
+    return this.temporalAuthority;
   }
 
   public getServerInfo(): ServerInfo | null {
@@ -194,7 +316,11 @@ export class WorldHttpServer {
    * Starts listening on the specified host and port.
    * If port 0 is given, the OS assigns an ephemeral port.
    */
-  public start(port: number = DEFAULT_SERVER_PORT, host: string = DEFAULT_SERVER_HOST): Promise<ServerInfo> {
+  public async start(port: number = DEFAULT_SERVER_PORT, host: string = DEFAULT_SERVER_HOST): Promise<ServerInfo> {
+    if (this.temporalAuthority) {
+      await this.temporalAuthority.start();
+    }
+
     return new Promise((resolve, reject) => {
       if (this.isListening) {
         return resolve(this.serverInfo!);
@@ -236,7 +362,12 @@ export class WorldHttpServer {
     }
     this.isStopping = true;
 
-    // Shutdown session controller first to reject incoming operations
+    // Shutdown temporal authority first to stop background reconciliations
+    if (this.temporalAuthority) {
+      await this.temporalAuthority.stop();
+    }
+
+    // Shutdown session controller to reject incoming operations
     await this.controller.shutdown();
 
     if (!this.isListening) {
@@ -329,6 +460,32 @@ export class WorldHttpServer {
         this.sendJson(res, 200, {
           success: scheduleResult.success,
           result: scheduleResult,
+        });
+        return;
+      }
+
+      // 5. GET /api/service (Read-only restaurant service inquiry)
+      if (method === 'GET' && (pathname === '/api/service' || pathname.startsWith('/api/service/'))) {
+        let staffNpcId = url.searchParams.get('staffNpcId');
+        if (!staffNpcId && pathname.startsWith('/api/service/')) {
+          staffNpcId = pathname.slice('/api/service/'.length);
+        }
+
+        if (!staffNpcId || staffNpcId.trim() === '') {
+          this.sendJson(res, 400, {
+            success: false,
+            error: {
+              code: 'invalid-query-input',
+              message: 'Query requires parameter "staffNpcId"',
+            },
+          });
+          return;
+        }
+
+        const serviceResult = this.controller.getRestaurantServiceView(staffNpcId.trim());
+        this.sendJson(res, 200, {
+          success: serviceResult.success,
+          result: serviceResult,
         });
         return;
       }

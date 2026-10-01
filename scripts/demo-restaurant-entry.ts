@@ -115,7 +115,7 @@ const persistenceB = new LocalFilePersistence(demoPath);
 const stateB = persistenceB.load()!;
 assert.ok(stateB !== null);
 validateWorldState(stateB);
-assert.equal(stateB.version, 14);
+assert.equal(stateB.version, 15);
 
 const playerB = stateB.agents.find((a) => a.id === 'agent:dev-player')!;
 const restaurantB = stateB.restaurants.find((r) => r.id === 'restaurant:development-restaurant')!;

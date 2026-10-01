@@ -28,7 +28,8 @@ import {
 import { evaluateDevelopmentRestaurantOperationalRule } from '../src/core/entities/restaurant.js';
 
 describe('Milestone 26: Minimal Relational Inquiry & Epistemic Grounding', () => {
-  const MORNING_TIME = '2026-09-14T08:00:00.000Z';
+  // 08:00 local civil time in Ciudad Juárez (UTC-6)
+  const MORNING_TIME = '2026-09-14T14:00:00.000Z';
 
   function setupWorldAt(timeIso: string = MORNING_TIME): { clock: WorldClock; state: WorldState; sim: Simulation } {
     const clock = WorldClock.create(timeIso);
@@ -403,7 +404,7 @@ describe('Milestone 26: Minimal Relational Inquiry & Epistemic Grounding', () =>
 
   describe('5. Complete Integration Flow (Inquiry → Navigation → Opportunity → Purchase)', () => {
     test('23–30. Full causal flow: acquaintance → inquiry on commute → informed travel → opportunity perception → purchase', () => {
-      const { clock, state, sim } = setupWorldAt('2026-09-14T08:00:00.000Z');
+      const { clock, state, sim } = setupWorldAt(MORNING_TIME);
       const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
       const npc = state.agents.find((a) => a.id === 'agent:dev-npc')!;
       const restaurant = state.restaurants.find((r) => r.id === 'restaurant:development-restaurant')!;
@@ -515,37 +516,37 @@ describe('Milestone 26: Minimal Relational Inquiry & Epistemic Grounding', () =>
     test('33. Existing NPC routine boundaries remain strictly invariant', () => {
       // 08:29 -> residence
       assert.strictEqual(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T08:29:59.999Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T08:29:59.999Z', 'UTC'),
         'building:development-residence'
       );
       // 08:30 -> development street
       assert.strictEqual(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T08:30:00.000Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T08:30:00.000Z', 'UTC'),
         'street:development-street'
       );
       // 08:59 -> development street
       assert.strictEqual(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T08:59:59.999Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T08:59:59.999Z', 'UTC'),
         'street:development-street'
       );
       // 09:00 -> restaurant (from DEVELOPMENT_NPC_WORK_SCHEDULE.workplaceId)
       assert.strictEqual(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T09:00:00.000Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T09:00:00.000Z', 'UTC'),
         DEVELOPMENT_NPC_WORK_SCHEDULE.workplaceId
       );
       // 16:59 -> restaurant (from DEVELOPMENT_NPC_WORK_SCHEDULE.workplaceId)
       assert.strictEqual(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T16:59:59.999Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T16:59:59.999Z', 'UTC'),
         DEVELOPMENT_NPC_WORK_SCHEDULE.workplaceId
       );
       // 17:00 -> Avenida Juárez
       assert.strictEqual(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T17:00:00.000Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T17:00:00.000Z', 'UTC'),
         'street:avenida-juarez'
       );
       // 20:30 -> residence
       assert.strictEqual(
-        evaluateDevelopmentNpcLocationRule('2026-09-14T20:30:00.000Z'),
+        evaluateDevelopmentNpcLocationRule('2026-09-14T20:30:00.000Z', 'UTC'),
         'building:development-residence'
       );
     });
@@ -553,22 +554,27 @@ describe('Milestone 26: Minimal Relational Inquiry & Epistemic Grounding', () =>
     test('34. Restaurant operational rule derives from DEVELOPMENT_NPC_WORK_SCHEDULE boundaries', () => {
       // 08:59 -> closed
       assert.strictEqual(
-        evaluateDevelopmentRestaurantOperationalRule('2026-09-14T08:59:59.999Z'),
+        evaluateDevelopmentRestaurantOperationalRule('2026-09-14T08:59:59.999Z', 'UTC'),
         'closed'
       );
       // 09:00 -> open
       assert.strictEqual(
-        evaluateDevelopmentRestaurantOperationalRule('2026-09-14T09:00:00.000Z'),
+        evaluateDevelopmentRestaurantOperationalRule('2026-09-14T09:00:00.000Z', 'UTC'),
         'open'
       );
-      // 16:59 -> open
+      // 16:44:59.999 -> open
       assert.strictEqual(
-        evaluateDevelopmentRestaurantOperationalRule('2026-09-14T16:59:59.999Z'),
+        evaluateDevelopmentRestaurantOperationalRule('2026-09-14T16:44:59.999Z', 'UTC'),
         'open'
+      );
+      // 16:59 -> closing-soon
+      assert.strictEqual(
+        evaluateDevelopmentRestaurantOperationalRule('2026-09-14T16:59:59.999Z', 'UTC'),
+        'closing-soon'
       );
       // 17:00 -> closed
       assert.strictEqual(
-        evaluateDevelopmentRestaurantOperationalRule('2026-09-14T17:00:00.000Z'),
+        evaluateDevelopmentRestaurantOperationalRule('2026-09-14T17:00:00.000Z', 'UTC'),
         'closed'
       );
     });

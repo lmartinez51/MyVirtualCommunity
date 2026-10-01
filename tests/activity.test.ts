@@ -23,7 +23,7 @@ import path from 'node:path';
 import os from 'node:os';
 
 describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
-  const OPEN_TIME = '2026-09-14T09:00:00.000Z';
+  const OPEN_TIME = '2026-09-14T15:00:00.000Z'; // 09:00 local in Ciudad Juárez (UTC-6)
 
   function setupWorldWithPlayerInOpenRestaurant(initialTime = OPEN_TIME) {
     const clock = new WorldClock(initialTime);
@@ -57,15 +57,15 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
     });
 
     it('calculates exact completion time without error', () => {
-      const completion = calculateHavingCoffeeCompletionTime('2026-09-14T09:00:00.000Z');
-      assert.strictEqual(completion, '2026-09-14T09:15:00.000Z');
+      const completion = calculateHavingCoffeeCompletionTime('2026-09-14T15:00:00.000Z');
+      assert.strictEqual(completion, '2026-09-14T15:15:00.000Z');
     });
 
     it('evaluates completion boundary correctly', () => {
-      const start = '2026-09-14T09:00:00.000Z';
-      assert.strictEqual(isHavingCoffeeCompleted(start, '2026-09-14T09:14:59.000Z'), false);
-      assert.strictEqual(isHavingCoffeeCompleted(start, '2026-09-14T09:15:00.000Z'), true);
-      assert.strictEqual(isHavingCoffeeCompleted(start, '2026-09-14T09:20:00.000Z'), true);
+      const start = '2026-09-14T15:00:00.000Z';
+      assert.strictEqual(isHavingCoffeeCompleted(start, '2026-09-14T15:14:59.000Z'), false);
+      assert.strictEqual(isHavingCoffeeCompleted(start, '2026-09-14T15:15:00.000Z'), true);
+      assert.strictEqual(isHavingCoffeeCompleted(start, '2026-09-14T15:20:00.000Z'), true);
     });
   });
 
@@ -253,7 +253,7 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
 
   describe('Simulation Progression & Boundary Semantics', () => {
     it('12. Mandatory Boundary 1: 09:00:00 -> 09:14:59 active, 09:15:00 completed', () => {
-      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T09:00:00.000Z');
+      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T15:00:00.000Z');
       const startResult = startHavingCoffee(state, 'agent:dev-player', purchaseReceipt);
       assert.strictEqual(startResult.success, true);
 
@@ -261,7 +261,7 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
 
       // Advance 14 minutes and 59 seconds (1 second before completion)
       clock.advance(14 * 60_000 + 59_000);
-      assert.strictEqual(clock.getTime(), '2026-09-14T09:14:59.000Z');
+      assert.strictEqual(clock.getTime(), '2026-09-14T15:14:59.000Z');
 
       const tick1 = sim.tick();
       const player = state.agents.find((a) => a.id === 'agent:dev-player');
@@ -270,16 +270,16 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
 
       // Advance 1 second to exact 15-minute boundary
       clock.advance(1000);
-      assert.strictEqual(clock.getTime(), '2026-09-14T09:15:00.000Z');
+      assert.strictEqual(clock.getTime(), '2026-09-14T15:15:00.000Z');
 
       const tick2 = sim.tick();
-      assert.strictEqual(player?.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z', 'must complete at 09:15:00');
+      assert.strictEqual(player?.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z', 'must complete at 09:15:00');
       assert.strictEqual(tick2.playerActivityTransitions?.length, 1);
-      assert.strictEqual(tick2.playerActivityTransitions![0].completedAt, '2026-09-14T09:15:00.000Z');
+      assert.strictEqual(tick2.playerActivityTransitions![0].completedAt, '2026-09-14T15:15:00.000Z');
     });
 
     it('13. Mandatory Boundary 2: 09:07:00 -> 09:21:59 active, 09:22:00 completed', () => {
-      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T09:07:00.000Z');
+      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T15:07:00.000Z');
       const startResult = startHavingCoffee(state, 'agent:dev-player', purchaseReceipt);
       assert.strictEqual(startResult.success, true);
 
@@ -287,7 +287,7 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
 
       // Advance to 09:21:59
       clock.advance(14 * 60_000 + 59_000);
-      assert.strictEqual(clock.getTime(), '2026-09-14T09:21:59.000Z');
+      assert.strictEqual(clock.getTime(), '2026-09-14T15:21:59.000Z');
 
       sim.tick();
       const player = state.agents.find((a) => a.id === 'agent:dev-player');
@@ -295,36 +295,36 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
 
       // Advance 1 second to 09:22:00
       clock.advance(1000);
-      assert.strictEqual(clock.getTime(), '2026-09-14T09:22:00.000Z');
+      assert.strictEqual(clock.getTime(), '2026-09-14T15:22:00.000Z');
 
       sim.tick();
-      assert.strictEqual(player?.playerActivity?.completedAt, '2026-09-14T09:22:00.000Z', 'must complete at 09:22:00');
+      assert.strictEqual(player?.playerActivity?.completedAt, '2026-09-14T15:22:00.000Z', 'must complete at 09:22:00');
     });
 
     it('14. Late Discovery Test: Start 09:00, advance directly to 09:22, completedAt is 09:15 (NOT 09:22)', () => {
-      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T09:00:00.000Z');
+      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T15:00:00.000Z');
       startHavingCoffee(state, 'agent:dev-player', purchaseReceipt);
 
       const sim = new Simulation(clock, state, { silent: true });
 
       // Leap 22 minutes ahead (discovering completion late)
       clock.advance(22 * 60_000);
-      assert.strictEqual(clock.getTime(), '2026-09-14T09:22:00.000Z');
+      assert.strictEqual(clock.getTime(), '2026-09-14T15:22:00.000Z');
 
       const tick = sim.tick();
       const player = state.agents.find((a) => a.id === 'agent:dev-player');
 
-      assert.strictEqual(clock.getTime(), '2026-09-14T09:22:00.000Z', 'clock remains 09:22:00');
+      assert.strictEqual(clock.getTime(), '2026-09-14T15:22:00.000Z', 'clock remains 09:22:00');
       assert.strictEqual(
         player?.playerActivity?.completedAt,
-        '2026-09-14T09:15:00.000Z',
+        '2026-09-14T15:15:00.000Z',
         'completedAt must be the theoretical 09:15:00 boundary, NOT late discovery 09:22:00'
       );
-      assert.strictEqual(tick.playerActivityTransitions?.[0].completedAt, '2026-09-14T09:15:00.000Z');
+      assert.strictEqual(tick.playerActivityTransitions?.[0].completedAt, '2026-09-14T15:15:00.000Z');
     });
 
     it('15. Idempotency: Additional ticks after completion produce no state change', () => {
-      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T09:00:00.000Z');
+      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T15:00:00.000Z');
       startHavingCoffee(state, 'agent:dev-player', purchaseReceipt);
 
       const sim = new Simulation(clock, state, { silent: true });
@@ -332,18 +332,18 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
       sim.tick();
 
       const player = state.agents.find((a) => a.id === 'agent:dev-player');
-      assert.strictEqual(player?.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
+      assert.strictEqual(player?.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z');
 
       // Subsequent tick at 09:16:00
       clock.advance(60_000);
       const subsequentTick = sim.tick();
 
       assert.strictEqual(subsequentTick.playerActivityTransitions?.length ?? 0, 0);
-      assert.strictEqual(player?.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
+      assert.strictEqual(player?.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z');
     });
 
     it('15b. Completed activity state remains stable, immutable, and un-cleared across multiple subsequent ticks', () => {
-      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T09:00:00.000Z');
+      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T15:00:00.000Z');
       startHavingCoffee(state, 'agent:dev-player', purchaseReceipt);
 
       const sim = new Simulation(clock, state, { silent: true });
@@ -351,27 +351,27 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
       sim.tick();
 
       const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
-      assert.strictEqual(player.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
+      assert.strictEqual(player.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z');
 
       // Tick at 09:30:00 (15 minutes later)
       clock.advance(15 * 60_000);
       const tick1 = sim.tick();
       assert.strictEqual(tick1.playerActivityTransitions?.length ?? 0, 0);
-      assert.strictEqual(player.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
+      assert.strictEqual(player.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z');
 
       // Tick at 10:00:00 (45 minutes after completion)
       clock.advance(30 * 60_000);
       const tick2 = sim.tick();
       assert.strictEqual(tick2.playerActivityTransitions?.length ?? 0, 0);
-      assert.strictEqual(player.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
+      assert.strictEqual(player.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z');
 
       // Tick at 12:00:00 (2 hours 45 minutes after completion)
       clock.advance(120 * 60_000);
       const tick3 = sim.tick();
       assert.strictEqual(tick3.playerActivityTransitions?.length ?? 0, 0);
       assert.strictEqual(player.playerActivity?.activity, 'having-coffee');
-      assert.strictEqual(player.playerActivity?.startedAt, '2026-09-14T09:00:00.000Z');
-      assert.strictEqual(player.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
+      assert.strictEqual(player.playerActivity?.startedAt, '2026-09-14T15:00:00.000Z');
+      assert.strictEqual(player.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z');
     });
   });
 
@@ -406,11 +406,11 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
     });
 
     it('18. NPC activity simulation continues working unaffected', () => {
-      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T09:00:00.000Z');
+      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T15:00:00.000Z');
       startHavingCoffee(state, 'agent:dev-player', purchaseReceipt);
 
       const sim = new Simulation(clock, state, { silent: true });
-      // Tick at 09:00:00 (inside active window [09:00, 17:00))
+      // Tick at 15:00:00 (inside active window [15:00, 23:00) UTC / [09:00, 17:00) local)
       const tickResult = sim.tick();
 
       const npcTransition = tickResult.transitions.find((t) => t.agentId === 'agent:dev-npc');
@@ -423,11 +423,11 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
     });
 
     it('19. Restaurant operational simulation continues working unaffected', () => {
-      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T09:00:00.000Z');
+      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T15:00:00.000Z');
       startHavingCoffee(state, 'agent:dev-player', purchaseReceipt);
 
       const sim = new Simulation(clock, state, { silent: true });
-      clock.advance(8 * 3600_000); // advance to 17:00:00 UTC (closing time)
+      clock.advance(8 * 3600_000); // advance to 23:00:00 UTC (17:00 local closing time)
 
       const tickResult = sim.tick();
       const restaurantTransition = tickResult.restaurantTransitions.find(
@@ -474,7 +474,7 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
       const filePath = path.join(tmpDir, 'world-state.json');
       const persistence = new LocalFilePersistence(filePath);
 
-      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T09:00:00.000Z');
+      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T15:00:00.000Z');
       startHavingCoffee(state, 'agent:dev-player', purchaseReceipt);
 
       await persistence.save(state);
@@ -487,7 +487,7 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
       const restoredPlayer = restored.agents.find((a) => a.id === 'agent:dev-player')!;
       assert.ok(restoredPlayer.playerActivity);
       assert.strictEqual(restoredPlayer.playerActivity.activity, 'having-coffee');
-      assert.strictEqual(restoredPlayer.playerActivity.startedAt, '2026-09-14T09:00:00.000Z');
+      assert.strictEqual(restoredPlayer.playerActivity.startedAt, '2026-09-14T15:00:00.000Z');
       assert.strictEqual(restoredPlayer.playerActivity.completedAt, null);
 
       await fs.rm(tmpDir, { recursive: true, force: true });
@@ -498,7 +498,7 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
       const filePath = path.join(tmpDir, 'world-state.json');
       const persistence = new LocalFilePersistence(filePath);
 
-      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T09:00:00.000Z');
+      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T15:00:00.000Z');
       startHavingCoffee(state, 'agent:dev-player', purchaseReceipt);
       await persistence.save(state);
 
@@ -506,14 +506,14 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
       const restored = await persistence.load();
       assert.ok(restored);
       const sessionBClock = new WorldClock(restored.worldTime);
-      sessionBClock.advance(15 * 60_000); // advance to 09:15:00
+      sessionBClock.advance(15 * 60_000); // advance to 15:15:00
 
       const sessionBSim = new Simulation(sessionBClock, restored, { silent: true });
       const tickResult = sessionBSim.tick();
 
       const restoredPlayer = restored.agents.find((a) => a.id === 'agent:dev-player')!;
-      assert.strictEqual(restoredPlayer.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
-      assert.strictEqual(tickResult.playerActivityTransitions?.[0].completedAt, '2026-09-14T09:15:00.000Z');
+      assert.strictEqual(restoredPlayer.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z');
+      assert.strictEqual(tickResult.playerActivityTransitions?.[0].completedAt, '2026-09-14T15:15:00.000Z');
 
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
@@ -523,7 +523,7 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
       const filePath = path.join(tmpDir, 'world-state.json');
       const persistence = new LocalFilePersistence(filePath);
 
-      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T09:00:00.000Z');
+      const { clock, state, purchaseReceipt } = setupSuccessfulCoffeePurchase('2026-09-14T15:00:00.000Z');
       startHavingCoffee(state, 'agent:dev-player', purchaseReceipt);
       const sim = new Simulation(clock, state, { silent: true });
       clock.advance(15 * 60_000);
@@ -537,21 +537,21 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
 
       const restoredPlayer = restored.agents.find((a) => a.id === 'agent:dev-player')!;
       assert.strictEqual(restoredPlayer.playerActivity?.activity, 'having-coffee');
-      assert.strictEqual(restoredPlayer.playerActivity?.startedAt, '2026-09-14T09:00:00.000Z');
-      assert.strictEqual(restoredPlayer.playerActivity?.completedAt, '2026-09-14T09:15:00.000Z');
+      assert.strictEqual(restoredPlayer.playerActivity?.startedAt, '2026-09-14T15:00:00.000Z');
+      assert.strictEqual(restoredPlayer.playerActivity?.completedAt, '2026-09-14T15:15:00.000Z');
 
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
-    it('25. Explicitly rejects versions 1 through 13 in validateWorldState', () => {
+    it('25. Explicitly rejects versions 1 through 17 in validateWorldState', () => {
       const clock = new WorldClock(OPEN_TIME);
       const state = createInitialWorldState(clock);
 
-      for (let v = 1; v <= 13; v++) {
+      for (let v = 1; v <= 17; v++) {
         const legacy = { ...state, version: v };
         assert.throws(
           () => validateWorldState(legacy),
-          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 14\\.`)
+          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 18\\.`)
         );
       }
     });

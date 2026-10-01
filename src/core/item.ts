@@ -32,10 +32,12 @@
 import type { Agent } from './entities/agent.js';
 import type { Restaurant } from './entities/restaurant.js';
 import type { PurchaseRecord } from './world-state.js';
+import { getCanonicalAgentPair, type Acquaintance } from './entities/social.js';
 
 export const QUALIFYING_ITEM_OFFERING_IDS = [
   'offering:development-coffee',
   'offering:development-pastry',
+  'offering:m39-demo-beverage',
 ] as const;
 
 export type QualifyingItemOfferingId = (typeof QUALIFYING_ITEM_OFFERING_IDS)[number];
@@ -43,19 +45,24 @@ export type QualifyingItemOfferingId = (typeof QUALIFYING_ITEM_OFFERING_IDS)[num
 export type ItemStatus = 'available' | 'consumed';
 
 /**
- * Authoritative physical possession entity (Milestone 33, formalized M37).
+ * Authoritative physical possession entity (Milestone 33, formalized M37, extended M50).
  *
  * Governs personal possession attribution and consumable lifecycle state.
  * Decoupled from immutable historical PurchaseRecord.
+ *
+ * NOTE (Milestone 50): ownerAgentId represents the agent currently attributed with
+ * physical custody/possession of the acquired item ('player' | 'npc').
+ * It does NOT represent legal ownership, deed, or trade rights.
+ * Original commercial provenance is permanently tracked by sourcePurchaseId.
  */
 export interface OwnedItem {
   readonly id: string; // Strict format: /^item:(\d+)$/
   readonly type: 'item';
   readonly offeringId: string;
   readonly name: string; // Acquisition snapshot or migration-reconstructed name
-  readonly ownerAgentId: string; // Foreign key -> state.agents (agentType === 'player' in current scope)
+  ownerAgentId: string; // Foreign key -> state.agents (current possessor: 'player' | 'npc')
   readonly restaurantId: string; // Foreign key -> state.restaurants
-  readonly sourcePurchaseId: string; // Foreign key -> state.purchases
+  readonly sourcePurchaseId: string; // Foreign key -> state.purchases (immutable commercial provenance)
   readonly acquiredAt: string; // ISO-8601 timestamp === purchase.worldTime
   status: ItemStatus; // Consumable lifecycle state: 'available' | 'consumed' (general physical condition not modeled)
   consumedAt: string | null; // ISO-8601 timestamp when consumed, or null
@@ -88,6 +95,29 @@ export interface ConsumeOwnedItemResult {
   consumedAt?: string;
 }
 
+export type TransferItemPossessionResultCode =
+  | 'success'
+  | 'sender-not-found'
+  | 'recipient-not-found'
+  | 'cannot-transfer-to-self'
+  | 'agents-not-co-located'
+  | 'agents-not-acquainted'
+  | 'item-not-found'
+  | 'item-not-in-possession'
+  | 'item-already-consumed'
+  | 'invalid-timestamp';
+
+export interface TransferItemPossessionResult {
+  success: boolean;
+  code: TransferItemPossessionResultCode;
+  message: string;
+  itemId: string;
+  fromAgentId: string;
+  toAgentId: string;
+  transferredAt?: string;
+  item?: OwnedItem;
+}
+
 /**
  * World state interface required for item domain operations.
  */
@@ -97,6 +127,8 @@ export interface ItemWorldState {
   restaurants: Restaurant[];
   purchases: PurchaseRecord[];
   items: OwnedItem[];
+  acquaintances?: Acquaintance[];
+  orders?: unknown[];
 }
 
 /**
@@ -157,6 +189,214 @@ export function consumeOwnedItem(
     itemId,
     item,
     consumedAt: worldTime,
+  };
+}
+
+/**
+ * Pure helper to check acquaintance between two agents.
+ */
+function checkAcquaintance(
+  acquaintances: readonly Acquaintance[] | undefined,
+  agentIdA: string,
+  agentIdB: string
+): boolean {
+  if (!acquaintances || agentIdA === agentIdB) {
+    return false;
+  }
+  const [first, second] = getCanonicalAgentPair(agentIdA, agentIdB);
+  return acquaintances.some(
+    (acq) => acq.agentIds[0] === first && acq.agentIds[1] === second
+  );
+}
+
+/**
+ * Authoritative physical possession handoff (Milestone 50).
+ *
+ * Transfers physical possession/custody of an available OwnedItem from a sender agent
+ * to a co-located, acquainted recipient agent.
+ *
+ * Semantic Boundary:
+ * - Governs physical custody/possession transfer between co-located agents.
+ * - Does NOT represent legal ownership, title, trade, deed, or sale.
+ * - The immutable commercial provenance (sourcePurchaseId -> PurchaseRecord)
+ *   remains permanently attributed to the original purchaser.
+ *
+ * Preconditions (evaluated in strict deterministic order):
+ * 1. Sender exists in state.agents (code: 'sender-not-found')
+ * 2. Recipient exists in state.agents (code: 'recipient-not-found')
+ * 3. Sender and recipient are distinct: senderId !== recipientId (code: 'cannot-transfer-to-self')
+ * 4. Sender and recipient are co-located: sender.locationId === recipient.locationId (code: 'agents-not-co-located')
+ * 5. Sender and recipient share mutual acquaintance (code: 'agents-not-acquainted')
+ *    Note: Bounded M50 safety constraint for interpersonal handoff; not a universal physical world law.
+ * 6. Target item exists in state.items (code: 'item-not-found')
+ * 7. Item is currently in sender's possession: item.ownerAgentId === senderId (code: 'item-not-in-possession')
+ * 8. Item is currently available: item.status === 'available' (code: 'item-already-consumed')
+ * 9. Timestamp is a valid ISO-8601 non-future timestamp >= item.acquiredAt (code: 'invalid-timestamp')
+ *
+ * State Transition:
+ * - Atomically mutates item.ownerAgentId = recipient.id.
+ * - Zero state mutation on any precondition violation.
+ */
+export function transferItemPossession(
+  state: ItemWorldState,
+  senderId: string,
+  recipientId: string,
+  itemId: string,
+  worldTime: string
+): TransferItemPossessionResult {
+  // 1. Confirm sender exists
+  const sender = state.agents.find((a) => a.id === senderId);
+  if (!sender) {
+    return {
+      success: false,
+      code: 'sender-not-found',
+      message: `Sender agent "${senderId}" not found in world state`,
+      itemId,
+      fromAgentId: senderId,
+      toAgentId: recipientId,
+    };
+  }
+
+  // 2. Confirm recipient exists
+  const recipient = state.agents.find((a) => a.id === recipientId);
+  if (!recipient) {
+    return {
+      success: false,
+      code: 'recipient-not-found',
+      message: `Recipient agent "${recipientId}" not found in world state`,
+      itemId,
+      fromAgentId: senderId,
+      toAgentId: recipientId,
+    };
+  }
+
+  // 3. Confirm sender and recipient are distinct
+  if (senderId === recipientId) {
+    return {
+      success: false,
+      code: 'cannot-transfer-to-self',
+      message: `Cannot transfer possession to self: agent "${senderId}"`,
+      itemId,
+      fromAgentId: senderId,
+      toAgentId: recipientId,
+    };
+  }
+
+  // 4. Confirm sender and recipient are co-located
+  if (sender.locationId !== recipient.locationId) {
+    return {
+      success: false,
+      code: 'agents-not-co-located',
+      message: `Agents "${senderId}" and "${recipientId}" are not co-located (sender at "${sender.locationId}", recipient at "${recipient.locationId}")`,
+      itemId,
+      fromAgentId: senderId,
+      toAgentId: recipientId,
+    };
+  }
+
+  // 5. Confirm sender and recipient are acquainted (M50 interpersonal handoff safety constraint)
+  if (!checkAcquaintance(state.acquaintances, senderId, recipientId)) {
+    return {
+      success: false,
+      code: 'agents-not-acquainted',
+      message: `Agents "${senderId}" and "${recipientId}" are not acquainted`,
+      itemId,
+      fromAgentId: senderId,
+      toAgentId: recipientId,
+    };
+  }
+
+  // 6. Confirm item exists
+  const item = state.items.find((i) => i.id === itemId);
+  if (!item) {
+    return {
+      success: false,
+      code: 'item-not-found',
+      message: `Item "${itemId}" not found in world state`,
+      itemId,
+      fromAgentId: senderId,
+      toAgentId: recipientId,
+    };
+  }
+
+  // 7. Confirm item is currently in sender's possession
+  if (item.ownerAgentId !== senderId) {
+    return {
+      success: false,
+      code: 'item-not-in-possession',
+      message: `Item "${itemId}" is not in possession of sender "${senderId}" (current possessor: "${item.ownerAgentId}")`,
+      itemId,
+      fromAgentId: senderId,
+      toAgentId: recipientId,
+      item,
+    };
+  }
+
+  // 8. Confirm item is available
+  if (item.status !== 'available') {
+    return {
+      success: false,
+      code: 'item-already-consumed',
+      message: `Item "${itemId}" is already consumed (consumedAt: "${item.consumedAt}")`,
+      itemId,
+      fromAgentId: senderId,
+      toAgentId: recipientId,
+      item,
+    };
+  }
+
+  // 9. Confirm timestamp is valid
+  const timeMs = Date.parse(worldTime);
+  if (typeof worldTime !== 'string' || worldTime.trim() === '' || Number.isNaN(timeMs)) {
+    return {
+      success: false,
+      code: 'invalid-timestamp',
+      message: `Invalid worldTime timestamp: "${worldTime}". Must be a valid ISO-8601 string.`,
+      itemId,
+      fromAgentId: senderId,
+      toAgentId: recipientId,
+      item,
+    };
+  }
+
+  const worldTimeStateMs = Date.parse(state.worldTime);
+  if (Number.isFinite(worldTimeStateMs) && timeMs > worldTimeStateMs) {
+    return {
+      success: false,
+      code: 'invalid-timestamp',
+      message: `worldTime "${worldTime}" is in the future relative to state.worldTime "${state.worldTime}"`,
+      itemId,
+      fromAgentId: senderId,
+      toAgentId: recipientId,
+      item,
+    };
+  }
+
+  const acquiredMs = Date.parse(item.acquiredAt);
+  if (Number.isFinite(acquiredMs) && timeMs < acquiredMs) {
+    return {
+      success: false,
+      code: 'invalid-timestamp',
+      message: `worldTime "${worldTime}" is earlier than item acquiredAt "${item.acquiredAt}"`,
+      itemId,
+      fromAgentId: senderId,
+      toAgentId: recipientId,
+      item,
+    };
+  }
+
+  // Authoritative possession handoff: re-attribute current custody to recipient
+  item.ownerAgentId = recipient.id;
+
+  return {
+    success: true,
+    code: 'success',
+    message: `Transferred possession of item "${item.id}" (${item.name}) from "${senderId}" to "${recipientId}"`,
+    itemId: item.id,
+    fromAgentId: senderId,
+    toAgentId: recipientId,
+    transferredAt: worldTime,
+    item,
   };
 }
 
@@ -266,9 +506,9 @@ export function validateItemAuthority(state: ItemWorldState): void {
         `Item Authority Invariant Violated: item "${item.id}" ownerAgentId "${item.ownerAgentId}" references non-existent agent`
       );
     }
-    if (ownerAgent.agentType !== 'player') {
+    if (ownerAgent.agentType !== 'player' && ownerAgent.agentType !== 'npc') {
       throw new Error(
-        `Item Authority Invariant Violated: item "${item.id}" ownerAgentId "${item.ownerAgentId}" is not a player (agentType: "${ownerAgent.agentType}"). In the current scope, acquired consumable items are associated with player agents.`
+        `Item Authority Invariant Violated: item "${item.id}" ownerAgentId "${item.ownerAgentId}" has invalid agentType "${ownerAgent.agentType}". In the current scope, acquired consumable items are possessed by player or npc agents.`
       );
     }
 
@@ -350,11 +590,10 @@ export function validateItemAuthority(state: ItemWorldState): void {
       );
     }
 
-    if (sourcePurchase.playerId !== item.ownerAgentId) {
-      throw new Error(
-        `Item Authority Invariant Violated: item "${item.id}" ownerAgentId "${item.ownerAgentId}" does not match purchase playerId "${sourcePurchase.playerId}"`
-      );
-    }
+    // Direction A referential consistency
+    // Note: In Milestone 50, item.ownerAgentId represents current custody/possession,
+    // which may diverge from original sourcePurchase.playerId after an authorized peer-to-peer handoff.
+    // Original commercial provenance is verified via sourcePurchase existence.
     if (sourcePurchase.offeringId !== item.offeringId) {
       throw new Error(
         `Item Authority Invariant Violated: item "${item.id}" offeringId "${item.offeringId}" does not match purchase offeringId "${sourcePurchase.offeringId}"`
@@ -372,10 +611,35 @@ export function validateItemAuthority(state: ItemWorldState): void {
     }
   }
 
+  // Collect purchase IDs for in-flight orders pending fulfillment (Milestone 39)
+  const pendingOrderPurchaseIds = new Set<string>();
+  if (Array.isArray((state as any).orders)) {
+    for (const order of (state as any).orders) {
+      if (
+        order &&
+        (order.status === 'preparing' || order.status === 'ready') &&
+        Array.isArray(order.purchaseIds)
+      ) {
+        for (const pid of order.purchaseIds) {
+          const purchase = purchaseMap.get(pid);
+          if (
+            purchase &&
+            purchase.playerId === order.customerId &&
+            purchase.restaurantId === order.restaurantId &&
+            !seenSourcePurchaseIds.has(pid)
+          ) {
+            pendingOrderPurchaseIds.add(pid);
+          }
+        }
+      }
+    }
+  }
+
   // Direction B check: Every qualifying PurchaseRecord must have exactly one OwnedItem
+  // (unless pending fulfillment in an active order)
   for (const p of state.purchases) {
     if (qualifyingOfferingIds.has(p.offeringId)) {
-      if (!seenSourcePurchaseIds.has(p.id)) {
+      if (!seenSourcePurchaseIds.has(p.id) && !pendingOrderPurchaseIds.has(p.id)) {
         throw new Error(
           `Item Authority Invariant Violated: missing OwnedItem for qualifying purchase "${p.id}" (offering: "${p.offeringId}") (Direction B violation)`
         );

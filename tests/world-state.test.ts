@@ -11,13 +11,13 @@ import {
 import { createDevelopmentSeedWorld } from '../src/core/seed.js';
 
 describe('WorldState', () => {
-  test('creates initial WorldState with seed entities, version 14, and clock time', () => {
+  test('creates initial WorldState with seed entities, version 18, and clock time', () => {
     const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
     const state = createInitialWorldState(clock);
 
     assert.equal(state.worldId, DEFAULT_WORLD_ID);
     assert.equal(state.version, CURRENT_WORLD_STATE_VERSION);
-    assert.equal(state.version, 14);
+    assert.equal(state.version, 18);
     assert.equal(state.worldTime, '2026-09-14T08:00:00.000Z');
     assert.equal(state.places.length, 8);
     assert.equal(state.restaurants.length, 1);
@@ -44,6 +44,9 @@ describe('WorldState', () => {
     assert.equal(state.acquaintances.length, 0);
     assert.equal(state.items.length, 0);
     assert.equal(state.knowledge.length, 0);
+    assert.equal(state.orders.length, 0);
+    assert.equal(state.properties.length, 3);
+    assert.equal(state.siteAgentAssociations.length, 2);
   });
 
   test('snapshots updated WorldState preserving entity collections and advancing time', () => {
@@ -54,7 +57,7 @@ describe('WorldState', () => {
     const snapshot = snapshotWorldState(clock, initial);
 
     assert.equal(snapshot.worldTime, '2026-09-14T08:00:05.000Z');
-    assert.equal(snapshot.version, 14);
+    assert.equal(snapshot.version, 18);
     assert.deepEqual(snapshot.places, initial.places);
     assert.deepEqual(snapshot.restaurants, initial.restaurants);
     assert.deepEqual(snapshot.agents, initial.agents);
@@ -64,6 +67,9 @@ describe('WorldState', () => {
     assert.deepEqual(snapshot.acquaintances, initial.acquaintances);
     assert.deepEqual(snapshot.items, initial.items);
     assert.deepEqual(snapshot.knowledge, initial.knowledge);
+    assert.deepEqual(snapshot.orders, initial.orders);
+    assert.deepEqual(snapshot.properties, initial.properties);
+    assert.deepEqual(snapshot.siteAgentAssociations, initial.siteAgentAssociations);
   });
 
   test('serializes cleanly to JSON and deserializes back', () => {
@@ -77,7 +83,7 @@ describe('WorldState', () => {
     assert.deepEqual(parsed, state);
   });
 
-  test('validateWorldState succeeds for valid version 14 seed state', () => {
+  test('validateWorldState succeeds for valid version 18 seed state', () => {
     const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
     const state = createInitialWorldState(clock);
 
@@ -93,7 +99,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v1State),
-      /Unsupported WorldState version: 1\. Expected version 14/
+      /Unsupported WorldState version: 1\. Expected version 18/
     );
   });
 
@@ -109,7 +115,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v2State),
-      /Unsupported WorldState version: 2\. Expected version 14/
+      /Unsupported WorldState version: 2\. Expected version 18/
     );
   });
 
@@ -127,7 +133,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v3State),
-      /Unsupported WorldState version: 3\. Expected version 14/
+      /Unsupported WorldState version: 3\. Expected version 18/
     );
   });
 
@@ -145,7 +151,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v4State),
-      /Unsupported WorldState version: 4\. Expected version 14/
+      /Unsupported WorldState version: 4\. Expected version 18/
     );
   });
 
@@ -164,7 +170,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v5State),
-      /Unsupported WorldState version: 5\. Expected version 14/
+      /Unsupported WorldState version: 5\. Expected version 18/
     );
   });
 
@@ -184,7 +190,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v6State),
-      /Unsupported WorldState version: 6\. Expected version 14/
+      /Unsupported WorldState version: 6\. Expected version 18/
     );
   });
 
@@ -204,7 +210,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v7State),
-      /Unsupported WorldState version: 7\. Expected version 14/
+      /Unsupported WorldState version: 7\. Expected version 18/
     );
   });
 
@@ -224,7 +230,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v8State),
-      /Unsupported WorldState version: 8\. Expected version 14/
+      /Unsupported WorldState version: 8\. Expected version 18/
     );
   });
 
@@ -244,7 +250,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v9State),
-      /Unsupported WorldState version: 9\. Expected version 14/
+      /Unsupported WorldState version: 9\. Expected version 18/
     );
   });
 
@@ -264,7 +270,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v10State),
-      /Unsupported WorldState version: 10\. Expected version 14/
+      /Unsupported WorldState version: 10\. Expected version 18/
     );
   });
 
@@ -285,7 +291,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v11State),
-      /Unsupported WorldState version: 11\. Expected version 14/
+      /Unsupported WorldState version: 11\. Expected version 18/
     );
   });
 
@@ -307,7 +313,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v12State),
-      /Unsupported WorldState version: 12\. Expected version 14/
+      /Unsupported WorldState version: 12\. Expected version 18/
     );
   });
 
@@ -329,7 +335,103 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v13State),
-      /Unsupported WorldState version: 13\. Expected version 14/
+      /Unsupported WorldState version: 13\. Expected version 18/
+    );
+  });
+
+  test('validateWorldState explicitly rejects version 14 persisted state', () => {
+    const seed = createDevelopmentSeedWorld();
+    const v14State = {
+      worldId: 'juarez-el-paso',
+      version: 14,
+      worldTime: '2026-09-14T08:00:00.000Z',
+      places: seed.places,
+      restaurants: seed.restaurants,
+      agents: seed.agents,
+      offerings: seed.offerings,
+      purchases: [],
+      activityCompletions: [],
+      acquaintances: [],
+      items: [],
+      knowledge: [],
+    };
+
+    assert.throws(
+      () => validateWorldState(v14State),
+      /Unsupported WorldState version: 14\. Expected version 18/
+    );
+  });
+
+  test('validateWorldState explicitly rejects version 15 persisted state', () => {
+    const seed = createDevelopmentSeedWorld();
+    const v15State = {
+      worldId: 'juarez-el-paso',
+      version: 15,
+      worldTime: '2026-09-14T08:00:00.000Z',
+      places: seed.places,
+      restaurants: seed.restaurants,
+      agents: seed.agents,
+      offerings: seed.offerings,
+      purchases: [],
+      activityCompletions: [],
+      acquaintances: [],
+      items: [],
+      knowledge: [],
+      orders: [],
+    };
+
+    assert.throws(
+      () => validateWorldState(v15State),
+      /Unsupported WorldState version: 15\. Expected version 18/
+    );
+  });
+
+  test('validateWorldState explicitly rejects version 16 persisted state', () => {
+    const seed = createDevelopmentSeedWorld();
+    const v16State = {
+      worldId: 'juarez-el-paso',
+      version: 16,
+      worldTime: '2026-09-14T08:00:00.000Z',
+      places: seed.places,
+      restaurants: seed.restaurants,
+      agents: seed.agents,
+      offerings: seed.offerings,
+      purchases: [],
+      activityCompletions: [],
+      acquaintances: [],
+      items: [],
+      knowledge: [],
+      orders: [],
+    };
+
+    assert.throws(
+      () => validateWorldState(v16State),
+      /Unsupported WorldState version: 16\. Expected version 18/
+    );
+  });
+
+  test('validateWorldState explicitly rejects version 17 persisted state', () => {
+    const seed = createDevelopmentSeedWorld();
+    const v17State = {
+      worldId: 'juarez-el-paso',
+      version: 17,
+      worldTime: '2026-09-14T08:00:00.000Z',
+      places: seed.places,
+      restaurants: seed.restaurants,
+      agents: seed.agents,
+      offerings: seed.offerings,
+      purchases: [],
+      activityCompletions: [],
+      acquaintances: [],
+      items: [],
+      knowledge: [],
+      orders: [],
+      properties: seed.properties,
+    };
+
+    assert.throws(
+      () => validateWorldState(v17State),
+      /Unsupported WorldState version: 17\. Expected version 18/
     );
   });
 
@@ -341,7 +443,7 @@ describe('WorldState', () => {
       () =>
         validateWorldState({
           worldId: 'other-region',
-          version: 14,
+          version: 18,
           worldTime: '2026-09-14T08:00:00.000Z',
           places: [],
           restaurants: [],
@@ -352,6 +454,9 @@ describe('WorldState', () => {
           acquaintances: [],
           items: [],
           knowledge: [],
+          orders: [],
+          properties: [],
+          siteAgentAssociations: [],
         }),
       /worldId must be "juarez-el-paso"/
     );
@@ -372,7 +477,7 @@ describe('WorldState', () => {
 
     const invalidState = {
       worldId: 'juarez-el-paso',
-      version: 14,
+      version: 18,
       worldTime: '2026-09-14T08:00:00.000Z',
       places: seed.places,
       restaurants: [collidingRestaurant],
@@ -383,6 +488,9 @@ describe('WorldState', () => {
       acquaintances: [],
       items: [],
       knowledge: [],
+      orders: [],
+      properties: seed.properties,
+      siteAgentAssociations: seed.siteAgentAssociations,
     };
 
     assert.throws(

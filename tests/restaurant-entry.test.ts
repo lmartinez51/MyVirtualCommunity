@@ -14,8 +14,8 @@ import {
 import { LocalFilePersistence } from '../src/persistence/local-storage.js';
 
 describe('enterRestaurant Interaction', () => {
-  const openTime = '2026-09-14T09:00:00.000Z';
-  const closedTime = '2026-09-14T08:00:00.000Z';
+  const openTime = '2026-09-14T15:00:00.000Z'; // 09:00 local Ciudad Juárez
+  const closedTime = '2026-09-14T14:00:00.000Z'; // 08:00 local Ciudad Juárez
 
   test('successfully enters restaurant when restaurant is open and player is at containing building', () => {
     const clock = WorldClock.create(openTime);
@@ -253,7 +253,7 @@ describe('enterRestaurant Interaction', () => {
 
       const restoredPlayer = restoredState.agents.find((a) => a.id === 'agent:dev-player')!;
       assert.equal(restoredPlayer.locationId, 'restaurant:development-restaurant');
-      assert.equal(restoredState.version, 14);
+      assert.equal(restoredState.version, 18);
     } finally {
       if (existsSync(testFile)) {
         unlinkSync(testFile);

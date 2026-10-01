@@ -19,9 +19,9 @@ import {
 import { Restaurant } from '../src/core/entities/restaurant.js';
 
 describe('Milestone 27: Spatial Opportunity Perception Across Building Storefront Boundary', () => {
-  const MORNING_OPEN_TIME = '2026-09-14T09:00:00.000Z';
-  const PRE_SHIFT_TIME = '2026-09-14T08:00:00.000Z';
-  const CLOSING_TIME = '2026-09-14T17:00:00.000Z';
+  const MORNING_OPEN_TIME = '2026-09-14T15:00:00.000Z';
+  const PRE_SHIFT_TIME = '2026-09-14T14:00:00.000Z';
+  const CLOSING_TIME = '2026-09-14T23:00:00.000Z';
 
   function setupWorldAt(timeIso: string = MORNING_OPEN_TIME): {
     clock: WorldClock;
@@ -205,7 +205,7 @@ describe('Milestone 27: Spatial Opportunity Perception Across Building Storefron
       const player = state.agents.find((a) => a.id === 'agent:dev-player')!;
 
       leaveBuilding(state, player.id, 'building:development-building', { silent: true });
-      enterBuilding(state, player.id, 'building:development-residence', { silent: true });
+      player.locationId = 'building:development-residence';
       assert.strictEqual(player.locationId, 'building:development-residence');
 
       const result = inspectCurrentLocation(state, player.id);
@@ -235,7 +235,7 @@ describe('Milestone 27: Spatial Opportunity Perception Across Building Storefron
 
       assert.strictEqual(beforeSnapshot, afterSnapshot);
       validateWorldState(state);
-      assert.strictEqual(state.version, 14);
+      assert.strictEqual(state.version, 18);
     });
 
     test('Building perception does NOT leak internal restaurant state or seated agents', () => {

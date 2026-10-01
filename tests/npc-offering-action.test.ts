@@ -23,7 +23,7 @@ import { existsSync, unlinkSync } from 'node:fs';
  * Helper to construct an open world at 09:00 UTC with the NPC active at the restaurant.
  */
 function setupActiveNpcWorld(): { clock: WorldClock; state: WorldState } {
-  const clock = WorldClock.create('2026-09-14T09:00:00.000Z');
+  const clock = WorldClock.create('2026-09-14T15:00:00.000Z');
   const state = createInitialWorldState(clock);
   // Place NPC at restaurant and set active
   const npc = state.agents.find((a) => a.id === 'agent:dev-npc')!;
@@ -432,8 +432,8 @@ describe('Milestone 19-A: Deterministic NPC Offering Availability', () => {
 
   describe('8. Simulation Integration Across Full Daily Routine', () => {
     test('clock advances 08:00 -> 09:00 -> 17:00 driving offering lifecycle, perception, and purchase', () => {
-      // 08:00 UTC: Restaurant closed, devNpc idle at building, Pan Dulce absent
-      const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
+      // 08:00 local (14:00 UTC): Restaurant closed, devNpc idle at building, Pan Dulce absent
+      const clock = WorldClock.create('2026-09-14T14:00:00.000Z');
       const state = createInitialWorldState(clock);
       const sim = new Simulation(clock, state, { silent: true });
 
@@ -495,7 +495,7 @@ describe('Milestone 19-A: Deterministic NPC Offering Availability', () => {
 
       try {
         const persistence = new LocalFilePersistence(storagePath);
-        const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
+        const clock = WorldClock.create('2026-09-14T14:00:00.000Z');
         const state = createInitialWorldState(clock);
         const sim = new Simulation(clock, state, { silent: true });
 
@@ -522,7 +522,7 @@ describe('Milestone 19-A: Deterministic NPC Offering Availability', () => {
         // Restore from file
         const loaded = persistence.load();
         assert.ok(loaded);
-        assert.equal(loaded.version, 14);
+        assert.equal(loaded.version, 18);
         assert.doesNotThrow(() => validateWorldState(loaded));
 
         // Offering is absent

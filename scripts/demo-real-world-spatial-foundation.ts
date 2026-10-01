@@ -84,7 +84,7 @@ try {
 
   const restored = persistence.load();
   assert.ok(restored !== null);
-  assert.equal(restored.version, 14);
+  assert.equal(restored.version, 15);
   validateWorldState(restored);
 
   const restoredPlayer = restored.agents.find((a) => a.id === player.id)!;

@@ -28,7 +28,7 @@ console.log('=== STEP 1: Bootstrapping Version 10 development world at 08:00:00 
 const clockA = WorldClock.create('2026-09-14T08:00:00.000Z');
 const stateA = createInitialWorldState(clockA);
 validateWorldState(stateA);
-assert.equal(stateA.version, 14);
+assert.equal(stateA.version, 15);
 assert.equal(stateA.purchases.length, 0);
 
 console.log(`World ID:         ${stateA.worldId}`);
@@ -170,7 +170,7 @@ const persistenceB = new LocalFilePersistence(demoPath);
 const stateB = persistenceB.load()!;
 assert.ok(stateB !== null);
 validateWorldState(stateB);
-assert.equal(stateB.version, 14);
+assert.equal(stateB.version, 15);
 assert.equal(stateB.purchases.length, 2);
 
 console.log(`Restored World Version:   ${stateB.version}`);

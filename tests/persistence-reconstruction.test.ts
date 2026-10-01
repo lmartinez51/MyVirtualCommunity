@@ -20,7 +20,7 @@ describe('Persistence Reconstruction', () => {
   });
 
   test('WorldClock and populated domain entities survive complete runtime destruction and reconstruction', () => {
-    const knownTime = '2026-09-14T10:00:00.000Z';
+    const knownTime = '2026-09-14T16:00:00.000Z';
 
     // --- RUNTIME SESSION 1 ---
     {
@@ -42,7 +42,7 @@ describe('Persistence Reconstruction', () => {
 
       assert.ok(loadedState !== null, 'Persisted state must exist in session 2');
       assert.equal(loadedState.worldId, 'juarez-el-paso');
-      assert.equal(loadedState.version, 14);
+      assert.equal(loadedState.version, 18);
       assert.equal(loadedState.worldTime, knownTime);
 
       const clock2 = WorldClock.create(loadedState.worldTime);
@@ -133,7 +133,7 @@ describe('Persistence Reconstruction', () => {
       const persistence2 = new LocalFilePersistence(testFilePath);
       const state2 = persistence2.load();
       assert.ok(state2 !== null);
-      assert.equal(state2.version, 14);
+      assert.equal(state2.version, 18);
       assert.equal(state2.worldTime, '2026-09-14T08:00:05.000Z');
       assert.equal(state2.places.length, 8);
       assert.equal(state2.restaurants.length, 1);
@@ -156,7 +156,7 @@ describe('Persistence Reconstruction', () => {
       const persistence3 = new LocalFilePersistence(testFilePath);
       const state3 = persistence3.load();
       assert.ok(state3 !== null);
-      assert.equal(state3.version, 14);
+      assert.equal(state3.version, 18);
       assert.equal(state3.worldTime, '2026-09-14T08:00:10.000Z');
       assert.equal(state3.places.length, 8);
       assert.equal(state3.restaurants.length, 1);
