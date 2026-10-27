@@ -191,7 +191,7 @@ describe('Milestone 56: Migration v16 -> v17 & Property Foundation', () => {
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.equal(loaded.properties.length, 3);
         assert.doesNotThrow(() => validateWorldState(loaded));
 
@@ -199,7 +199,7 @@ describe('Milestone 56: Migration v16 -> v17 & Property Foundation', () => {
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 18);
+        assert.equal(reloaded.version, 19);
         assert.equal(reloaded.properties.length, 3);
         assert.doesNotThrow(() => validateWorldState(reloaded));
       } finally {
@@ -235,7 +235,7 @@ describe('Milestone 56: Migration v16 -> v17 & Property Foundation', () => {
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.equal(loaded.properties.length, 3);
         assert.doesNotThrow(() => validateWorldState(loaded));
       } finally {
@@ -256,7 +256,7 @@ describe('Milestone 56: Migration v16 -> v17 & Property Foundation', () => {
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.doesNotThrow(() => validateWorldState(loaded));
         assert.deepEqual(loaded, v18);
       } finally {

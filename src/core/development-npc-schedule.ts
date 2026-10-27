@@ -127,12 +127,44 @@ export const SECONDARY_DEVELOPMENT_NPC_SCHEDULE: DeterministicNpcSchedule = Obje
   }),
 });
 
+export const ELENA_NPC_ID = 'agent:elena-npc';
+
+export const ELENA_NPC_SCHEDULE: DeterministicNpcSchedule = Object.freeze({
+  npcId: ELENA_NPC_ID,
+  residenceId: 'building:del-porvenir-residence',
+  commuteLocationId: 'street:calle-del-porvenir',
+  workplaceId: 'restaurant:wing-spot',
+  recreationLocationId: 'street:blvd-gomez-morin',
+  shiftStartHour: 9,
+  shiftStartMinute: 0,
+  shiftEndHour: 17,
+  shiftEndMinute: 0,
+  commuteLeadMinutes: 30,
+  recreationStartHour: 17,
+  recreationStartMinute: 0,
+  recreationEndHour: 20,
+  recreationEndMinute: 30,
+  actionDescriptions: Object.freeze({
+    resting: 'Stay at residence',
+    commuting: 'Commute to work via Calle Del Porvenir',
+    working: 'Work shift at restaurant',
+    promenading: 'Walk along Blvd. Gómez Morín',
+  }),
+  activityLabels: Object.freeze({
+    resting: 'Resting at home',
+    commuting: 'Commuting to work',
+    working: 'Working at restaurant',
+    promenading: 'Walking along Blvd. Gómez Morín',
+  }),
+});
+
 /**
  * Immutable fixture lookup map of deterministic NPC schedules (Milestone 64).
  */
 export const DETERMINISTIC_NPC_SCHEDULES: Readonly<Record<string, DeterministicNpcSchedule>> = Object.freeze({
   [DEVELOPMENT_NPC_ID]: DEVELOPMENT_NPC_SCHEDULE,
   [SECONDARY_DEVELOPMENT_NPC_ID]: SECONDARY_DEVELOPMENT_NPC_SCHEDULE,
+  [ELENA_NPC_ID]: ELENA_NPC_SCHEDULE,
 });
 
 /**
@@ -166,6 +198,7 @@ export function createSecondaryDevelopmentNpc(
     activityState: 'idle',
     activitySince: initialTime,
     locationId: SECONDARY_DEVELOPMENT_NPC_SCHEDULE.residenceId,
+    interiorSpaceId: null,
     balanceMinor: 0,
     currency: 'USD',
     playerActivity: null,

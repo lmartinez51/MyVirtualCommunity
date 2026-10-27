@@ -243,6 +243,27 @@ const ALLOWED_COMMANDS: Record<string, CommandValidator> = {
       return { valid: true };
     },
   },
+  inquireRestaurantService: {
+    validate: (body) => {
+      if (typeof body.staffNpcId !== 'string' || body.staffNpcId.trim() === '') {
+        return { valid: false, error: 'Command "inquireRestaurantService" requires a non-empty string "staffNpcId"' };
+      }
+      return { valid: true };
+    },
+  },
+  requestRestaurantService: {
+    validate: (body) => {
+      if (body.restaurantId !== undefined) {
+        if (typeof body.restaurantId !== 'string' || body.restaurantId.trim() === '') {
+          return { valid: false, error: 'Command "requestRestaurantService" restaurantId must be a non-empty string if provided' };
+        }
+      }
+      if ('attendantId' in body || 'npcId' in body || 'accepted' in body || 'status' in body || 'serviceStatus' in body) {
+        return { valid: false, error: 'Command "requestRestaurantService" forbids client-supplied attendant, NPC, or acceptance parameters' };
+      }
+      return { valid: true };
+    },
+  },
 };
 
 const MAX_BODY_BYTES = 64 * 1024; // 64 KB limit
@@ -375,6 +396,9 @@ export class WorldHttpServer {
     }
 
     return new Promise((resolve) => {
+      if (typeof (this.server as any).closeAllConnections === 'function') {
+        (this.server as any).closeAllConnections();
+      }
       this.server.close(() => {
         this.isListening = false;
         this.serverInfo = null;
@@ -488,6 +512,119 @@ export class WorldHttpServer {
           result: serviceResult,
         });
         return;
+      }
+
+      // 6. GET /api/businesses/:businessId/schedule (Read-only business schedule and operational status)
+      if (
+        method === 'GET' &&
+        pathname.startsWith('/api/businesses/') &&
+        pathname.endsWith('/schedule')
+      ) {
+        const middle = pathname.slice('/api/businesses/'.length, pathname.length - '/schedule'.length);
+        const businessId = decodeURIComponent(middle);
+        if (!businessId || businessId.trim() === '' || middle.includes('/')) {
+          this.sendJson(res, 400, {
+            success: false,
+            error: {
+              code: 'invalid-business-id',
+              message: 'Route parameter "businessId" must be a non-empty string without path separators',
+            },
+          });
+          return;
+        }
+
+        const atParam = url.searchParams.get('at');
+        const scheduleView = this.controller.getBusinessScheduleView(
+          businessId,
+          atParam !== null ? atParam : undefined
+        );
+
+        if (!scheduleView.success) {
+          const statusCode = scheduleView.error?.code === 'business-not-found' ? 404 : 400;
+          this.sendJson(res, statusCode, {
+            success: false,
+            error: scheduleView.error,
+          });
+          return;
+        }
+
+        this.sendJson(res, 200, {
+          success: true,
+          result: scheduleView.result,
+        });
+        return;
+      }
+
+      // Milestone 92: AI NPC Cognition & Perception Endpoints
+      if (pathname.startsWith('/api/npc/')) {
+        const subpath = pathname.slice('/api/npc/'.length);
+        const slashIdx = subpath.lastIndexOf('/');
+        if (slashIdx !== -1) {
+          const agentId = decodeURIComponent(subpath.slice(0, slashIdx));
+          const action = subpath.slice(slashIdx + 1);
+
+          // GET /api/npc/:agentId/perception
+          if (method === 'GET' && action === 'perception') {
+            try {
+              const perception = this.controller.getNpcPerception(agentId);
+              this.sendJson(res, 200, {
+                success: true,
+                result: perception,
+              });
+            } catch (err) {
+              this.sendJson(res, 404, {
+                success: false,
+                error: {
+                  code: 'agent-not-found',
+                  message: (err as Error).message,
+                },
+              });
+            }
+            return;
+          }
+
+          // GET /api/npc/:agentId/diagnostics
+          if (method === 'GET' && action === 'diagnostics') {
+            try {
+              const diagnostics = this.controller.getNpcAiDiagnostics(agentId);
+              this.sendJson(res, 200, {
+                success: true,
+                result: diagnostics,
+              });
+            } catch (err) {
+              this.sendJson(res, 404, {
+                success: false,
+                error: {
+                  code: 'agent-not-found',
+                  message: (err as Error).message,
+                },
+              });
+            }
+            return;
+          }
+
+          // POST /api/npc/:agentId/cycle
+          if (method === 'POST' && action === 'cycle') {
+            try {
+              const cycleResult = await this.controller.runNpcAiCycle(agentId);
+              this.sendJson(res, 200, {
+                success:
+                  cycleResult.status !== 'provider_failed' &&
+                  cycleResult.status !== 'invalid_proposal',
+                result: cycleResult,
+              });
+            } catch (err) {
+              this.sendJson(res, 500, {
+                success: false,
+                error: {
+                  code: 'cycle-execution-error',
+                  message: (err as Error).message,
+                },
+              });
+            }
+            return;
+          }
+        }
       }
 
       // 5. POST /api/commands/:commandName
@@ -718,6 +855,32 @@ export class WorldHttpServer {
    * Serves static client assets (HTML, CSS, JS) from dist/client or src/client.
    */
   private serveStaticFile(res: ServerResponse, pathname: string): boolean {
+    // 3D Playable Blockout Client route (Milestone 79)
+    if (
+      pathname === '/3d' ||
+      pathname === '/3d/' ||
+      pathname === '/minimal-3d' ||
+      pathname === '/minimal-3d/' ||
+      pathname === '/client/3d.html'
+    ) {
+      const pathsToTry = [
+        resolve(process.cwd(), 'clients', 'minimal-3d', 'index.html'),
+        resolve(process.cwd(), 'dist', 'client', '3d.html'),
+      ];
+      for (const p of pathsToTry) {
+        if (existsSync(p) && statSync(p).isFile()) {
+          const content = readFileSync(p);
+          res.writeHead(200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Content-Length': Buffer.byteLength(content),
+            'Cache-Control': 'no-cache',
+          });
+          res.end(content);
+          return true;
+        }
+      }
+    }
+
     let relativePath = pathname === '/' ? 'index.html' : pathname;
     if (relativePath.startsWith('/client/')) {
       relativePath = relativePath.slice('/client/'.length);

@@ -389,7 +389,7 @@ describe('Milestone 58: Residential Access Foundation', () => {
       enterBuilding(state, player.id, 'building:development-residence');
 
       assert.equal(state.version, CURRENT_WORLD_STATE_VERSION);
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
       assert.doesNotThrow(() => validateWorldState(state));
     });
   });

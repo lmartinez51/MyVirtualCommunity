@@ -441,8 +441,8 @@ describe('Phase D: Civil-Time Domain Rules Integration', () => {
 
       sim.tick();
 
-      assert.equal(state.version, 18);
-      assert.equal(CURRENT_WORLD_STATE_VERSION, 18);
+      assert.equal(state.version, 19);
+      assert.equal(CURRENT_WORLD_STATE_VERSION, 19);
 
       // Verify no foreign or persisted civil time keys on state
       const stateKeys = Object.keys(state);
@@ -689,6 +689,7 @@ describe('Phase D: Civil-Time Domain Rules Integration', () => {
         activityState: 'idle',
         activitySince: '2026-09-24T14:00:00.000Z',
         locationId: 'building:development-building',
+        interiorSpaceId: null,
         balanceMinor: 500,
         currency: 'USD',
       };
@@ -759,6 +760,7 @@ describe('Phase D: Civil-Time Domain Rules Integration', () => {
         activityState: 'idle',
         activitySince: '2026-09-24T14:00:00.000Z',
         locationId: 'building:el-paso-library',
+        interiorSpaceId: null,
         balanceMinor: 2000,
         currency: 'USD',
       };

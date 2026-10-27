@@ -27,15 +27,42 @@ import {
   collectOrder,
   transferItemPossession,
   startAccompaniedActivity,
+  evaluateRequestRestaurantService,
+  commitRestaurantServiceInteraction,
+  clearActiveRestaurantService,
 } from '../core/world-state.js';
+import {
+  enterThroughEntranceThreshold,
+  exitThroughEntranceThreshold,
+  traverseInternalConnection,
+  findInteriorSpaceByPlace,
+  findEntranceById,
+  createGomezMorinSpatialTopology,
+} from '../core/real-world-street-topology.js';
 import { Simulation, TickResult } from '../core/simulation.js';
 import { LocalFilePersistence } from '../persistence/local-storage.js';
 import { RealTimeSource } from './time-source.js';
 import { DEFAULT_DEVELOPMENT_PLAYER_ID } from './config.js';
+import {
+  NpcAiRuntime,
+  type NpcCognitionProvider,
+  type NpcPerception,
+  type NpcAiCycleResult,
+  type NpcAiDiagnostics,
+} from '../core/npc-ai/index.js';
+import {
+  findBusinessSchedule,
+  evaluateBusinessScheduleStatus,
+  evaluateBusinessAdmission,
+  type BusinessAdmissionResultCode,
+  type BusinessSchedule,
+} from '../core/business-schedule.js';
+import type { RestaurantOperationalState } from '../core/entities/restaurant.js';
 
 export interface SessionControllerOptions extends BootstrapOptions {
   playerId?: string;
   timeSource?: RealTimeSource;
+  aiProvider?: NpcCognitionProvider;
 }
 
 export interface RuntimeStatus {
@@ -106,6 +133,44 @@ export interface TemporalReconciliationResult {
 }
 
 /**
+ * Result projection for read-only business schedule inquiry (GET /api/businesses/:id/schedule).
+ */
+export interface BusinessScheduleViewResult {
+  readonly success: boolean;
+  readonly result?: {
+    readonly businessId: string;
+    readonly name: string;
+    readonly timeZone: string;
+    readonly worldTime: string;
+    readonly schedule: {
+      readonly operatingDays: readonly number[];
+      readonly hours: {
+        readonly openHour: number;
+        readonly openMinute: number;
+        readonly closeHour: number;
+        readonly closeMinute: number;
+      };
+      readonly lastEntryCutoffMinutes: number;
+      readonly closureOverrides?: readonly string[];
+      readonly version: number;
+    };
+    readonly operationalStatus: {
+      readonly status: RestaurantOperationalState;
+      readonly isOpen: boolean;
+      readonly admissionPermitted: boolean;
+      readonly code: BusinessAdmissionResultCode;
+      readonly message: string;
+      readonly openTimeStr: string;
+      readonly closingTimeStr: string;
+    };
+  };
+  readonly error?: {
+    readonly code: string;
+    readonly message: string;
+  };
+}
+
+/**
  * WorldSessionController (Milestone 29).
  *
  * Authoritative in-memory session controller hosting the World Core.
@@ -133,18 +198,27 @@ export class WorldSessionController {
   private commandQueue: Promise<unknown> = Promise.resolve();
   private isShuttingDown: boolean = false;
   private isStopped: boolean = false;
+  private aiRuntime?: NpcAiRuntime;
 
   constructor(options: SessionControllerOptions = {}) {
     const bootstrapResult = bootstrapWorld({
       persistencePath: options.persistencePath,
       silent: options.silent ?? true,
+      worldSeed: options.worldSeed,
+      initialWorldTime: options.initialWorldTime,
+      initialStateFactory: options.initialStateFactory,
     });
 
     this.clock = bootstrapResult.clock;
     this.state = bootstrapResult.state;
     this.persistence = bootstrapResult.persistence;
-    this.activePlayerId = options.playerId ?? DEFAULT_DEVELOPMENT_PLAYER_ID;
+    const playerAgent = this.state.agents.find((a) => a.agentType === 'player');
+    this.activePlayerId = options.playerId ?? playerAgent?.id ?? DEFAULT_DEVELOPMENT_PLAYER_ID;
     this.timeSource = options.timeSource;
+    this.aiRuntime = new NpcAiRuntime({
+      controller: this,
+      provider: options.aiProvider,
+    });
   }
 
   /**
@@ -191,6 +265,127 @@ export class WorldSessionController {
    */
   public getRestaurantServiceView(staffNpcId: string): InquireRestaurantServiceResult {
     return inquireRestaurantService(structuredClone(this.state), this.activePlayerId, staffNpcId);
+  }
+
+  /**
+   * Returns read-only business schedule and operational status projection.
+   * Grounded in authoritative World Clock (or explicit evaluation timestamp).
+   * Zero state mutation, zero disk write, bypasses command queue.
+   */
+  public getBusinessScheduleView(
+    businessId: string,
+    evaluatedAt?: string | number | Date
+  ): BusinessScheduleViewResult {
+    if (typeof businessId !== 'string' || businessId.trim() === '') {
+      return {
+        success: false,
+        error: {
+          code: 'invalid-business-id',
+          message: 'Parameter "businessId" must be a non-empty string',
+        },
+      };
+    }
+
+    const trimmedId = businessId.trim();
+    const schedule = findBusinessSchedule(trimmedId);
+    if (!schedule) {
+      return {
+        success: false,
+        error: {
+          code: 'business-not-found',
+          message: `Business "${trimmedId}" not found`,
+        },
+      };
+    }
+
+    let evaluationTimeIso: string;
+    if (evaluatedAt !== undefined && evaluatedAt !== null) {
+      const parsedDate = new Date(evaluatedAt);
+      if (Number.isNaN(parsedDate.getTime())) {
+        return {
+          success: false,
+          error: {
+            code: 'invalid-evaluation-time',
+            message: `Evaluation timestamp "${String(evaluatedAt)}" is invalid`,
+          },
+        };
+      }
+      evaluationTimeIso = parsedDate.toISOString();
+    } else {
+      evaluationTimeIso = this.clock.getTime();
+    }
+
+    const operationalState = evaluateBusinessScheduleStatus(schedule, evaluationTimeIso);
+    const admissionDecision = evaluateBusinessAdmission(schedule, evaluationTimeIso);
+
+    return {
+      success: true,
+      result: {
+        businessId: schedule.businessId,
+        name: schedule.name,
+        timeZone: schedule.timeZone,
+        worldTime: evaluationTimeIso,
+        schedule: {
+          operatingDays: schedule.operatingDays,
+          hours: {
+            openHour: schedule.hours.openHour,
+            openMinute: schedule.hours.openMinute,
+            closeHour: schedule.hours.closeHour,
+            closeMinute: schedule.hours.closeMinute,
+          },
+          lastEntryCutoffMinutes: schedule.lastEntryCutoffMinutes,
+          closureOverrides: schedule.closureOverrides ? [...schedule.closureOverrides] : [],
+          version: schedule.version,
+        },
+        operationalStatus: {
+          status: operationalState,
+          isOpen: operationalState === 'open' || operationalState === 'closing-soon',
+          admissionPermitted: admissionDecision.permitted,
+          code: admissionDecision.code,
+          message: admissionDecision.message,
+          openTimeStr: admissionDecision.openTimeStr,
+          closingTimeStr: admissionDecision.closingTimeStr,
+        },
+      },
+    };
+  }
+
+  /**
+   * Milestone 92: Returns the NPC AI runtime orchestrator.
+   */
+  public getNpcAiRuntime(): NpcAiRuntime {
+    if (!this.aiRuntime) {
+      this.aiRuntime = new NpcAiRuntime({ controller: this });
+    }
+    return this.aiRuntime;
+  }
+
+  /**
+   * Injects or overrides the NPC AI runtime orchestrator.
+   */
+  public setNpcAiRuntime(runtime: NpcAiRuntime): void {
+    this.aiRuntime = runtime;
+  }
+
+  /**
+   * Returns read-only bounded perception for the target NPC.
+   */
+  public getNpcPerception(agentId: string): NpcPerception {
+    return this.getNpcAiRuntime().getPerception(agentId);
+  }
+
+  /**
+   * Executes a single AI cognition cycle for the target NPC.
+   */
+  public runNpcAiCycle(agentId: string): Promise<NpcAiCycleResult> {
+    return this.getNpcAiRuntime().runCycle(agentId);
+  }
+
+  /**
+   * Returns AI diagnostics for the target NPC.
+   */
+  public getNpcAiDiagnostics(agentId: string): NpcAiDiagnostics {
+    return this.getNpcAiRuntime().getDiagnostics(agentId);
   }
 
   /**
@@ -323,6 +518,17 @@ export class WorldSessionController {
 
       // 5. Persistence succeeded! Commit candidate to active in-memory state
       this.state = candidate;
+
+      // Milestone 91: Authoritative post-commit interaction synchronization
+      if (commandName === 'requestRestaurantService' && domainResult.success && (domainResult as any).event) {
+        commitRestaurantServiceInteraction((domainResult as any).event);
+      } else if (
+        commandName === 'exitRestaurant' ||
+        commandName === 'exitEntranceThreshold' ||
+        commandName === 'traverseStreet'
+      ) {
+        clearActiveRestaurantService(this.activePlayerId);
+      }
 
       return {
         success: true,
@@ -670,13 +876,91 @@ export class WorldSessionController {
 
       case 'enterRestaurant': {
         const restaurantId = payload.restaurantId as string;
+        const topology = createGomezMorinSpatialTopology();
+        const interior = findInteriorSpaceByPlace(topology, restaurantId);
+        if (interior && interior.entranceIds.length > 0) {
+          const player = candidateState.agents.find((a) => a.id === this.activePlayerId);
+          const entranceId = (payload.entranceId as string) || interior.entranceIds[0];
+          const entrance = findEntranceById(topology, entranceId);
+          if (
+            player &&
+            entrance &&
+            (player.locationId === entrance.facingStreetPlaceId ||
+              player.locationId === entrance.buildingId)
+          ) {
+            return enterThroughEntranceThreshold(candidateState, {
+              agentId: this.activePlayerId,
+              entranceId,
+              spatialPosition: payload.spatialPosition as { x: number; z: number } | undefined,
+            }, topology);
+          }
+        }
         return enterRestaurant(candidateState, this.activePlayerId, restaurantId, { silent: true });
       }
 
       case 'exitRestaurant': {
         const player = candidateState.agents.find((a) => a.id === this.activePlayerId);
         const restaurantId = (payload.restaurantId as string) || (player?.locationId ?? '');
+        const topology = createGomezMorinSpatialTopology();
+        const interior = findInteriorSpaceByPlace(topology, restaurantId);
+        if (interior && interior.entranceIds.length > 0) {
+          const entranceId = (payload.entranceId as string) || interior.entranceIds[0];
+          return exitThroughEntranceThreshold(candidateState, {
+            agentId: this.activePlayerId,
+            entranceId,
+            spatialPosition: payload.spatialPosition as { x: number; z: number } | undefined,
+          }, topology);
+        }
         return exitRestaurant(candidateState, this.activePlayerId, restaurantId);
+      }
+
+      case 'enterEntranceThreshold': {
+        const entranceId = payload.entranceId as string;
+        if (!entranceId) {
+          return {
+            success: false,
+            code: 'missing-entrance-id',
+            message: 'entranceId is required for enterEntranceThreshold',
+          };
+        }
+        return enterThroughEntranceThreshold(candidateState, {
+          agentId: this.activePlayerId,
+          entranceId,
+          spatialPosition: payload.spatialPosition as { x: number; z: number } | undefined,
+        });
+      }
+
+      case 'exitEntranceThreshold': {
+        const entranceId = payload.entranceId as string;
+        if (!entranceId) {
+          return {
+            success: false,
+            code: 'missing-entrance-id',
+            message: 'entranceId is required for exitEntranceThreshold',
+          };
+        }
+        return exitThroughEntranceThreshold(candidateState, {
+          agentId: this.activePlayerId,
+          entranceId,
+          spatialPosition: payload.spatialPosition as { x: number; z: number } | undefined,
+        });
+      }
+
+      case 'traverseInternalConnection': {
+        const connectionId = payload.connectionId as string;
+        if (!connectionId) {
+          return {
+            success: false,
+            code: 'missing-connection-id',
+            message: 'connectionId is required for traverseInternalConnection',
+          };
+        }
+        const topology = createGomezMorinSpatialTopology();
+        return traverseInternalConnection(candidateState, {
+          agentId: this.activePlayerId,
+          connectionId,
+          spatialPosition: payload.spatialPosition as { x: number; z: number } | undefined,
+        }, topology);
       }
 
       case 'traverseStreet': {
@@ -743,6 +1027,21 @@ export class WorldSessionController {
       case 'collectOrder': {
         const orderId = payload.orderId as string;
         return collectOrder(candidateState as any, this.activePlayerId, orderId);
+      }
+
+      case 'inquireRestaurantService': {
+        const staffNpcId = payload.staffNpcId as string;
+        return inquireRestaurantService(candidateState as any, this.activePlayerId, staffNpcId);
+      }
+
+      case 'requestRestaurantService': {
+        const restaurantId = payload.restaurantId as string | undefined;
+        return evaluateRequestRestaurantService(
+          candidateState,
+          this.activePlayerId,
+          restaurantId,
+          payload
+        );
       }
 
       default:

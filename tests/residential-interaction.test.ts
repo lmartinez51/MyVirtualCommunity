@@ -355,7 +355,7 @@ describe('Milestone 59: Residential Interaction Contract', () => {
 
       interactAtResidence(state, player.id, 'building:development-residence');
 
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
       assert.equal(state.version, CURRENT_WORLD_STATE_VERSION);
       assert.doesNotThrow(() => validateWorldState(state));
     });

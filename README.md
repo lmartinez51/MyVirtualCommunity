@@ -12,6 +12,12 @@ The World Core serves as the single source of truth and authoritative owner of w
 - **Testing**: Node.js native test runner (`node:test`, `node:assert/strict`)
 - **Dependencies**: Zero runtime dependencies
 
+## Architectural Documentation
+
+The formal semantic areas of authority, invariants, lifecycle rules, and cross-domain interaction contracts for the World Core are established in:
+
+- **[WORLD DOMAIN MODEL v0.1](docs/world-domain-model-v0.1.md)**: Defines the 21 bounded domains of the World Core, single semantic authority principle, capability ownership, command/transition/event lifecycle, cross-domain consistency contracts, and conceptual AUD closure matrix.
+
 ## Milestone 5: Restaurant Operational State
 
 Milestone 5 introduces the first operational availability state for business entities:
@@ -2038,6 +2044,918 @@ World State
 - **Offline Simulation Continuity**: Multi-hour leaps resolve both NPCs deterministically in a single tick.
 - **Schema Version**: Schema version remains strictly **18** (`CURRENT_WORLD_STATE_VERSION = 18`). Zero migrations or persistent behavioral fields.
 
+## Milestone 65: Contextual NPC Behavior Foundation [CLOSED / VERIFIED]
+
+Milestone 65 establishes the minimal deterministic foundation enabling an NPC to derive a **contextual intent from current world facts**, instead of relying exclusively on its scheduled routine. It forms the architectural bridge from pure routine execution toward contextual reaction:
+
+```text
+WORLD FACTS
+    ↓
+CONTEXTUAL INTERPRETATION (evaluateNpcContextualIntent)
+    ↓
+DETERMINISTIC INTENT ('continue-routine' | 'interact-with-nearby-agent')
+```
+
+### 1. Architectural Principles & Boundaries
+- **World Fact $\neq$ Interpretation $\neq$ Intent $\neq$ Command $\neq$ State Transition**: Pure evaluation layer. Deriving a contextual intent does NOT directly mutate WorldState or execute actions.
+- **Strict Precedence & Fallback**:
+  ```text
+  Authoritative World Constraints
+          ↓
+  Contextual Relevance
+          ↓
+  Deterministic Intent
+          ↓
+  Routine remains fallback ('continue-routine')
+  ```
+  When no valid co-located interaction partner exists, or when venue constraints prevent interaction, the NPC deterministically falls back to `'continue-routine'`.
+- **Pure & Non-Persistent**: Zero state mutation during derivation. Zero behavioral fields added to `Agent` or `WorldState`. Schema version remains strictly **18** (`CURRENT_WORLD_STATE_VERSION = 18`).
+- **Zero AI / Autonomous Planning**: 100% deterministic, pure evaluation without LLMs, prompts, embeddings, Behavior Trees, Utility AI, GOAP, blackboards, or cognitive engines.
+
+### 2. Required Data Model (`src/core/npc-behavior.ts`)
+- **`NpcContextualIntentType`**:
+  ```ts
+  type NpcContextualIntentType =
+    | 'continue-routine'
+    | 'interact-with-nearby-agent';
+  ```
+- **`NpcContextualIntent`**:
+  ```ts
+  interface NpcContextualIntent {
+    readonly npcId: string;
+    readonly intentType: NpcContextualIntentType;
+    readonly targetAgentId?: string;
+    readonly reason: string;
+  }
+  ```
+
+### 3. Pure Contextual Evaluation (`evaluateNpcContextualIntent` & `deriveNpcContextualIntent`)
+- **Authoritative Fact Inspection**:
+  - NPC identity, agent type (`npc`), spatial location (`agent.locationId`), and routine schedule lookup (`findNpcSchedule`).
+  - Spatial location validity against authoritative `state.places` and `state.restaurants`.
+  - Business Authority domain constraints: if location is a closed restaurant (`operationalState === 'closed'`), interaction is unavailable and reverts cleanly to `'continue-routine'`.
+  - Co-located candidate agents via `areAgentsCoLocated(state, npcId, other.id)` filtering out self, invalid entities, and invalid locations.
+  - Deterministic candidate selection: prioritizes players over NPCs, broken by lexicographical ID order.
+- **Context Inspection Integration**: `inspectNpcContext(state, npcId)` projects the derived `contextualIntent` alongside existing behavioral state and routine action.
+
+## Milestone 66: Contextual NPC Interaction Execution [CLOSED / VERIFIED]
+
+Milestone 66 extends the M65 Contextual NPC Behavior Foundation by transforming derived contextual intent (`interact-with-nearby-agent`) into an authoritative, executable social action (`greet-agent`) executed strictly through existing Social Authority:
+
+```text
+World State
+    ↓
+Routine / Spatial Context
+    ↓
+NpcContextualIntent ('interact-with-nearby-agent')
+    ↓
+NpcContextualAction ('greet-agent')
+    ↓
+Social Authority (executeNpcGreeting)
+    ↓
+World State / Social Consequence (authoritative dialogue response, zero state corruption)
+```
+
+### 1. Architectural Principles & Boundaries
+- **Derivation vs. Execution Separation**: Contextual action derivation is purely derived and non-mutating (`evaluateNpcContextualAction`, `deriveNpcContextualAction`). Execution delegates entirely to authoritative Social Authority (`executeNpcGreeting`).
+- **Authority Revalidation at Execution Time**: Derived actions represent ephemeral intent proposals. When `executeNpcContextualAction` executes, Social Authority revalidates all world facts in the live state (agent existence, alive status, operational venue constraints, and spatial co-location via `areAgentsCoLocated`). If the target has moved away between derivation and execution, Social Authority rejects the action with `'agents-not-co-located'`.
+- **Zero State Mutation & Idempotency**: Executing an NPC greeting produces authoritative dialogue output while preserving absolute state isolation (no unbounded acquaintance arrays, no history corruption, no memory leaks). Repeated executions under identical conditions produce deterministic dialogue with zero side effects.
+- **Pure & Non-Persistent**: Schema version remains strictly **18** (`CURRENT_WORLD_STATE_VERSION = 18`). Zero persistent fields added to `Agent` or `WorldState`.
+- **Zero AI / Autonomous Planning**: 100% deterministic, pure evaluation and execution without LLMs, prompts, embeddings, Behavior Trees, Utility AI, GOAP, blackboards, or cognitive engines.
+
+### 2. Required Data Model (`src/core/npc-behavior.ts`)
+- **`NpcContextualActionType`**:
+  ```ts
+  type NpcContextualActionType = 'greet-agent';
+  ```
+- **`NpcContextualAction`**:
+  ```ts
+  interface NpcContextualAction {
+    readonly actorNpcId: string;
+    readonly actionType: NpcContextualActionType;
+    readonly targetAgentId: string;
+    readonly reason: string;
+  }
+  ```
+
+### 3. Contextual Action Evaluation & Derivation (`src/core/npc-behavior.ts`)
+- `evaluateNpcContextualAction(state, npcId)`: Pure evaluation inspecting contextual intent from `evaluateNpcContextualIntent`. When intent is `'interact-with-nearby-agent'` targeting a valid agent, derives a concrete `'greet-agent'` contextual action. If intent is `'continue-routine'`, returns `null` (no action).
+- `deriveNpcContextualAction(state, npcId)`: Pure convenience accessor returning `NpcContextualAction | null`.
+- `inspectNpcContext(state, npcId)`: Projects `contextualAction` into `InspectNpcContextResult` alongside `behavioralState`, `routineAction`, and `contextualIntent`.
+
+### 4. Authoritative Social Execution (`src/core/world-state.ts`)
+- **`resolveNpcGreetingResponse(state, npcId, targetAgentId)`**: Pure dialogue resolution shared by player- and NPC-initiated greetings, grounded in the NPC's active behavioral phase (e.g. Elena working vs. resting, Lorenzo commuting).
+- **`executeNpcGreeting(state, actorNpcId, targetAgentId)`**: Authoritative Social Authority function validating actor, target, venue operational state, and spatial co-presence (`areAgentsCoLocated`).
+- **`executeNpcContextualAction(state, action)`**: Bridges the derived `NpcContextualAction` to Social Authority execution, returning `ExecuteNpcContextualActionResult` with status codes (`'success'`, `'agents-not-co-located'`, `'venue-not-operational'`, etc.) and dialogue response.
+
+## Milestone 67: Contextual NPC Simulation Integration [CLOSED / VERIFIED]
+
+Milestone 67 integrates the derived contextual NPC interaction pipeline (M65/M66) directly into the authoritative `Simulation.tick()` lifecycle:
+
+```text
+Simulation.tick()
+       ↓
+NPC routine evaluation
+       ↓
+Context inspection
+       ↓
+Contextual intent
+       ↓
+Contextual action
+       ↓
+Social Authority validation
+       ↓
+Contextual interaction execution
+       ↓
+Tick-level observable result (TickResult.npcContextualInteractions)
+```
+
+### 1. Architectural Principles & Boundaries
+- **Simulation Lifecycle Participation**: Contextual NPC interactions participate in actual discrete simulation ticks without direct state mutation. Simulation derives actions via pure evaluation (`deriveNpcContextualAction`) and delegates execution strictly to Social Authority (`executeNpcContextualAction` -> `executeNpcGreeting`).
+- **Authority Revalidation at Point of Execution**: Authority checks live world facts at the moment of execution. If the target agent moves away or the venue closes between derivation and execution, Social Authority cleanly rejects the action (`'agents-not-co-located'` or `'venue-not-operational'`).
+- **Failure Isolation**: A rejected or failed contextual interaction does NOT invalidate or abort the simulation tick. The tick completes normally and reports the failure in `TickResult.npcContextualInteractions`.
+- **Tick-Level Duplicate Protection**: Prevents the same NPC-target pair from executing the same contextual action multiple times within the same simulation tick via an ephemeral, tick-scoped set (`Set<string>`). Protection is strictly tick-local; resets on the next tick with zero persistent cooldown state.
+- **Multiple NPCs & Independence**: Operates generically across all eligible NPC agents (e.g. Elena, Lorenzo) without identity-specific branching. Multiple NPCs independently evaluate context and can produce simultaneous interactions in the same tick.
+- **Zero Persistent Interaction State**: Pure and non-mutating on world state entities. Greetings do not introduce unbounded acquaintances, memories, cooldown fields, or schema changes. Persisted schema remains strictly **18** (`CURRENT_WORLD_STATE_VERSION = 18`).
+- **Zero AI / Autonomous Planning**: 100% deterministic, discrete, and offline compatible; no LLMs, prompts, embeddings, Behavior Trees, Utility AI, GOAP, blackboards, or cognitive engines.
+
+### 2. Data Model (`src/core/simulation.ts`)
+- **`NpcContextualInteractionResult`**:
+  ```ts
+  interface NpcContextualInteractionResult {
+    readonly actorNpcId: string;
+    readonly targetAgentId: string;
+    readonly actionType: NpcContextualActionType;
+    readonly success: boolean;
+    readonly code: ExecuteNpcContextualActionResultCode | string;
+    readonly response?: string;
+    readonly message?: string;
+  }
+  ```
+- **`TickResult` Extension**: Exposes `npcContextualInteractions?: NpcContextualInteractionResult[]` (and alias `contextualInteractions`) containing all contextual interaction attempts and outcomes produced during the tick.
+
+## Milestone 68: Spatial Movement & Navigation Contract
+
+Milestone 68 defines and establishes the architectural contract that bridges the authoritative topological World Core with future physical movement and navigation systems:
+
+```text
++-------------------------------------------------------------+
+| Layer A: World Topology (AUTHORITATIVE WORLD TRUTH)         |
+| - Logical containment: City -> District -> Place           |
+| - Agent.locationId: authoritative logical entity ID         |
+| - transitionAgentLocation(): instantaneous logical update   |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+| Layer C: Navigation (DETERMINES HOW MOVEMENT OCCURS)         |
+| - Traversal mechanics, paths, routing, NavMesh              |
+| - Non-authoritative: determines HOW, not WHETHER valid      |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+| Layer B: Physical Spatial Representation                    |
+| - Geometry, positions, transforms, coordinates              |
+| - Implementation-specific (client / server / engine)        |
+| - NEVER authoritative world truth                           |
++-------------------------------------------------------------+
+```
+
+### 1. Architectural Principles & Boundaries
+- **Layer A (World Topology)**: The authoritative world representation (City -> District -> Neighborhood -> Street -> Building -> Restaurant). The World Core owns semantic truth, topological containment, and agent placement.
+- **Layer B (Physical Spatial Representation)**: Physical representation (geometry, positions, transforms, bounds) is implementation-specific and must NEVER become authoritative world truth.
+- **Layer C (Navigation)**: Traversal mechanics, routing, and pathfinding determine *how* movement occurs. World Core determines *whether* world state is valid.
+- **Authority Rule**: World Core -> Navigation Request -> Navigation System -> Physical Traversal -> Authoritative World Transition. Physical representation or client/renderer positions never dictate world truth.
+- **Logical Location Semantics**: `Agent.locationId` strictly represents the authoritative logical/topological place or restaurant entity ID. It is never a physical vector, coordinate, or transform.
+- **Logical Transition Semantics**: `transitionAgentLocation()` is an instantaneous logical/topological location transition, not a physical movement simulation.
+- **Invalid vs. Unreachable Distinction**:
+  - `INVALID_DESTINATION`: Target destination does not exist in authoritative World Core (`state.places` or `state.restaurants`). This is a World Core truth validation failure.
+  - `UNREACHABLE_DESTINATION`: Target destination exists and is topologically valid in world truth, but the navigation layer (NavMesh/pathfinder) cannot find a valid physical path. This is a Navigation-layer reachability failure.
+- **Engine Independence**: Zero coupling to Unity, NavMesh, 3D physics, coordinates (`x`, `y`, `z`), vectors, or browser DOM.
+- **Preserved Schema Version 18**: Pure contract and validation helpers without state mutations or entity schema changes (`CURRENT_WORLD_STATE_VERSION = 18`).
+
+### 2. Contract Helpers & Model (`src/core/spatial-contract.ts`)
+- **`validateLogicalDestination(state, targetPlaceId, currentLocationId?, agentType?)`**: Pure evaluator validating destination existence in World Core topology without mutating state.
+- **`categorizeSpatialFailure(targetExistsInWorld, isPhysicallyReachable)`**: Pure evaluator distinguishing World Core truth failures (`invalid-destination`) from navigation reachability failures (`unreachable-destination`).
+- **`SPATIAL_MOVEMENT_CONTRACT`**: Frozen, runtime-accessible introspection specification detailing layers, authority rules, and semantics.
+
+## Milestone 69: Navigation Provider Contract
+
+Milestone 69 formally defines the engine-independent contract between the authoritative World Core and an external physical navigation system (e.g. Unity NavMesh, Unreal, a 3D engine, a headless simulator, or a server-side router):
+
+```text
+WORLD INTENT / ROUTINE ACTION
+        ↓
+WORLD CORE
+        ↓
+validateLogicalDestination()
+        ↓
+NavigationRequest
+        ↓
+NavigationProvider
+        │
+        ├── route-unavailable (unreachable-destination)
+        ├── traversal-interrupted
+        ├── traversal-failed
+        └── arrived
+                 ↓
+        WORLD CORE REVALIDATION (validateArrivalAndCommit)
+                 ↓
+        transitionAgentLocation()
+                 ↓
+        AUTHORITATIVE WORLD STATE
+```
+
+### 1. Architectural Principles & Boundaries
+- **World Core Sole Authority**: The Navigation Provider is NEVER authoritative over WorldState. It determines whether/how physical traversal occurs and reports the result. Only the World Core may authorize, revalidate, and commit logical arrivals.
+- **Separation of Request, Traversal, and Arrival**:
+  - `NavigationRequest`: Ephemeral integration object requesting physical traversal from authoritative origin to destination.
+  - `Physical Traversal`: Non-authoritative traversal simulated or executed by the external provider.
+  - `Arrival`: Provider reports traversal completion (`status: 'arrived'`); does NOT mutate world truth directly.
+- **Mandatory Arrival Revalidation (`validateArrivalAndCommit`)**:
+  - Result status must be `'arrived'`.
+  - Request and Result identity must match (`requestId`, `agentId`, `destinationPlaceId`).
+  - Agent must still exist in `state.agents`.
+  - Destination must still exist in `state.places` or `state.restaurants`.
+  - Stale origin protection: `agent.locationId` must match `request.originPlaceId` (rejection if agent moved while traversal was in flight).
+  - Idempotency: Returns `already-at-destination` with `changed: false` if agent already reached destination.
+  - Only on complete revalidation is `transitionAgentLocation()` invoked.
+- **Provider Failure Isolation**: Provider exceptions or crashes cannot corrupt WorldState; state remains completely intact.
+- **Engine Independence**: Zero coupling to Unity, Unreal, NavMesh, coordinates (`x`, `y`, `z`), vectors, or browser DOM.
+- **Preserved Schema Version 18**: Pure contract types, factories, and validators without schema changes (`CURRENT_WORLD_STATE_VERSION = 18`).
+
+### 2. Contract Helpers & Models (`src/core/navigation-contract.ts`)
+- **`NavigationRequest`**: Ephemeral integration request containing `{ requestId, agentId, originPlaceId, destinationPlaceId, requestedAt, agentType }`.
+- **`NavigationResult`**: Traversal outcome report containing `{ requestId, agentId, destinationPlaceId, status, completedAt, failureCategory?, message }`.
+- **`NavigationProvider`**: Replaceable engine-independent interface exposing `requestTraversal(request): Promise<NavigationResult> | NavigationResult`.
+- **`createNavigationRequest(state, agentId, destinationPlaceId, currentTime)`**: Pure factory validating logical destination before dispatching to provider.
+- **`validateArrivalAndCommit(state, request, result)`**: Authoritative gatekeeper executing arrival revalidation and atomic location transition.
+- **`DeterministicMockNavigationProvider`**: Headless mock provider for deterministic tests and demonstrations without coordinates or NavMesh.
+
+## Milestone 70: Physical World Representation & Spatial Mapping
+
+Milestone 70 establishes the engine-independent contract between the authoritative World Core topology and external physical 3D representations (e.g. Unity, Unreal, Three.js, or headless simulators), formally answering how an authoritative world entity maps to a physical representation without granting authority to the physical representation:
+
+```text
+             AUTHORITATIVE WORLD CORE (Layer A)
+                    (Owns WorldState & Truth)
+                                │
+                                ▼
+              PHYSICAL MAPPING LAYER (M70 Contract)
+          (World Entity ID ↔ Physical Representation ID)
+          (Semantic Spatial Anchors Without Coordinates)
+                                │
+                                ▼
+             EXTERNAL PHYSICAL ENGINE (Layers B & C)
+              (Owns Geometry, Transforms, Coordinates)
+```
+
+### 1. Architectural Principles & Boundaries
+- **World Core Sole Authority**: Logical World Identity and Physical Representation are strictly decoupled. World Core owns entity identity, logical containment, world state, and state transitions. Physical engines own geometry, coordinates, transforms, meshes, collision, and rendering. Physical representations are NEVER authoritative over world state.
+- **External Integration / Runtime State**: `PhysicalMappingRegistry` is an external integration structure. It is NOT part of `WorldState`, NOT serialized, NOT persistent, and NOT a dependency of `Simulation`, `transitionAgentLocation()`, or `validateArrivalAndCommit()`. World Core remains 100% operational when no physical registry exists.
+- **Semantic Spatial Anchors Without Coordinates**: `SpatialAnchor` represents stable functional locations on world entities (e.g. `entrance`, `interior`, `service-entry`). It contains zero coordinates, transforms, quaternions, or vectors.
+- **Cardinality & Replaceability**: Supports 1:1, 1:many (e.g. restaurant exterior facade + interior dining scene), and many:1 container mappings. Physical representations can be destroyed or swapped across engines (e.g. Unity prefab -> Three.js glTF) without altering World Core.
+- **Reverse Lookup (Representation ID -> World Entity ID)**: Provides identification only for external rendering engines; NEVER grants authority to mutate WorldState or alter locations.
+- **Physical Failure Isolation**: If a physical representation is destroyed or marked unavailable, the authoritative World Entity remains completely intact.
+- **Engine Independence**: Zero coupling to Unity, Unreal, Three.js, Canvas, DOM, WebGL, coordinates, or transforms.
+- **Preserved Schema Version 18**: Pure integration types and registry without schema changes (`CURRENT_WORLD_STATE_VERSION = 18`).
+
+### 2. Contract Helpers & Models (`src/core/physical-mapping.ts`)
+- **`WorldEntityType`**: Domain vocabulary reflecting existing entities (`'city' | 'district' | 'neighborhood' | 'street' | 'building' | 'restaurant' | 'agent'`).
+- **`PhysicalRepresentationType`**: Descriptive classification (`'world-container' | 'terrain' | 'street' | 'building' | 'interior' | 'entrance' | 'navigation-anchor' | 'agent'`).
+- **`PhysicalRepresentationAvailability`**: Physical status (`'available' | 'unavailable' | 'destroyed'`).
+- **`PhysicalEntityMapping`**: Immutable mapping record connecting a world entity to a physical representation ID.
+- **`SpatialAnchor`**: Semantic anchor point (`anchorId`, `worldEntityId`, `anchorType`, `description?`) with zero coordinates.
+- **`PhysicalMappingRegistry`**: Runtime registry supporting mapping registration, unregistration, multi-representation lookups, reverse lookups, and anchor resolution.
+- **`resolvePhysicalMapping(state, registry, worldEntityId)`**: Pure evaluator resolving physical representation availability against WorldState.
+- **`resolveSpatialAnchor(state, registry, worldEntityId, anchorId)`**: Pure evaluator resolving semantic anchors against WorldState.
+
+## Milestone 71: Physical Client Projection Contract
+
+Milestone 71 establishes the engine-independent boundary separating the authoritative World Core from external physical client representations (Unity, Unreal, Three.js, Canvas 2D, headless test harnesses):
+
+```text
+               AUTHORITATIVE WORLD CORE (Layer A)
+             (WorldState, Simulation, Domain Rules)
+                               │
+            projectWorldState(state, observerAgentId, registry)
+                               │
+                               ▼
+            WORLD PROJECTION SNAPSHOT (Layer B1)
+         (Read-Only, Observer-Scoped, Non-Authoritative)
+                               │
+               ┌───────────────┴───────────────┐
+               ▼                               ▼
+     PhysicalClientAdapter A         PhysicalClientAdapter B
+       (e.g. Unity Client)             (e.g. Web Spectator)
+               │                               │
+       reconcileWorldProjection()      reconcileWorldProjection()
+               │                               │
+               ▼                               ▼
+       Physical Scene A                Physical Scene B
+```
+
+And for Client-Originated Intent:
+
+```text
+       PHYSICAL CLIENT (Unity / Web / Headless)
+               │
+       adapter.createIntent(commandName, payload)  [ENVELOPE ONLY]
+               │
+               ▼
+       AUTHORITATIVE COMMAND BOUNDARY
+       (WorldSessionController.dispatchCommand / Domain Functions)
+               │
+               ▼
+       DOMAIN AUTHORITY VALIDATION
+               │
+               ├── Rejected  ──>  Zero Mutation (Client re-aligns to truth)
+               │
+               └── Approved  ──>  Authoritative WorldState Transition
+                                         │
+                                         ▼
+                                  New Projection Snapshot
+                                         │
+                                         ▼
+                                  Client Reconciliation
+```
+
+### 1. Architectural Boundary & Invariants
+- **World Core Authority**: World Core remains the sole authority over `WorldState`. Physical clients are derived, disposable visual representations.
+- **PhysicalClientAdapter Responsibility**: The adapter retains the latest snapshot, computes pure reconciliation reports, and creates `ClientIntent` envelopes. It has ZERO world authority and NEVER executes or routes commands.
+- **Observer-Scoped Projection**: Projections are strictly scoped to the observer agent's location (`observerLocationId`), immediate topological connections, and co-located agents. Zero omniscient leakage.
+- **World Facts vs. Presentation**: Authoritative world facts (`operationalState`, `isResidential`, `agentType`) and M70 mapping metadata are projected. Coordinates (`x, y, z`), transforms, rotations, colliders, physics, and NavMesh are strictly excluded.
+- **Snapshot Identity Semantics**: `snapshotId` is derived as `"proj:" + observerAgentId + ":" + worldTime`, with `worldTime` representing the authoritative capture time. Schema version remains 18.
+- **Pure Reconciliation**: `reconcileWorldProjection()` computes `entitiesToSpawn`, `entitiesToDespawn`, and `entitiesToUpdate`. Strictly unidirectional (World Core -> Client).
+
+### 2. Contract Helpers & Models (`src/core/world-projection.ts`)
+- **`ProjectedPhysicalMapping`**: Client-safe projection metadata (`mappingId`, `representationId`, `representationType`, `availability`).
+- **`ProjectedSpatialAnchor`**: Client-safe semantic spatial anchor (`anchorId`, `anchorType`, `description?`) with zero coordinates.
+- **`ProjectedEntity`**: Observer-visible world entity combining facts and physical mappings.
+- **`WorldProjectionSnapshot`**: Immutable snapshot stamped with `snapshotId`, `worldTime`, and `schemaVersion: 18`.
+- **`ClientIntent`**: Minimal transport envelope (`intentId`, `clientId`, `agentId`, `commandName`, `payload`).
+- **`ProjectionReconciliation`**: Pure diff (`isStale`, `entitiesToSpawn`, `entitiesToDespawn`, `entitiesToUpdate`).
+- **`projectWorldState(state, observerAgentId, registry)`**: Pure evaluator deriving an observer-scoped snapshot.
+- **`reconcileWorldProjection(prev, curr)`**: Pure evaluator comparing two snapshots.
+- **`createClientIntent(clientId, agentId, commandName, payload)`**: Pure envelope factory.
+- **`PhysicalClientAdapter`**: Engine-independent client adapter managing snapshot retention and intent creation.
+
+## Milestone 72: Minimal 3D Client Prototype
+
+Milestone 72 formally validates the architectural hypothesis that the authoritative World Core can be represented by a minimal 3D client without altering World Core rules, authority, state, persistence, simulation, or domain contracts:
+
+```text
+               AUTHORITATIVE WORLD CORE
+         (WorldState, Simulation, Domain Rules)
+                          │
+                          │ projectWorldState(state, observerAgentId)
+                          ▼
+              WORLD PROJECTION SNAPSHOT (M71)
+       (Observer-Scoped, Read-Only, Non-Authoritative)
+                          │
+                          ▼
+            MINIMAL 3D CLIENT ADAPTER (M72)
+             (PhysicalClientAdapter Integration)
+                          │
+                          ├── reconcileScene()
+                          ▼
+             ENGINE-INDEPENDENT 3D SCENE GRAPH
+            (Scene3D, Node3D, Transform3D, Vector3)
+                          │
+                          ▼
+              MINIMAL WEBGL PRESENTATION
+              (Direct WebGL 1.0/2.0 Shaders & Buffers)
+```
+
+And for Client-Originated User Interaction:
+
+```text
+          USER INPUT IN 3D CLIENT (WASD / Keyboard / UI)
+                          │
+       ┌──────────────────┴──────────────────┐
+       ▼                                     ▼
+LOCAL 3D MOVEMENT                     SEMANTIC ACTION
+movePlayerVisual(delta)               client.createIntent('enterBuilding', ...)
+Updates Scene3D Transform ONLY        (Envelope Only, Zero World Authority)
+World Core Location UNCHANGED                        │
+                                                     ▼
+                                      WORLD CORE COMMAND BOUNDARY
+                                      enterBuilding(state, agentId, buildingId)
+                                                     │
+                                                     ▼
+                                      AUTHORITATIVE WORLD TRANSITION
+                                      Agent.locationId = 'building:...'
+                                                     │
+                                                     ▼
+                                      NEW PROJECTION SNAPSHOT (M71)
+                                                     │
+                                                     ▼
+                                      3D SCENE RECONCILIATION
+                                      Despawn street entities / Spawn interior
+```
+
+### 1. Key Validations & Invariants
+- **Core Hypothesis Validated**: The existing Canvas 2D client representation can be complemented or replaced by a minimal 3D client without changing any World Core logic or data structures.
+- **Strict Separation of 3D Transform vs. Logical Location**: Local 3D coordinate adjustments (`x, y, z` in `Node3D.transform.position`) are strictly presentation-level and have ZERO effect on `Agent.locationId` in World Core.
+- **Zero Coordinates in World Core**: `WorldState` remains strictly topological; no coordinates, vectors, matrices, transforms, or colliders enter World Core or persistence.
+- **Pure Projection Consumption**: `Minimal3DClient` binds `PhysicalClientAdapter` directly to `Scene3D`, reconciling scene nodes exclusively from `entitiesToSpawn`, `entitiesToDespawn`, and `entitiesToUpdate`.
+- **Authoritative Round-Trip Cycle**: Actions are packaged as `ClientIntent` envelopes, dispatched to authoritative commands (e.g. `enterBuilding`), committed to `WorldState`, projected via M71 snapshots, and reconciled into 3D scene nodes.
+- **Zero New Dependencies**: Uses native browser WebGL (WebGL 1.0/2.0) with handcrafted 4x4 matrix math, lighting shaders, and unit primitives (box, cylinder, plane). Zero Three.js, Babylon.js, or external 3D packages.
+- **Disposable Architecture**: All 3D client code resides strictly within `clients/minimal-3d/`. World Core and simulation operate 100% headlessly with or without the 3D client.
+- **Schema Preservation**: `CURRENT_WORLD_STATE_VERSION` remains strictly **18**.
+
+### 2. Prototype Structure (`clients/minimal-3d/`)
+- **`scene-3d.ts`**: Engine-independent 3D scene model (`Vector3`, `Euler3`, `Transform3D`, `Primitive3D`, `Node3D`, `Scene3D`).
+- **`minimal-3d-client.ts`**: Adapter integration binding M71 `PhysicalClientAdapter` to `Scene3D`, handling spawning, despawning, property updates, local player movement, and intent creation.
+- **`webgl-renderer.ts`**: Zero-dependency WebGL renderer providing perspective camera, directional lighting, and procedural primitive rendering.
+- **`index.html`**: Interactive visible browser viewer featuring WebGL canvas, HUD (authoritative vs. local 3D coordinates), movement controls, and authoritative round-trip action trigger.
+
+## Milestone 73: Runtime Traversal Coordinator
+
+Milestone 73 establishes the engine-independent runtime orchestration contract for coordinating active, in-flight physical traversals between logical world locations without polluting World Core:
+
+```text
+                  MOVEMENT INTENT
+                        │
+                        ▼
+            startTraversal(state, agentId, destId)
+                        │
+       ┌────────────────┴────────────────┐
+       ▼                                 ▼
+NAVIGATION REQUEST (M69)        ACTIVE TRAVERSAL REGISTRY
+(Origin, Dest, RequestedAt)     Map<agentId, ActiveTraversal>
+       │                        (0 or 1 active traversal per agent)
+       │                                 │
+       ▼                                 ├── Supersede / Cancel prior request
+NAVIGATION PROVIDER / 3D CLIENT          └── Stale request rejection
+(Physical Traversal in transit)
+       │
+       ▼
+NAVIGATION RESULT (arrived / failure)
+       │
+       ▼
+completeTraversal(state, result)
+       │
+       ├── Request Mismatch / Stale ──> REJECTED (Zero Mutation)
+       ├── Provider Failure/Blocked  ──> CLEARED (Zero Mutation)
+       └── Provider 'arrived'
+                 │
+                 ▼
+       validateArrivalAndCommit() (M69 Gatekeeper)
+                 │
+                 ├── Stale Origin / Invalid ──> REJECTED (Zero Mutation)
+                 └── Validated Arrival
+                           │
+                           ▼
+                 transitionAgentLocation() (World Core)
+                           │
+                           ├── agent.locationId = destination
+                           └── Clean up active traversal record
+```
+
+### 1. Architectural Invariants
+- **World Truth != Runtime Traversal State != Physical Transform**: `Agent.locationId` in `WorldState` is the sole authoritative logical location. In-flight traversal leaves `Agent.locationId` strictly unchanged at origin.
+- **Single Active Traversal Per Agent**: An agent may have at most one active traversal. Starting a new traversal (`A -> C`) automatically supersedes any previous traversal (`A -> B`).
+- **Stale & Superseded Result Invalidation**: Late arrival results for superseded or cancelled requests are rejected with `stale-request` or `no-active-traversal` with **zero state mutation**.
+- **Arrival Authority Delegation**: The coordinator never directly assigns `agent.locationId`. It delegates solely to M69 `validateArrivalAndCommit()`, which authorizes and commits the transition.
+- **Pure In-Memory Runtime Orchestration**: `RuntimeTraversalCoordinator` is not part of `WorldState`, is not serialized, and is not persisted.
+- **Schema Preservation**: `CURRENT_WORLD_STATE_VERSION` remains strictly **18**.
+
+### 2. Contract Helpers & Models (`src/core/traversal-coordinator.ts`)
+- **`ActiveTraversal`**: Transient in-memory record (`request: NavigationRequest`, `startedAt: string`).
+- **`RuntimeTraversalCoordinator`**:
+  - `startTraversal(state, agentId, destId, currentTime, customRequestId?)`: Creates request via M69, supersedes prior active traversal, and registers new active record.
+  - `completeTraversal(state, result)`: Revalidates active request identity, handles provider failure outcomes, and delegates arrival to `validateArrivalAndCommit()`.
+  - `cancelTraversal(agentId, reason?)`: In-memory cancellation invalidating future completion.
+  - `executeTraversalWithProvider(state, agentId, destId, time, provider)`: Convenience orchestrator integrating provider execution.
+
+## Milestone 74: Physical Traversal Runtime Integration
+
+Milestone 74 introduces the client-side physical traversal runtime capable of executing time-spanning movement over multiple frames/discrete steps in presentation space and reporting arrival to the M73 `RuntimeTraversalCoordinator`, without adding physical movement state to World Core:
+
+```text
+                  MOVEMENT INTENT
+                        │
+                        ▼
+NAVIGATION REQUEST ───► M73 RUNTIME TRAVERSAL COORDINATOR
+                        │
+                        ▼
+           PHYSICAL TRAVERSAL RUNTIME (M74)
+           implements NavigationProvider
+                        │
+           ┌────────────┴────────────┐
+           ▼                         ▼
+    Scene3D Transform         Deterministic step(dt)
+   (origin ──► destination)  (Interpolation & Progress)
+           │                         │
+           ▼                         ▼
+   Time/Frame Steps          In-Flight Transit
+   (T0, T1, T2...)           Agent.locationId === origin
+           │                         │
+           └────────────┬────────────┘
+                        ▼
+            PHYSICAL ARRIVAL DETECTED
+            (distance <= arrivalThreshold)
+                        │
+                        ▼
+NAVIGATION RESULT ────► M73 completeTraversal()
+(status: 'arrived')     │
+                        ▼
+            validateArrivalAndCommit() (M69 Gatekeeper)
+                        │
+                        ▼
+            transitionAgentLocation() (World Core)
+                        │
+                        ├── Agent.locationId = destination
+                        ├── Emit M71 WorldProjectionSnapshot
+                        └── Minimal3DClient scene reconciliation
+```
+
+### 1. Architectural Invariants
+- **World Truth != Runtime Traversal State != Physical Transform**: `Agent.locationId` in `WorldState` remains strictly at origin during all intermediate steps of physical traversal.
+- **Time-Spanning Progression**: Physical movement takes multiple frames/ticks; never teleports instantaneously.
+- **Deterministic Stepping (`step(deltaTimeMs)`)**: Fully testable headless simulation without wall-clock timers or `setInterval`. Rejects invalid or negative deltas safely.
+- **Client-Side Anchor Resolution**: Resolves logical destination places (`building:development-building`) to presentation coordinates (`node:anchor:commercial-door` at `x=-8, y=1.75, z=0`) using M70 mappings and scene nodes without polluting World Core.
+- **Leak-Free Supersession & Cancellation**: Obsolete traversals terminate with `status: 'traversal-interrupted'`, resolving pending promises immediately and preventing dangling operations or stale commits.
+- **Authoritative Arrival Delegation**: Physical arrival merely produces an observational `NavigationResult(arrived)`. World Core transition occurs only after M73 coordinator validation and M69 gatekeeper verification.
+- **Replaceable Engine Boundary**: `PhysicalTraversalRuntime` serves as a prototype provider that can be cleanly swapped with a future Unity/Unreal NavMesh agent without altering World Core.
+- **Schema Preservation**: `CURRENT_WORLD_STATE_VERSION` remains strictly **18**.
+
+### 2. Contract Components (`clients/minimal-3d/physical-traversal-runtime.ts`)
+- **`PhysicalTraversalRuntime implements NavigationProvider`**:
+  - `requestTraversal(request: NavigationRequest): Promise<NavigationResult>`: Initiates in-flight traversal, returning a pending Promise that resolves upon physical arrival or interruption.
+  - `step(deltaTimeMs: number): readonly NavigationResult[]`: Deterministically advances active traversals, updates 3D transforms, and detects arrival.
+  - `cancelCurrentTraversal(agentId: string, reason?: string): boolean`: Terminates active traversal with `traversal-interrupted`.
+  - `resolveDestination(placeId: string, agentId?: string): Vector3 | undefined`: Maps logical destination to 3D presentation coordinates.
+  - `registerAnchorCoordinate(placeOrAnchorId: string, coordinate: Vector3): this`: Custom anchor coordinate mapping.
+  - `getProgress(agentId: string): number`: Returns current progress (0.0 to 1.0).
+
+## Milestone 75: Agent Intent & Decision Boundary Foundation
+
+Milestone 75 establishes the engine-independent boundary separating Agent Cognition / Decision from Agent Intent, translating non-authoritative candidate proposals into the existing spatial navigation and traversal pipeline without granting decision providers direct authority over World Core:
+
+```text
+Agent Decision
+      ↓ decideIntent()
+AgentIntent (e.g. MoveToPlaceIntent)
+      ↓ dispatchAgentIntent()
+NavigationRequest
+      ↓ startTraversal()
+RuntimeTraversalCoordinator (M73)
+      ↓ requestTraversal()
+NavigationProvider / PhysicalTraversalRuntime (M74)
+      ↓ step() discrete physical progression
+NavigationResult(status: 'arrived')
+      ↓ completeTraversal()
+validateArrivalAndCommit() (M69)
+      ↓ atomic state transition
+World Core transitionAgentLocation()
+```
+
+### 1. Architectural Invariants
+- **Decision != Authority != Mutation**: An agent decision is never an authoritative World Core mutation. An agent may propose *"I want to go to the restaurant"*, but cannot mutate `Agent.locationId`.
+- **Ephemeral Candidate Proposal**: `AgentIntent` is non-authoritative, ephemeral, and non-persistent. It contains zero coordinates, transforms, velocities, or NavMesh data.
+- **Minimal Initial Vocabulary**: Initial vocabulary is strictly bounded to `'move-to-place'` (and `'idle'`).
+- **Pluggable & Engine-Independent Provider Boundary**: `AgentDecisionProvider` defines an engine-independent interface (`decideIntent(state, agentId)`) supporting both synchronous deterministic evaluation today and asynchronous LLM-backed decision providers tomorrow.
+- **Zero Bypass Around M69/M73/M74**: Movement proposals translate strictly through `validateLogicalDestination()`, `createNavigationRequest()`, `RuntimeTraversalCoordinator.startTraversal()`, and `validateArrivalAndCommit()`. No direct `transitionAgentLocation()` bypass exists.
+- **In-Flight Logical Location Immutability**: `Agent.locationId` in World Core remains strictly at the origin throughout multi-step physical traversal. Only validated arrival committed through M69 updates `Agent.locationId`.
+- **Schema & Persistence Preservation**: `CURRENT_WORLD_STATE_VERSION` remains strictly **18**. Zero intent or decision state added to `WorldState`.
+
+### 2. Contract Components (`src/core/agent-intent.ts`)
+- **`AgentIntent`**: Union of `MoveToPlaceIntent` and `IdleIntent`.
+- **`createMoveToPlaceIntent(agentId, destinationPlaceId, createdAt, reason?)`**: Factory creating an immutable movement proposal.
+- **`createIdleIntent(agentId, createdAt, reason?)`**: Factory creating an immutable idle proposal.
+- **`AgentDecisionProvider`**: Engine-independent interface for decision sources (`decideIntent(context: AgentContext)`).
+- **`DeterministicAgentDecisionProvider implements AgentDecisionProvider`**: Evaluates schedule fixtures and civil time to produce deterministic routine movement proposals.
+- **`dispatchAgentIntent(state, intent, options)`**: Narrow dispatcher validating intent targets and initiating active traversal in M73.
+- **`executeAgentIntentWithProvider(state, intent, coordinator, provider)`**: Convenience orchestrator delegating directly to M73 `executeTraversalWithProvider`.
+
+## Milestone 76: Agent Context Foundation
+
+Milestone 76 eliminates the omniscient `WorldState` epistemic leak from agent cognition by introducing `AgentContext`—a bounded, ephemeral, read-only projection representing an individual agent's situated perspective:
+
+```text
+WorldState
+    ↓
+deriveAgentContext(state, agentId)
+    ↓
+AgentContext (Bounded, Epistemic Projection)
+    ↓
+AgentDecisionProvider.decideIntent(context)
+    ↓
+AgentIntent (e.g. MoveToPlaceIntent)
+    ↓
+dispatchAgentIntent()
+    ↓
+RuntimeTraversalCoordinator (M73)
+    ↓
+PhysicalTraversalRuntime (M74) / 3D Client
+    ↓
+NavigationResult(status: 'arrived')
+    ↓
+M69 validateArrivalAndCommit()
+    ↓
+WorldState transitionAgentLocation()
+```
+
+### 1. Architectural Invariants
+- **Epistemic Boundary & Omniscience Elimination**: An agent's decision provider receives only `AgentContext`, never raw `WorldState`. It cannot access other agents' financial balances, private activity states, private knowledge graphs, or global entity maps.
+- **Pure Ephemeral Projection**: `AgentContext` is computed on-demand via `deriveAgentContext(state, agentId)`. It is purely ephemeral, non-authoritative, and never persisted.
+- **Zero World Core Mutation**: Context derivation produces zero state mutation. The input `WorldState` is treated as strictly read-only.
+- **Decoupling from Runtime Traversal**: `AgentContext` strictly does NOT depend on `RuntimeTraversalCoordinator` or active traversal state. Traversal remains runtime execution metadata managed by M73/M74.
+- **Minimal Schedule Objective (No Premature Goal System)**: Instead of a premature persistent `AgentGoal` entity system, `AgentContext` exposes a minimal derived `AgentScheduledObjective` (`commute-to-work`, `work-shift`, `neighborhood-recreation`, `rest-at-residence`) evaluated on-demand from authoritative schedules and civil time.
+- **Minimal Vocabulary & Scoping**: Inventory and item collections are omitted from `AgentContext` in M76 to prevent premature expansion.
+- **Demonstrated Through 3D World Slice**: Decisions derived from `AgentContext` drive physical 3D scene transformations over time and commit authoritative arrival via M69 without mutating World Core during traversal.
+- **Schema & Persistence Preservation**: `CURRENT_WORLD_STATE_VERSION` remains strictly **18**. Zero persistence changes.
+
+### 2. Contract Components (`src/core/agent-context.ts`)
+- **`AgentContext`**: Bounded situated context interface comprising:
+  - `agent`: Agent identity (`id`, `name`, `agentType`).
+  - `currentLocation`: Situated place projection (`locationId`, `name`, `type`, `timeZone`).
+  - `civilTime`: Local civil time representation (`isoTime`, `year`, `month`, `day`, `hour`, `minute`, `second`, `millisecond`, `dayOfWeek`, `timeZone`).
+  - `scheduledObjective`: Minimal derived objective (`type`, `targetPlaceId`, `reason`).
+  - `coLocatedAgents`: Read-only `ObservableAgent[]` of agents at the current place.
+  - `knownFacts`: Read-only `AgentKnowledgeRecord[]` privately possessed by the agent.
+- **`deriveAgentContext(state, agentId)`**: Pure function projecting bounded `AgentContext` from `WorldState`. Rejects invalid or nonexistent agents with zero mutation.
+
+## Milestone 77: Shared 3D World Slice Foundation
+
+Milestone 77 introduces the first continuous shared 3D world slice, bringing multiple physical structures and multiple agents into a single unified scene coordinate frame:
+
+```text
+WorldState (Authoritative Topological Truth)
+    ↓
+deriveAgentContext(state, agentId)
+    ↓
+AgentDecisionProvider.decideIntent(context)
+    ↓
+dispatchAgentIntent()
+    ↓
+RuntimeTraversalCoordinator (M73)
+    ↓
+PhysicalTraversalRuntime (M74) / Shared 3D World Slice
+    ↓
+NavigationResult(status: 'arrived')
+    ↓
+M69 validateArrivalAndCommit()
+    ↓
+WorldState transitionAgentLocation()
+```
+
+### 1. Architectural Invariants
+- **Zero World Core Mutation During In-Flight Traversal**: Throughout physical traversal across the shared slice, `Agent.locationId` in `WorldState` remains strictly at the origin (`building:development-residence`).
+- **Physical Position vs Logical Location Isolation**: Elena's physical transform updates frame-by-frame along the continuous 3D path (`(10, 1.5, 0) -> (0, 1.5, 0) -> (-10, 1.5, 0)`), while World Core topological location is updated ONLY upon authoritative arrival commit via M69 `validateArrivalAndCommit()`.
+- **Continuous Shared Scene Coordinate Frame**: Street, Residence, Residence Doorway, Commercial Building, Commercial Doorway, Restaurant, Player, and Elena are all co-present in one continuous scene graph (`buildSharedWorldSlice()`), eliminating isolated scene-switching.
+- **Initial Placement Grounding**: Non-observer agents visually spawn grounded at their logical location threshold (e.g. Elena at `(10, 1.5, 0)` for `building:development-residence`), rather than ungrounded defaults.
+- **Multi-Agent Runtime Independence**: Multiple agents (Player and Elena) exist in the scene simultaneously. The player can move locally without mutating WorldState or interfering with Elena's traversal.
+- **Stale & Unauthorized Result Rejection**: Arrival results with mismatched `requestId` or from uncoordinated sources are strictly rejected with zero state mutation.
+- **Discrete & Engine-Independent Simulation**: The browser client simulation in `clients/minimal-3d/index.html` operates via discrete, caller-invoked control actions (`[Step Traversal]`, `[Commit Authoritative Arrival]`) without autonomous background simulation loops.
+- **Schema & Persistence Preservation**: `CURRENT_WORLD_STATE_VERSION` remains strictly **18**. Zero persistence or core schema changes.
+
+### 2. Client & Demonstration Components (`clients/minimal-3d/`)
+- **`buildSharedWorldSlice(state)`**: Assembles a unified continuous 3D scene containing the street corridor, residential exterior/doorway, commercial exterior/doorway, restaurant interior, and active agents.
+- **`PhysicalTraversalRuntime` Multi-Agent Resolution**: Visual lookup supporting distinct entity nodes (`node:player`, `node:npc`) during coordinate interpolation and node transform updates.
+- **Dual-Agent HUD & Discrete Controls (`clients/minimal-3d/index.html`)**: Interactive browser testbed displaying live Player and Elena status (logical location, physical position, traversal state, slice coherence) with step-by-step traversal controls.
+
+## Milestone 78: Autonomous Agent Simulation Runtime Foundation
+
+Milestone 78 introduces the first autonomous agent simulation loop, connecting discrete world simulation with situated cognition and spatial navigation contracts:
+
+```text
+WorldState
+    ↓
+AgentContext (deriveAgentContext)
+    ↓
+AgentDecisionProvider.decideIntent(context)
+    ↓
+AgentIntent (move-to-place / idle)
+    ↓
+Simulation eligibility & in-transit gating
+    ↓
+dispatchAgentIntent()
+    ↓
+RuntimeTraversalCoordinator (M73)
+    ↓
+NavigationProvider (M69)
+    ↓
+NavigationResult(status: 'arrived')
+    ↓
+M69 validateArrivalAndCommit()
+    ↓
+WorldState.locationId (transitionAgentLocation)
+```
+
+### 1. Architectural Invariants
+- **Non-Self-Moving Agent Principle**: Agents autonomously formulate movement decisions (`AgentIntent`), but never mutate their own location directly. World Core remains the exclusive authority over state transitions.
+- **Dual-Mode Simulation Compatibility**:
+  - *Legacy Routine Mode* (`!options.coordinator`): Preserves existing deterministic M63 routine movement (`executeNpcRoutineAction() -> transitionAgentLocation()`) across all 90 existing test suites with zero behavioral divergence.
+  - *Autonomous Traversal Mode* (`options.coordinator`): Suppresses M63 direct routine movement and routes agent decisions through the M73/M74/M69 navigation pipeline.
+- **In-Transit Gating (`M78-AUD-01`)**: Agents with active traversal in `coordinator.hasActiveTraversal(agent.id) === true` are gated from evaluating movement decisions until their traversal completes, is canceled, or fails.
+- **Observation Barrier (`M78-AUD-06`)**: All eligible agent contexts are derived in Phase 1 before Phase 5 commits any arrival transitions, preventing intra-tick observation skew where earlier agents observe later agents' mid-tick arrival state.
+- **Strict Synchronous Cognition Boundary**: `Simulation.tick()` remains strictly synchronous. Any `AgentDecisionProvider` returning a Promise/thenable is detected and throws an explicit architectural exception rather than introducing hidden async scheduling.
+- **Cognition & Provider Failure Isolation**: Errors thrown by a decision provider for a specific agent are isolated into `TickResult.decisionFailures`, allowing remaining agents to proceed safely without crashing world simulation.
+- **Engine-Independent Separation (Zero 3D in Core)**: `src/core/` maintains zero imports or dependencies on `clients/`, `clients/minimal-3d/`, `Scene3D`, `Transform3D`, or `PhysicalTraversalRuntime`. Headless simulation uses `DeterministicMockNavigationProvider` for deterministic single-tick arrival.
+- **Schema & Persistence Preservation**: `CURRENT_WORLD_STATE_VERSION` remains strictly **18**. Zero persistence changes or schema migrations.
+
+### 2. Runtime Simulation Components (`src/core/simulation.ts`)
+- **`SimulationOptions` Extensions**:
+  - `coordinator?: RuntimeTraversalCoordinator`: Optional traversal coordinator enabling autonomous traversal mode.
+  - `decisionProvider?: AgentDecisionProvider`: Agent cognition provider (defaults to `DeterministicAgentDecisionProvider`).
+  - `navigationProvider?: NavigationProvider`: Spatial navigation provider for headless immediate arrival processing.
+- **`TickResult` Extensions**:
+  - `agentIntents?: AgentIntent[]`: Emitted intents across the tick.
+  - `decisionFailures?: AgentDecisionFailure[]`: Isolated decision provider errors.
+  - `traversalCompletions?: CompleteTraversalResult[]`: Authoritative arrival commits completed during the tick.
+
+## Milestone 79: 3D World Blockout & Playable Environment Foundation
+
+Milestone 79 marks the transition from architecture-first development to visual world construction. It establishes the first genuinely recognizable 3D urban environment of MyVirtualCommunity, rendering a coherent, human-scaled neighborhood blockout powered by the authoritative World Core, M71 projection boundary, M72 WebGL client, M73/M74 traversal runtime, M76 AgentContext, M77 shared 3D world slice, and M78 autonomous simulation integration.
+
+### 1. Architectural & Visual Principles
+- **Visual World Construction Without Core Bloat**: The 3D urban environment is constructed entirely within client-side presentation mapping (`clients/minimal-3d/minimal-3d-client.ts`), utilizing pure WebGL unit primitives (`box`, `cylinder`, `plane`) without external heavy 3D game engines (Three.js, Babylon, Unity).
+- **Zero World Core Schema Changes**: Preserves `CURRENT_WORLD_STATE_VERSION = 18` and zero persistent changes to `Agent`, `Place`, `Restaurant`, or `WorldState`.
+- **Zero 3D in Core Invariant**: `src/core/` retains zero imports, references, or dependencies on WebGL, matrices, coordinates, or presentation nodes.
+- **Strict Presentation vs. Authority Isolation**: Moving the player character in 3D presentation space modifies only client-side coordinates. The authoritative `Agent.locationId` remains strictly unchanged until an explicit, validated world command or M69 arrival gate commits.
+- **Human-Scale Calibration**: All structures and props are proportioned relative to a 2.0-unit human height baseline:
+  - Human height: 2.0 units
+  - Entrance doorways: 3.0–3.5 units
+  - Residential building: 8.0 units (~2 stories) + 1.5-unit shingled roof
+  - Commercial building: 12.0 units (~3 stories) + roof parapet
+  - Roadway width: 16.0 units (2 vehicular lanes + center markings)
+  - Pedestrian sidewalks: 3.2 units wide with raised 0.2-unit curbs
+  - Parked sedan: 4.4m length × 1.9m width with chassis, cabin, wheels, and lights
+- **Proximity & Floating Affordances**: 3D world tags project into 2D screen coordinates over places and agents. Approaching entrance door anchors within 3.0 units dynamically triggers interactive HUD prompts (`[E] Enter Development Residence`, `[E] Enter Commercial Building`, `[E] Enter Restaurant`).
+- **Autonomous NPC Commute Integration**: Elena NPC visibly departs her residence entrance stoop, traverses the blockout along the street, and commits her arrival at the restaurant via M69 `validateArrivalAndCommit()`.
+
+### 2. Blockout Scene Architecture (84 Total Nodes)
+The blockout scene expands the shared 3D world slice from 8 technical nodes to 84 detailed architectural and environmental nodes while maintaining 100% backward compatibility with M77 node IDs and coordinates:
+- **Core World Places & Entities**: Development Street, Development Residence, Commercial Building, Development Restaurant, Player Character, and Elena NPC.
+- **Street Infrastructure & Markings**: North & South raised pedestrian sidewalks, curbs, roadway asphalt, yellow road dashes, pedestrian crosswalk bands.
+- **Residential Architecture**: Brick mass, pitched shingled roof, front entrance stoop/porch, lawn yard, concrete walkway, boundary fence, and facade windows.
+- **Commercial Architecture**: Modern entrance canopy, ground-floor storefront display, multi-floor window grids, and roof parapet.
+- **Restaurant Architecture & Patio**: Terracotta cafe awning, branded signboard, outdoor dining patio, bistro tables, dining chairs, and dining window.
+- **Neighborhood Props & Streetscape**: Curbside street lamps with illuminated lanterns, leafy sidewalk trees (trunks + canopies), planter boxes with foliage, teak park benches, parked sedan vehicle (chassis, cabin, wheels, headlights, taillights), utility pole with crossarm, trash & recycling bins, and fire hydrant.
+
+## Milestone 80: Real-World Spatial Slice & Pedestrian Navigation Topology
+
+Milestone 80 evolves the visual environment from the fictional blockout into the first real-world-derived spatial slice of Ciudad Juárez along **Blvd. Manuel Gómez Morín**. It establishes a rich physical topology connecting arterial roadways, secondary streets, parcels, building footprints, pedestrian sidewalks, designated crosswalks, and deterministic navigation graphs.
+
+### 1. Real-World Reference Corridor
+- **Blvd. Manuel Gómez Morín**: Authoritative east-west arterial corridor, bidirectional, with vehicular traffic lanes and continuous pedestrian sidewalks.
+- **Calle Del Porvenir**: Secondary street approaching Gómez Morín from the north, bidirectional, terminating at Gómez Morín (west of Av. La Arboleda).
+- **Avenida La Arboleda**: Secondary street approaching Gómez Morín from the north, bidirectional, terminating at Gómez Morín (east of Del Porvenir).
+- **West Side of Del Porvenir**:
+  - Commercial Corner: **Pastelerías La Tía Lupe** occupies the corner property with primary customer entrance facing Blvd. Manuel Gómez Morín.
+  - Commercial Building / Sports Restaurant: **Wing Spot** is immediately associated to the west/northwest of the corner property with customer entrance facing Gómez Morín.
+  - Residential Strip: North of the commercial corner along Calle Del Porvenir, properties become predominantly residential (**Residencia Del Porvenir**) with primary entrances facing Del Porvenir.
+- **East Side / Central Block**:
+  - Paved Parcel / Parking Area: **Dollar 2 Go** occupies a large paved property with direct vehicular access from Gómez Morín. The single-story store building sits inside the larger parking lot, where circulation space is significantly larger than the building itself.
+  - Commercial Property: Immediately east of Dollar 2 Go sits **Acabados HBC** (commercial paint showroom).
+  - Medical / Veterinary: Further north is **CatZoo Clínica Felina**.
+- **East Block**:
+  - Across Av. La Arboleda sits **Corporativo Arboleda**, a larger corporate and commercial complex with primary access facing Av. La Arboleda.
+
+### 2. Physical Topology & Domain Distinctions (`src/core/real-world-street-topology.ts`)
+The architecture introduces pure TypeScript domain structures separating distinct spatial concepts:
+- **`RoadSegment`**: Road corridor identity, directionality (`bidirectional`), connected roads, vehicular access flags, and sidewalk infrastructure flags.
+- **`RoadIntersection`**: Junction classification (`t-junction`, `four-way`), connected road IDs, and designated pedestrian crosswalk presence.
+- **`PhysicalParcel`**: Property parcel identity, zoning category (`commercial-corner`, `residential-strip`, `paved-commercial-lot`, `corporate-complex`), street access, and on-site parking area flags.
+- **`BuildingEntrance`**: Explicit architectural entrance thresholds with entrance type (`customer-primary`, `residential-primary`), containing place reference, and street frontage.
+- **`PedestrianNavNode` & `PedestrianNavEdge`**: Deterministic pedestrian navigation graph with semantic node types (`sidewalk`, `crossing`, `lot-access`, `parking-area`, `entrance`) and surface accessibility flags (`walkable`).
+
+### 3. Pedestrian Walkable Surfaces vs Non-Walkable Boundaries
+- **Building Footprints as Strict Barriers**: Building volumes (`GOMEZ_MORIN_BUILDING_FOOTPRINTS`) form impenetrable 2D bounding boxes. Walkable queries (`isInsideBuildingFootprint(x, z)`) strictly reject player movement inside building perimeters.
+- **Roadways as Non-Walkable Surfaces**: Vehicular traffic lanes along Blvd. Manuel Gómez Morín, Calle Del Porvenir, and Av. La Arboleda are non-walkable for pedestrians.
+- **Explicit Crosswalks**: Crossing roadways is strictly prohibited except through designated pedestrian crosswalks with zebra striping across Del Porvenir and Gómez Morín.
+- **Walkable Surfaces**: Walking is permitted exclusively on sidewalks, crosswalks, parking lot circulation, and entrance thresholds.
+
+### 4. Deterministic Multi-Waypoint Polyline Commute
+- Elena NPC navigates the real-world corridor using the deterministic pedestrian navigation graph (`findPedestrianRoute()` via BFS).
+- The traversal runtime (`PhysicalTraversalRuntime`) supports multi-segment polyline interpolation over waypoints:
+  1. `Umbral Residencia Del Porvenir` (Porch stoop threshold)
+  2. `Banqueta Del Porvenir Norte` (North sidewalk)
+  3. `Banqueta Del Porvenir Media` (Mid sidewalk)
+  4. `Banqueta Esquina Norponiente Del Porvenir` (Northwest corner)
+  5. `Banqueta Gómez Morín Frente Tía Lupe` (Gómez Morín sidewalk past Tía Lupe)
+  6. `Banqueta Gómez Morín Frente Wing Spot` (Sidewalk outside Wing Spot)
+  7. `Umbral Wing Spot` (Wing Spot customer entrance threshold)
+- **Strict In-Flight Isolation**: Throughout the entire multi-waypoint commute, `Agent.locationId` in World Core remains strictly `building:del-porvenir-residence`. Arrival commit occurs exclusively via M69 `validateArrivalAndCommit()`.
+
+### 5. Provisional Calibration Parameters
+All dimensions in the prototype are defined explicitly as provisional/calibrated parameters for spatial scale, never claimed as survey-level measurements:
+- Gómez Morín arterial roadway: provisional width 18.0 units (approx. 18m)
+- Secondary streets (Del Porvenir, La Arboleda): provisional width 10.0 units
+- Sidewalk width: 3.5 units with raised 0.2-unit curbs
+- Crosswalk stripe width: 0.9–2.4 units
+- Dollar 2 Go paved parking parcel: 22.0 × 26.0 units
+- Store building inside lot: 11.0 × 11.0 units (single-story, 5.5 units height)
+
+### 6. Architectural Invariants
+- **Zero Schema Version Increment**: `CURRENT_WORLD_STATE_VERSION` remains strictly version 18.
+- **Zero 3D in Core**: Zero WebGL, matrices, coordinates, or renderers in `src/core/`.
+- **Zero Game Engine Dependencies**: Implemented natively in TypeScript and WebGL without Three.js, Babylon, Unity, or Godot.
+
+## Milestone 85: Hierarchical Spatial Identity & Co-Presence Authority (Schema 19)
+
+Milestone 85 establishes authoritative hierarchical spatial identity for world partitions:
+- **`Agent.interiorSpaceId: string | null`**: Authoritative partition-level physical identity alongside topological `Agent.locationId`.
+- **`areAgentsCoLocated()`**: Canonical physical co-presence authority across all domains. Two agents are co-located if and only if they share identical `locationId` and identical `interiorSpaceId`.
+- **Invariants A–E**:
+  - Invariant A: Exterior agents have `interiorSpaceId === null`.
+  - Invariant B: Interior agents must reference a registered `InteriorSpace` in topology.
+  - Invariant C: Logical context integrity (`locationId === associatedPlaceId`).
+  - Invariant D: Building consistency.
+  - Invariant E: No entrance or nav node leakage into `interiorSpaceId`.
+- **Unified Entrance Ingress**: Canonical authority `executeUnifiedEntranceIngress()` / `enterThroughEntranceThreshold()`.
+- **Schema 19**: Clean migration from Schema 18 preserving epistemic validity without fabricated presence.
+
+## Milestone 86: Multi-Room Venue Topology Foundation
+
+Milestone 86 designs and introduces the foundation for multiple interior spaces within a venue:
+- **`InteriorSpace` Partitioning**: Partitions belonging to the same building and place context.
+- **`InternalConnection`**: Directed internal doorway relationships between interior spaces with properties: `connectionId`, `buildingId`, `sourceInteriorId`, `targetInteriorId`, `passageType`, `accessPolicy`, `pairedConnectionId`, `sourceThreshold`, `targetThreshold`, `interactionRadius`.
+- **`traverseInternalConnection()`**: Sole canonical production authority for interior-to-interior transitions within a building.
+- **Invariants F–I**:
+  - Invariant F: Internal connections exist between registered interior spaces.
+  - Invariant G: Internal connections preserve logical venue context (`associatedPlaceId`).
+  - Invariant H: Internal connections cannot span different buildings.
+  - Invariant I: Atomic state mutation (`interiorSpaceId` updates, `locationId` preserved).
+
+## Milestone 87: Wing Spot Canonical Multi-Room Topology & Back-of-House Staff Gating
+
+Milestone 87 constructs the canonical multi-room venue layout and back-of-house staff gating for Wing Spot on Blvd. Manuel Gómez Morín:
+- **Canonical Multi-Room Partitions**:
+  - `interior:wing-spot`: Public Dining Hall (`entranceIds: ['entrance:wing-spot-main']`, preserving existing ID and backward compatibility).
+  - `interior:wing-spot-kitchen`: Back-of-House Kitchen / Staff Area (`entranceIds: []`, zero direct exterior ingress).
+  - Both belong to `building:wing-spot-building` and `restaurant:wing-spot`.
+- **Canonical Internal Connections**:
+  - `conn:wing-spot-dining-to-kitchen`: Service door with `accessPolicy: 'staff-only'`, connecting public dining hall to kitchen.
+  - `conn:wing-spot-kitchen-to-dining`: Service door with `accessPolicy: 'unrestricted'`, providing return egress from kitchen to dining hall.
+  - Bidirectionally paired with threshold spatial positions and 2.5m interaction radii.
+- **Staff-Only Gating & Preconditions**:
+  - Authorized staff (Elena NPC, attendant at Wing Spot) traverses into the kitchen successfully via `traverseInternalConnection()`.
+  - Customer / non-staff attempts receive canonical rejection `unauthorized-traversal` with guaranteed zero state mutation.
+  - Spatial threshold proximity prevents wall passage/teleportation.
+- **Partitioned Physical Co-Presence**:
+  - Customers in dining and staff in kitchen are physically partitioned: `areAgentsCoLocated() === false`.
+  - When staff returns to dining hall: `areAgentsCoLocated() === true`.
+- **Schema 19 Persistence**:
+  - Kitchen interior identity survives save/load under Schema 19 with complete world spatial topology validation.
+
+## Milestone 88: First Complete Establishment Customer Experience (Wing Spot Gómez Morín)
+
+Milestone 88 delivers the first genuine end-to-end establishment customer experience in the World Core using **Wing Spot Gómez Morín** as the canonical establishment:
+- **Phase A — Approach**: Customer navigates towards Wing Spot (`building:wing-spot-building`) along Blvd. Manuel Gómez Morín pedestrian sidewalk.
+- **Phase B — Physical Ingress**: Customer enters through canonical exterior entrance threshold (`entrance:wing-spot-main`) into the authoritative public dining hall partition (`interior:wing-spot`).
+- **Phase C — Establishment Presence & Spatial Invariants**: Customer exists physically inside `restaurant:wing-spot` with `interiorSpaceId === 'interior:wing-spot'`. Physical co-presence authority `areAgentsCoLocated()` respects room partitions (dining room vs. back-of-house kitchen).
+- **Phase D — NPC Perception & Co-Presence Interaction**: Co-located customer perceives on-duty attendant Elena Morales (`agent:elena-npc`). When Elena is in the dining hall, service affordances are available; when Elena is in the kitchen (`interior:wing-spot-kitchen`), co-presence evaluates to `false` and service requests are rejected with `agents-not-co-located` and zero mutation.
+- **Phase E — Authentic Restaurant Menu Inquiry**: Authoritative service inquiry `inquireRestaurantService()` returns authentic Wing Spot offerings catalog (`offering:boneless-wings` at $12.00, `offering:traditional-wings` at $14.00, `offering:seasoned-fries` at $4.50, `offering:fountain-soda` at $2.50) with prompt, fulfillment modes (`['pickup']`), and zero state mutation.
+- **Phase F — Multi-Line Order Placement & Atomic Settlement**: Authoritative `placeOrder()` executes an atomic transaction debiting customer funds, crediting restaurant revenue, creating 1:1 immutable `PurchaseRecord` audit entries, and instantiating an active `Order` entity in `preparing` status. Preconditions enforce co-location, operational state, positive integer quantities, foreign offering rejection, and balance limits with zero mutation on failure.
+- **Phase G — Order Preparation Simulation & Inventory Collection**: Deterministic `Simulation.tick()` (or `stepSimulation()`) advances authoritative `worldTime` by 5 minutes, transitioning order status from `preparing` to `ready`. Customer collects completed order via `collectOrder()`, transitioning order status to `fulfilled` and instantiating canonical `OwnedItem` records in player inventory.
+- **Client & HTTP Runtime Integration**: Session controller and HTTP server expose `inquireRestaurantService` command alongside `enterRestaurant`, `placeOrder`, `stepSimulation`, and `collectOrder`, proving client projection parity.
+- **Schema 19 Persistence Integrity**: Persisted world states containing active/fulfilled Wing Spot orders, updated balances, and item inventories round-trip cleanly under Schema 19 with complete entity and spatial validation.
+
+## Milestone 89: Authoritative 3D Vertical Slice (Wing Spot Ingress/Egress)
+
+Milestone 89 transforms the browser 3D client (`clients/minimal-3d/index.html`) from a local visual blockout into an authoritative client flow:
+- **Authoritative Ingress & Egress**: Visual player triggers `POST /api/commands/enterRestaurant` and `POST /api/commands/exitRestaurant` via key affordance `[E]`. Visual representation transitions only after authoritative server confirmation.
+- **In-Flight Command Protection**: Disables re-entrant interaction buttons while commands are pending over HTTP.
+- **Authoritative Startup Hydration**: Reconciles client position, interior space, and camera mode from authoritative `GET /api/status` and `GET /api/location` queries.
+- **Local Civil Time HUD Representation**: Exposes authoritative Ciudad Juárez civil time (`America/Ciudad_Juarez`) in the 3D HUD.
+- **Strict Schema 19 & State Authority**: 3D client remains presentation-only; World Core owns all spatial authority.
+
+## Milestone 90: Authoritative NPC Establishment Attendance (Wing Spot)
+
+Milestone 90 implements the first complete authoritative NPC establishment-attendance architecture:
+- **Persistent Attendant Identity**: Elena Morales (`agent:elena-npc`) serves as the authoritative, persistent attendant for Wing Spot (`restaurant:wing-spot`).
+- **First-Class Relationship Model**: Grounded in `SiteAgentAssociation` in World Core (`role: 'attendant'`). Pure queries `getSiteAttendant(state, placeId)` and `getAgentAttendedSite(state, agentId)` resolve the establishment attendant relationship deterministically without client heuristics.
+- **Authoritative Spatial Presence**: During scheduled shifts [09:00, 17:00) Civil Time, deterministic `Simulation.tick()` transitions Elena's activity state to `active` and executes unified ingress into `interior:wing-spot`. Outside shifts, Elena transitions to `idle` at her residence stoop or promenade.
+- **Authoritative Read Model (`ObservedLocation.attendant`)**: Read-only projection `ObservableAttendantSummary` surfaces attendant identity, establishment, presence, location, interior space, and activity state without violating `ObservableAgent` minimal privacy invariants.
+- **Customer & Staff Co-Presence**: When entering Wing Spot, customers perceive on-duty attendant Elena Morales as co-located in `interior:wing-spot`, unlocking authoritative restaurant service inquiry (`inquireRestaurantService()`).
+- **3D Presentation Parity**: Minimal 3D client discovers attendant strictly through authoritative query data (`GET /api/location`), positions Elena at the interior service counter, and renders on-duty HUD status with zero client-side simulation authority.
+- **Strict Schema 19 & Integrity**: Preserves Schema 19; referential integrity, duplicate protection, and domain invariants validated across 107 test suites (1,812 tests).
+
+## Milestone 91: Authoritative NPC–Player Interaction (Request Restaurant Service)
+
+Milestone 91 implements the first authoritative interaction between the player and an establishment attendant:
+- **Authoritative Command Pipeline (`requestRestaurantService`)**: Dispatched via `POST /api/commands/requestRestaurantService` through the serialized `WorldSessionController` queue. Client passes only `{ restaurantId?: string }`; the World Core strictly rejects client overrides of `playerId`, `attendantId`, `npcId`, or outcome status.
+- **Precondition & Authority Validation (`evaluateRequestRestaurantService`)**: Validates 9 strict preconditions:
+  1. `player-not-found`: Active player exists.
+  2. `player-not-player`: Active agent is of type `'player'`.
+  3. `not-inside-restaurant`: Player is located in the target restaurant (`restaurant:wing-spot`).
+  4. `not-inside-interior`: Player is inside the establishment's interior space (`interior:wing-spot`).
+  5. `restaurant-not-found`: Target restaurant exists in world state.
+  6. `attendant-not-found`: Target restaurant has an authoritative attendant association (`agent:elena-npc`).
+  7. `attendant-not-present`: Attendant agent is actively co-located inside the restaurant and interior.
+  8. `attendant-not-available`: Attendant is on duty according to the deterministic schedule [09:00, 17:00) Ciudad Juárez Civil Time with `activityState: 'active'`.
+  9. `service-already-active`: Duplicate active service request protection.
+- **Domain Event & State Transition (`RestaurantServiceAcceptedEvent`)**: Elena deterministically accepts the service request, producing an authoritative domain event. Transient interaction state tracks active service per player/establishment.
+- **Atomic Persistence & Lifecycle Synchronization**: Committed only upon successful file persistence. Automatically cleared on player egress (`exitRestaurant`, `exitThroughEntranceThreshold`, `traverseStreet`).
+- **Side-Effect-Free Read-Model Projection**: `inspectCurrentLocation()` projects `attendant.interactionState: 'service-accepted'` dynamically without mutating world state.
+- **3D Presentation Parity**: Minimal 3D client discovers interaction affordance `[E] Request Service from Elena Morales` inside Wing Spot, dispatches authoritative command, displays acceptance warning, and updates HUD with zero client-side simulation authority.
+- **Strict Schema 19 & Zero New Runtime Dependencies**: Schema 19 preserved; all 108 test suites (1,834 tests) pass cleanly with 0 failures.
+
 ## Getting Started
 
 ### 1. Install Dependencies
@@ -2048,7 +2966,7 @@ npm install
 
 ### 2. Run Tests
 
-Executes all **automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, inventory, activity lifecycle, epistemic retention, business authority, asset/property/inventory authority, real-world spatial foundation, property assignment foundation, site-agent association, residential access foundation, residential interaction contract, NPC presence & observation boundary, NPC behavioral state & intent foundation, NPC routine action execution foundation, simulation routine execution integration, and deterministic NPC routine generalization tests across 77 test suites (1,315 tests)**:
+Executes all **automated unit, spatial, interaction, economic, routine, perception, social, runtime server, client boundary, inventory, activity lifecycle, epistemic retention, business authority, asset/property/inventory authority, real-world spatial foundation, property assignment foundation, site-agent association, residential access foundation, residential interaction contract, NPC presence & observation boundary, NPC behavioral state & intent foundation, NPC routine action execution foundation, simulation routine execution integration, deterministic NPC routine generalization, contextual NPC behavior foundation, contextual NPC interaction execution, contextual NPC simulation integration, spatial movement & navigation contract, navigation provider contract, physical world representation & spatial mapping, physical client projection contract, minimal 3D client prototype, runtime traversal coordinator, physical traversal runtime integration, agent intent & decision boundary, agent context foundation, shared 3D world slice foundation, autonomous agent simulation runtime foundation, 3D world blockout & playable environment foundation, real-world spatial slice, hierarchical spatial identity, multi-room venue topology, Wing Spot multi-room staff gating, establishment customer experience, authoritative 3D vertical slice, and NPC establishment attendance tests across 107 test suites (1,812 tests)**:
 
 ```bash
 npm test
@@ -2142,6 +3060,78 @@ Each demonstration script exercises a complete, self-contained milestone slice w
 | `npm run demo:npc-behavior` | M61 Behavior | Pure derived routine phases, deterministic intent interpretation, context projection, and grounded dialogue |
 | `npm run demo:npc-routine-execution` | M62 Action | Deterministic routine action derivation, topological cycle execution, and spatial authority |
 | `npm run demo:npc-routine-generalization` | M64 Generalization | Multi-NPC deterministic routine generalization, shared execution pipeline, and distinct schedules |
+| `npm run demo:contextual-npc-behavior` | M65 Context | Contextual intent derivation, co-presence interaction, domain constraints, and routine fallback |
+| `npm run demo:contextual-npc-interaction` | M66 Execution | Contextual action derivation, authoritative social greeting execution, execution-time revalidation, and zero state mutation |
+| `npm run demo:contextual-npc-simulation` | M67 Simulation | Contextual NPC interaction integration into Simulation.tick(), tick-level duplicate protection, and failure isolation |
+| `npm run demo:spatial-movement-contract` | M68 Contract | Semantic boundary between topological World Core, physical spatial representation, and navigation |
+| `npm run demo:navigation-contract` | M69 Provider | Engine-independent navigation provider contract, traversal reporting, and arrival revalidation |
+| `npm run demo:physical-world-mapping` | M70 Mapping | Engine-independent physical representation mapping, spatial anchors, and failure isolation |
+| `npm run demo:physical-client-projection` | M71 Projection | Engine-independent observer-scoped world projection, client adapter, reconciliation, and intent envelope |
+| `npm run demo:minimal-3d-client` | M72 Prototype | Minimal 3D client prototype, WebGL presentation, authority separation, and authoritative round-trip |
+| `npm run demo:traversal-coordinator` | M73 Traversal | In-flight physical traversal coordinator, supersession, stale result rejection, and arrival delegation |
+| `npm run demo:physical-traversal` | M74 Integration | Client-side physical traversal runtime, time-spanning stepping, destination resolution, supersession, and arrival commit |
+| `npm run demo:agent-intent` | M75/M76 Intent & Context | Agent decision boundary, bounded AgentContext projection, M73/M74 traversal translation, and AI pluggability |
+| `npm run demo:shared-3d-slice` | M77 3D Slice | Shared continuous 3D world slice, multi-agent co-presence, in-flight isolation, and authoritative commit |
+| `npm run demo:agent-simulation` | M78 Simulation | Autonomous agent simulation loop, bounded context evaluation, intent dispatch, in-transit gating, and authoritative arrival commit |
+| `npm run demo:3d-world-blockout` | M79 3D Blockout | Recognizable 3D urban blockout environment, human-scale proportions, player presentation movement, proximity interaction, and Elena autonomous commute |
+| `npm run demo:gomez-morin-slice` | M80 Spatial Slice | Real-world spatial slice of Blvd. Manuel Gómez Morín, road topology, parcels, building footprints, pedestrian navigation graph, and Elena multi-waypoint commute |
+
+---
+
+## Milestone 92: AI NPC Cognition & Unity 3D Product Vertical Slice
+
+Milestone 92 establishes the first true AI cognition layer and production-engine Unity 3D client vertical slice, uniting intelligent agent behavior with high-fidelity visual presentation while strictly preserving World Core single-source-of-truth authority:
+
+```text
+                 ┌─────────────────────┐
+                 │     WORLD CORE      │
+                 │                     │
+                 │   SINGLE TRUTH      │
+                 └─────────┬───────────┘
+                           │
+             ┌─────────────┼─────────────┐
+             │             │             │
+             ▼             ▼             ▼
+          AI NPC         UNITY       WEB CLIENT
+         COGNITION    PRESENTATION
+             │             │
+      proposal & intent    │ presentation & UX
+             │             │
+             └──────┬──────┘
+                    ▼
+             HUMAN EXPERIENCE
+```
+
+### Track A — AI NPC Cognition Layer (`src/core/npc-ai/`)
+
+1. **Bounded Perception Boundary (`deriveNpcPerception`)**:
+   - Exposes strictly read-only, observer-scoped context: agent identity, assigned establishment, duty status, co-located player presence, active restaurant service state, and local civil time (`America/Ciudad_Juarez`).
+   - Strictly withholds private player financial balances, inventory arrays, file persistence paths, and raw internal world collections.
+2. **Structured Memory Store (`NpcMemoryStore`)**:
+   - Ring-buffered memory store completely distinct and isolated from WorldState.
+   - Preserves Schema Version 19 strictly; transient AI memories do not pollute canonical world persistence.
+3. **Cognition Provider Boundary (`NpcCognitionProvider`)**:
+   - `DeterministicNpcCognitionProvider`: Rule-based evaluation with failure injection (`shouldThrow`, `returnMalformed`, `cannedProposal`, `delayMs`) ensuring 100% reproducible automated testing.
+   - `LiveNpcCognitionProvider`: Runtime LLM cognition using native `fetch` supporting OpenAI and Gemini API endpoints.
+4. **AI Runtime Orchestrator (`NpcAiRuntime`)**:
+   - Drives the full causal pipeline: `Perception -> Context -> Cognition -> Proposal Validation -> Command Translation -> Session Controller Dispatch -> Memory Logging`.
+   - Protects World Core from provider timeouts, network crashes, or malformed proposals with zero state corruption.
+
+### Track B — Unity 3D Product Client (`unity-client/`)
+
+1. **Unity 6.3 LTS Baseline (`6000.3.0f1`)**:
+   - Self-contained project under `unity-client/` with Unity 6 `.gitignore`, package manifest (URP, AI Navigation, UI, Input System), and project settings.
+2. **Authoritative Client Architecture (`unity-client/Assets/Scripts/`)**:
+   - `Core/WorldCoreClient.cs`: Handles HTTP connection (`/api/status`, `/api/location`, `/api/commands/*`, `/api/npc/*`), polling, reconnection, and state reconstruction.
+   - `Core/AuthoritativeStateModels.cs`: Serialized C# models matching World Core endpoints.
+   - `Player/PlayerController.cs`: Third-person player controller with WASD movement, sprint, and authoritative threshold triggers (`enterRestaurant`, `exitRestaurant`, `requestRestaurantService`).
+   - `Player/ThirdPersonCamera.cs`: Orbit follow camera with sphere-cast collision avoidance and interior framing.
+   - `Npc/ElenaNpcController.cs`: Elena Morales presentation controller with NavMesh presentation navigation, idle counter stance, service approach, and dialogue reactions.
+   - `Environment/GomezMorinSceneBuilder.cs`: Procedural geometry generator for Blvd. Gómez Morín street context, Wing Spot exterior facade, and Wing Spot interior dining room.
+   - `UI/ProductHudController.cs`: Product-grade HUD with Ciudad Juárez Civil Time, location badge, interaction prompt, Elena dialogue bubble, and F3 developer diagnostics.
+   - `GameManager.cs`: Bootstrap coordinator uniting client, scene builder, player, NPC, and HUD.
+3. **Automated Unity Contract Tests (`tests/unity-client-contract.test.ts`)**:
+   - Validates the entire client HTTP contract (hydration, threshold entry, AI service acceptance, exit, and state reconstruction on reconnect) independently of the Unity binary.
 
 ---
 

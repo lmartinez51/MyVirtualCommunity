@@ -551,7 +551,7 @@ describe('Milestone 9: Having Coffee Time-Bound Player Activity', () => {
         const legacy = { ...state, version: v };
         assert.throws(
           () => validateWorldState(legacy),
-          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 18\\.`)
+          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 19\\.`)
         );
       }
     });

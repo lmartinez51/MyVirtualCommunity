@@ -275,7 +275,7 @@ describe('Milestone 34: Migration v12 -> v13 & Non-Fabrication Invariants', () =
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.doesNotThrow(() => validateWorldState(loaded));
         assert.equal(loaded.activityCompletions.length, 1);
         assert.equal(loaded.activityCompletions[0].id, 'coffee-completion:1');
@@ -284,7 +284,7 @@ describe('Milestone 34: Migration v12 -> v13 & Non-Fabrication Invariants', () =
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 18);
+        assert.equal(reloaded.version, 19);
       } finally {
         if (existsSync(testFile)) {
           unlinkSync(testFile);

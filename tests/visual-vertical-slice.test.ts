@@ -60,13 +60,22 @@ describe('Milestone 53: First Visual Vertical Slice Implementation', () => {
     }
   });
 
+  async function createInitializedSession(): Promise<{ apiClient: ApiClient; session: ClientSession }> {
+    const apiClient = new ApiClient(baseUrl);
+    const session = new ClientSession(apiClient);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const ok = await session.init();
+      if (ok && session.getState().model) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return { apiClient, session };
+  }
+
   // =========================================================================
   // Test 1: Locomotion, Facing, Walk Cycle, and Boundary Clamping
   // =========================================================================
   test('Test 1 — Locomotion: velocity updates visual position, tracks facing, and respects scene bounds', async () => {
-    const apiClient = new ApiClient(baseUrl);
-    const session = new ClientSession(apiClient);
-    await session.init();
+    const { apiClient, session } = await createInitializedSession();
 
     const renderer = new WorldRenderer();
     renderer.render(session.getState());
@@ -119,9 +128,7 @@ describe('Milestone 53: First Visual Vertical Slice Implementation', () => {
   // Test 2: Proximity Trigger Detection Across Scenes
   // =========================================================================
   test('Test 2 — Proximity Trigger: prompts appear when approaching anchors and clear when moving away', async () => {
-    const apiClient = new ApiClient(baseUrl);
-    const session = new ClientSession(apiClient);
-    await session.init();
+    const { apiClient, session } = await createInitializedSession();
 
     const renderer = new WorldRenderer();
     renderer.render(session.getState()); // Context: BUILDING
@@ -198,9 +205,7 @@ describe('Milestone 53: First Visual Vertical Slice Implementation', () => {
   // Test 3: InputController Dispatches Command on [E] / Enter
   // =========================================================================
   test('Test 3 — InputController: pressing E dispatches authoritative command when prompt is active', async () => {
-    const apiClient = new ApiClient(baseUrl);
-    const session = new ClientSession(apiClient);
-    await session.init();
+    const { apiClient, session } = await createInitializedSession();
 
     const renderer = new WorldRenderer();
     const input = new InputController(session, renderer);
@@ -233,9 +238,7 @@ describe('Milestone 53: First Visual Vertical Slice Implementation', () => {
   // Test 4: Location Transition Anchor Reconciliation
   // =========================================================================
   test('Test 4 — Anchor Reconciliation: transitions place player at deterministic entry anchors', async () => {
-    const apiClient = new ApiClient(baseUrl);
-    const session = new ClientSession(apiClient);
-    await session.init();
+    const { apiClient, session } = await createInitializedSession();
 
     const renderer = new WorldRenderer();
     session.subscribe((state) => renderer.render(state));
@@ -271,9 +274,7 @@ describe('Milestone 53: First Visual Vertical Slice Implementation', () => {
   // Test 5: Rejection Handling Keeps Player Position and Exposes Error
   // =========================================================================
   test('Test 5 — Rejection Handling: domain rejection does not advance location or move player', async () => {
-    const apiClient = new ApiClient(baseUrl);
-    const session = new ClientSession(apiClient);
-    await session.init();
+    const { apiClient, session } = await createInitializedSession();
 
     const renderer = new WorldRenderer();
     session.subscribe((state) => renderer.render(state));
@@ -302,9 +303,7 @@ describe('Milestone 53: First Visual Vertical Slice Implementation', () => {
   // Test 6: Hard Reload / Rehydration Preserves Server Authority
   // =========================================================================
   test('Test 6 — Rehydration: page reload reconstructs state purely from authoritative world projection', async () => {
-    const apiClient = new ApiClient(baseUrl);
-    const session1 = new ClientSession(apiClient);
-    await session1.init();
+    const { apiClient, session: session1 } = await createInitializedSession();
 
     // Navigate to restaurant
     await session1.executeCommand('enterRestaurant', {
@@ -333,9 +332,7 @@ describe('Milestone 53: First Visual Vertical Slice Implementation', () => {
   // Test 7: Complete Playable Slice Walkthrough Loop
   // =========================================================================
   test('Test 7 — Complete Playable Slice: full traversal loop through Street -> Building -> Restaurant -> Street', async () => {
-    const apiClient = new ApiClient(baseUrl);
-    const session = new ClientSession(apiClient);
-    await session.init();
+    const { apiClient, session } = await createInitializedSession();
 
     const renderer = new WorldRenderer();
     const input = new InputController(session, renderer);

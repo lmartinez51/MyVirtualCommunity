@@ -11,13 +11,13 @@ import {
 import { createDevelopmentSeedWorld } from '../src/core/seed.js';
 
 describe('WorldState', () => {
-  test('creates initial WorldState with seed entities, version 18, and clock time', () => {
+  test('creates initial WorldState with seed entities, version 19, and clock time', () => {
     const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
     const state = createInitialWorldState(clock);
 
     assert.equal(state.worldId, DEFAULT_WORLD_ID);
     assert.equal(state.version, CURRENT_WORLD_STATE_VERSION);
-    assert.equal(state.version, 18);
+    assert.equal(state.version, 19);
     assert.equal(state.worldTime, '2026-09-14T08:00:00.000Z');
     assert.equal(state.places.length, 8);
     assert.equal(state.restaurants.length, 1);
@@ -57,7 +57,7 @@ describe('WorldState', () => {
     const snapshot = snapshotWorldState(clock, initial);
 
     assert.equal(snapshot.worldTime, '2026-09-14T08:00:05.000Z');
-    assert.equal(snapshot.version, 18);
+    assert.equal(snapshot.version, 19);
     assert.deepEqual(snapshot.places, initial.places);
     assert.deepEqual(snapshot.restaurants, initial.restaurants);
     assert.deepEqual(snapshot.agents, initial.agents);
@@ -83,7 +83,7 @@ describe('WorldState', () => {
     assert.deepEqual(parsed, state);
   });
 
-  test('validateWorldState succeeds for valid version 18 seed state', () => {
+  test('validateWorldState succeeds for valid version 19 seed state', () => {
     const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
     const state = createInitialWorldState(clock);
 
@@ -99,7 +99,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v1State),
-      /Unsupported WorldState version: 1\. Expected version 18/
+      /Unsupported WorldState version: 1\. Expected version 19/
     );
   });
 
@@ -115,7 +115,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v2State),
-      /Unsupported WorldState version: 2\. Expected version 18/
+      /Unsupported WorldState version: 2\. Expected version 19/
     );
   });
 
@@ -133,7 +133,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v3State),
-      /Unsupported WorldState version: 3\. Expected version 18/
+      /Unsupported WorldState version: 3\. Expected version 19/
     );
   });
 
@@ -151,7 +151,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v4State),
-      /Unsupported WorldState version: 4\. Expected version 18/
+      /Unsupported WorldState version: 4\. Expected version 19/
     );
   });
 
@@ -170,7 +170,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v5State),
-      /Unsupported WorldState version: 5\. Expected version 18/
+      /Unsupported WorldState version: 5\. Expected version 19/
     );
   });
 
@@ -190,7 +190,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v6State),
-      /Unsupported WorldState version: 6\. Expected version 18/
+      /Unsupported WorldState version: 6\. Expected version 19/
     );
   });
 
@@ -210,7 +210,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v7State),
-      /Unsupported WorldState version: 7\. Expected version 18/
+      /Unsupported WorldState version: 7\. Expected version 19/
     );
   });
 
@@ -230,7 +230,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v8State),
-      /Unsupported WorldState version: 8\. Expected version 18/
+      /Unsupported WorldState version: 8\. Expected version 19/
     );
   });
 
@@ -250,7 +250,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v9State),
-      /Unsupported WorldState version: 9\. Expected version 18/
+      /Unsupported WorldState version: 9\. Expected version 19/
     );
   });
 
@@ -270,7 +270,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v10State),
-      /Unsupported WorldState version: 10\. Expected version 18/
+      /Unsupported WorldState version: 10\. Expected version 19/
     );
   });
 
@@ -291,7 +291,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v11State),
-      /Unsupported WorldState version: 11\. Expected version 18/
+      /Unsupported WorldState version: 11\. Expected version 19/
     );
   });
 
@@ -313,7 +313,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v12State),
-      /Unsupported WorldState version: 12\. Expected version 18/
+      /Unsupported WorldState version: 12\. Expected version 19/
     );
   });
 
@@ -335,7 +335,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v13State),
-      /Unsupported WorldState version: 13\. Expected version 18/
+      /Unsupported WorldState version: 13\. Expected version 19/
     );
   });
 
@@ -358,7 +358,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v14State),
-      /Unsupported WorldState version: 14\. Expected version 18/
+      /Unsupported WorldState version: 14\. Expected version 19/
     );
   });
 
@@ -382,7 +382,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v15State),
-      /Unsupported WorldState version: 15\. Expected version 18/
+      /Unsupported WorldState version: 15\. Expected version 19/
     );
   });
 
@@ -406,7 +406,7 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v16State),
-      /Unsupported WorldState version: 16\. Expected version 18/
+      /Unsupported WorldState version: 16\. Expected version 19/
     );
   });
 
@@ -431,7 +431,33 @@ describe('WorldState', () => {
 
     assert.throws(
       () => validateWorldState(v17State),
-      /Unsupported WorldState version: 17\. Expected version 18/
+      /Unsupported WorldState version: 17\. Expected version 19/
+    );
+  });
+
+  test('validateWorldState explicitly rejects version 18 persisted state', () => {
+    const seed = createDevelopmentSeedWorld();
+    const v18State = {
+      worldId: 'juarez-el-paso',
+      version: 18,
+      worldTime: '2026-09-14T08:00:00.000Z',
+      places: seed.places,
+      restaurants: seed.restaurants,
+      agents: seed.agents,
+      offerings: seed.offerings,
+      purchases: [],
+      activityCompletions: [],
+      acquaintances: [],
+      items: [],
+      knowledge: [],
+      orders: [],
+      properties: seed.properties,
+      siteAgentAssociations: seed.siteAgentAssociations,
+    };
+
+    assert.throws(
+      () => validateWorldState(v18State),
+      /Unsupported WorldState version: 18\. Expected version 19/
     );
   });
 
@@ -443,7 +469,7 @@ describe('WorldState', () => {
       () =>
         validateWorldState({
           worldId: 'other-region',
-          version: 18,
+          version: 19,
           worldTime: '2026-09-14T08:00:00.000Z',
           places: [],
           restaurants: [],
@@ -477,7 +503,7 @@ describe('WorldState', () => {
 
     const invalidState = {
       worldId: 'juarez-el-paso',
-      version: 18,
+      version: 19,
       worldTime: '2026-09-14T08:00:00.000Z',
       places: seed.places,
       restaurants: [collidingRestaurant],

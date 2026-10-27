@@ -521,7 +521,7 @@ describe('Milestone 20-A: Intra-Neighborhood Street Traversal & Multi-Building M
 
         const loadedState = persistence.load();
         assert.ok(loadedState !== null);
-        assert.equal(loadedState.version, 18);
+        assert.equal(loadedState.version, 19);
         validateWorldState(loadedState);
 
         const loadedPlayer = loadedState.agents.find((a) => a.id === 'agent:dev-player')!;
@@ -547,7 +547,7 @@ describe('Milestone 20-A: Intra-Neighborhood Street Traversal & Multi-Building M
 
         const loadedState = persistence.load();
         assert.ok(loadedState !== null);
-        assert.equal(loadedState.version, 18);
+        assert.equal(loadedState.version, 19);
         validateWorldState(loadedState);
 
         const loadedPlayer = loadedState.agents.find((a) => a.id === 'agent:dev-player')!;

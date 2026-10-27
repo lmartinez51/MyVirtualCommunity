@@ -528,8 +528,8 @@ describe('Milestone 62: NPC Routine Action Execution Foundation', () => {
       const { state, devNpc } = setupWorld(WORK_SHIFT_TIME);
       executeNpcRoutineAction(state, devNpc.id);
 
-      assert.equal(CURRENT_WORLD_STATE_VERSION, 18);
-      assert.equal(state.version, 18);
+      assert.equal(CURRENT_WORLD_STATE_VERSION, 19);
+      assert.equal(state.version, 19);
 
       // Verify no illegal persistent behavioral fields were added
       assert.equal((state as unknown as Record<string, unknown>).npcActions, undefined);

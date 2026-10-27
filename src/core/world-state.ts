@@ -1,5 +1,5 @@
 import { WorldClock } from './clock.js';
-import { validateEntityId } from './entities/entity.js';
+import { BaseEntity, validateEntityId } from './entities/entity.js';
 import { Place, PlaceType, validatePlaces } from './entities/geography.js';
 import {
   Restaurant,
@@ -7,9 +7,9 @@ import {
   validateRestaurants,
   getRestaurantClosingTimeMs,
 } from './entities/restaurant.js';
-import { Agent, AgentType, validateAgents, ConsumableActivityType, PlayerActivityState } from './entities/agent.js';
+import { Agent, AgentType, ActivityState, validateAgents, ConsumableActivityType, PlayerActivityState } from './entities/agent.js';
 import { Offering, validateOfferings } from './entities/offering.js';
-import { createDevelopmentSeedWorld, createRealWorldJuarezSeedWorld, SeedWorldData } from './seed.js';
+import { createDevelopmentSeedWorld, createRealWorldJuarezSeedWorld, createGomezMorinSeedWorld, SeedWorldData } from './seed.js';
 import { HAVING_COFFEE_DURATION_MS } from './activities/having-coffee.js';
 import {
   resolveLocationTimeZone,
@@ -35,6 +35,26 @@ import {
   isRestaurantAccessible,
   validateBusinessAuthority,
 } from './business.js';
+import {
+  type BusinessSchedule,
+  type BusinessAdmissionDecision,
+  type BusinessAdmissionResultCode,
+  DEFAULT_BUSINESS_SCHEDULES,
+  findBusinessSchedule,
+  evaluateBusinessScheduleStatus,
+  evaluateBusinessAdmission,
+} from './business-schedule.js';
+export {
+  type BusinessSchedule,
+  type BusinessAdmissionDecision,
+  type BusinessAdmissionResultCode,
+  DEFAULT_BUSINESS_SCHEDULES,
+  findBusinessSchedule,
+  evaluateBusinessScheduleStatus,
+  evaluateBusinessAdmission,
+};
+import { areAgentsCoLocated } from './co-presence.js';
+export { areAgentsCoLocated } from './co-presence.js';
 
 import {
   type ActionConsideration,
@@ -78,6 +98,7 @@ import {
   getSiteResident,
   getSiteAttendant,
   getAgentSiteAssociations,
+  getAgentAttendedSite,
 } from './site-agent-association.js';
 import {
   type ResidentialAccessResultCode,
@@ -107,16 +128,45 @@ import {
   type EvaluateNpcRoutineActionResult,
   type ExecuteNpcRoutineActionResultCode,
   type ExecuteNpcRoutineActionResult,
+  type NpcContextualIntentType,
+  type NpcContextualIntent,
+  type EvaluateNpcContextualIntentResultCode,
+  type EvaluateNpcContextualIntentResult,
+  type NpcContextualActionType,
+  type NpcContextualAction,
+  type EvaluateNpcContextualActionResultCode,
+  type EvaluateNpcContextualActionResult,
+  type ExecuteNpcContextualActionResultCode,
+  type ExecuteNpcContextualActionResult,
   evaluateNpcBehavioralState,
   deriveNpcBehavioralState,
   inspectNpcContext,
   evaluateNpcRoutineAction,
   deriveNpcRoutineAction,
   executeNpcRoutineAction,
+  evaluateNpcContextualIntent,
+  deriveNpcContextualIntent,
+  evaluateNpcContextualAction,
+  deriveNpcContextualAction,
+  executeNpcContextualAction,
 } from './npc-behavior.js';
+import {
+  type AttendantInteractionState,
+  type RestaurantServiceAcceptedEvent,
+  type ActiveRestaurantServiceInteraction,
+  type RequestRestaurantServiceResultCode,
+  type RequestRestaurantServiceResult,
+  evaluateRequestRestaurantService,
+  requestRestaurantService,
+  getActiveRestaurantService,
+  commitRestaurantServiceInteraction,
+  clearActiveRestaurantService,
+  resetRestaurantServiceState,
+  isAttendantOnDuty,
+} from './restaurant-service.js';
 
 export const DEFAULT_WORLD_ID = 'juarez-el-paso';
-export const CURRENT_WORLD_STATE_VERSION = 18;
+export const CURRENT_WORLD_STATE_VERSION = 19;
 
 export {
   type RestaurantOperationalTransitionResult,
@@ -160,6 +210,7 @@ export {
   getSiteResident,
   getSiteAttendant,
   getAgentSiteAssociations,
+  getAgentAttendedSite,
   type ResidentialAccessResultCode,
   type ResidentialAccessResult,
   type ResidentialAccessWorldState,
@@ -185,13 +236,101 @@ export {
   type EvaluateNpcRoutineActionResult,
   type ExecuteNpcRoutineActionResultCode,
   type ExecuteNpcRoutineActionResult,
+  type NpcContextualIntentType,
+  type NpcContextualIntent,
+  type EvaluateNpcContextualIntentResultCode,
+  type EvaluateNpcContextualIntentResult,
+  type NpcContextualActionType,
+  type NpcContextualAction,
+  type EvaluateNpcContextualActionResultCode,
+  type EvaluateNpcContextualActionResult,
+  type ExecuteNpcContextualActionResultCode,
+  type ExecuteNpcContextualActionResult,
   evaluateNpcBehavioralState,
   deriveNpcBehavioralState,
   inspectNpcContext,
   evaluateNpcRoutineAction,
   deriveNpcRoutineAction,
   executeNpcRoutineAction,
+  evaluateNpcContextualIntent,
+  deriveNpcContextualIntent,
+  evaluateNpcContextualAction,
+  deriveNpcContextualAction,
+  executeNpcContextualAction,
+  type AttendantInteractionState,
+  type RestaurantServiceAcceptedEvent,
+  type ActiveRestaurantServiceInteraction,
+  type RequestRestaurantServiceResultCode,
+  type RequestRestaurantServiceResult,
+  evaluateRequestRestaurantService,
+  requestRestaurantService,
+  getActiveRestaurantService,
+  commitRestaurantServiceInteraction,
+  clearActiveRestaurantService,
+  resetRestaurantServiceState,
+  isAttendantOnDuty,
 };
+
+export {
+  type SpatialLayer,
+  type SpatialFailureCategory,
+  type LogicalDestinationValidationCode,
+  type LogicalDestinationValidationResult,
+  validateLogicalDestination,
+  categorizeSpatialFailure,
+  SPATIAL_MOVEMENT_CONTRACT,
+} from './spatial-contract.js';
+
+export {
+  type NavigationRequest,
+  type NavigationStatus,
+  type NavigationResult,
+  type NavigationProvider,
+  type CreateNavigationRequestResultCode,
+  type CreateNavigationRequestSuccess,
+  type CreateNavigationRequestFailure,
+  type CreateNavigationRequestResult,
+  type ValidateArrivalAndCommitResultCode,
+  type ValidateArrivalAndCommitSuccess,
+  type ValidateArrivalAndCommitFailure,
+  type ValidateArrivalAndCommitResult,
+  createNavigationRequest,
+  validateArrivalAndCommit,
+  DeterministicMockNavigationProvider,
+} from './navigation-contract.js';
+
+export {
+  type WorldEntityType,
+  type PhysicalRepresentationType,
+  type PhysicalRepresentationAvailability,
+  type PhysicalEntityMapping,
+  type SpatialAnchorType,
+  type SpatialAnchor,
+  type PhysicalMappingFailureCode,
+  type ResolvePhysicalMappingSuccess,
+  type ResolvePhysicalMappingFailure,
+  type ResolvePhysicalMappingResult,
+  type ResolveSpatialAnchorSuccess,
+  type ResolveSpatialAnchorFailure,
+  type ResolveSpatialAnchorResult,
+  identifyWorldEntity,
+  PhysicalMappingRegistry,
+  resolvePhysicalMapping,
+  resolveSpatialAnchor,
+} from './physical-mapping.js';
+
+export {
+  type ProjectedPhysicalMapping,
+  type ProjectedSpatialAnchor,
+  type ProjectedEntity,
+  type WorldProjectionSnapshot,
+  type ClientIntent,
+  type ProjectionReconciliation,
+  projectWorldState,
+  reconcileWorldProjection,
+  createClientIntent,
+  PhysicalClientAdapter,
+} from './world-projection.js';
 
 export const EATING_PASTRY_DURATION_MINUTES = 15;
 export const EATING_PASTRY_DURATION_MS = 15 * 60 * 1000;
@@ -424,11 +563,51 @@ export interface AgentKnowledgeRecord {
  */
 export interface WorldState {
   worldId: string;
-  version: 18;
+  version: 19;
   worldTime: string;
   places: Place[];
   restaurants: Restaurant[];
   agents: Agent[];
+  offerings: Offering[];
+  purchases: PurchaseRecord[];
+  activityCompletions: ActivityCompletionRecord[];
+  acquaintances: Acquaintance[];
+  items: OwnedItem[];
+  knowledge: AgentKnowledgeRecord[];
+  orders: Order[];
+  properties: Property[];
+  siteAgentAssociations: SiteAgentAssociation[];
+}
+
+/**
+ * Historical Agent entity schema for Milestone 57-84 (Version 18).
+ * In Version 18, interiorSpaceId was not an authoritative schema field.
+ */
+export interface AgentV18 extends BaseEntity {
+  id: string;
+  type: 'agent';
+  name: string;
+  agentType: AgentType;
+  activityState: ActivityState;
+  activitySince: string;
+  locationId: string;
+  interiorSpaceId?: string | null;
+  balanceMinor: number;
+  currency: string;
+  playerActivity?: PlayerActivityState | null;
+}
+
+/**
+ * Historical WorldState schema for Milestone 57-84 (Version 18).
+ * Preserved for strict pre-validation prior to v18 -> v19 migration.
+ */
+export interface WorldStateV18 {
+  worldId: string;
+  version: 18;
+  worldTime: string;
+  places: Place[];
+  restaurants: Restaurant[];
+  agents: AgentV18[];
   offerings: Offering[];
   purchases: PurchaseRecord[];
   activityCompletions: ActivityCompletionRecord[];
@@ -617,6 +796,18 @@ export function createRealWorldJuarezWorldState(
   return createInitialWorldState(clock, worldId, seed);
 }
 
+/**
+ * Creates an authoritative WorldState initialized with the Blvd. Manuel Gómez Morín
+ * real-world spatial slice (Milestone 80).
+ */
+export function createGomezMorinWorldState(
+  clock: WorldClock,
+  worldId: string = DEFAULT_WORLD_ID
+): WorldState {
+  const seed = createGomezMorinSeedWorld(clock.getTime());
+  return createInitialWorldState(clock, worldId, seed);
+}
+
 
 /**
  * Takes a snapshot of current WorldState with the latest time from the authoritative WorldClock.
@@ -627,7 +818,7 @@ export function snapshotWorldState(
 ): WorldState {
   return {
     worldId: state.worldId,
-    version: state.version as 18,
+    version: state.version as 19,
     worldTime: clock.getTime(),
     places: state.places,
     restaurants: state.restaurants,
@@ -645,14 +836,20 @@ export function snapshotWorldState(
 }
 
 /**
- * Performs an instantaneous, explicit authoritative spatial transition for an Agent.
+ * Authoritative Spatial Authority transition: Updates an agent's logical/topological locationId (Milestone 1, formalized in Milestone 68).
  *
  * Validates target place existence, updates only the agent's locationId, and guarantees
  * zero mutation on failure.
  *
- * NOTE: This is an instantaneous state transition. It does NOT advance WorldClock,
- * does NOT alter activityState or activitySince, and does NOT imply movement physics,
- * walking, or navigation.
+ * NOTE: This is an instantaneous logical/topological state transition in the World Core.
+ * It is NOT physical movement simulation. It does NOT imply that an Agent has physically
+ * traversed the physical distance between two locations.
+ * In future physical movement/navigation architectures, this represents the authoritative
+ * logical transition that completes the traversal sequence:
+ * Intent -> Validation -> Navigation Request -> Physical Traversal -> Arrival -> Authoritative Logical Transition.
+ *
+ * Invariant: Does NOT advance WorldClock, does NOT alter activityState or activitySince,
+ * and does NOT compute paths or navigation.
  */
 export function transitionAgentLocation(
   state: WorldState,
@@ -671,9 +868,10 @@ export function transitionAgentLocation(
   }
 
   const targetPlace = state.places.find((p) => p.id === targetPlaceId);
-  const targetRestaurant = agent.agentType === 'npc'
-    ? state.restaurants?.find((r) => r.id === targetPlaceId)
-    : undefined;
+  const targetRestaurant =
+    agent.agentType === 'npc'
+      ? state.restaurants?.find((r) => r.id === targetPlaceId)
+      : undefined;
 
   if (!targetPlace && !targetRestaurant) {
     throw new Error(
@@ -682,6 +880,7 @@ export function transitionAgentLocation(
   }
 
   agent.locationId = targetPlaceId;
+  agent.interiorSpaceId = null;
   return agent;
 }
 
@@ -691,8 +890,10 @@ export type EnterRestaurantResultCode =
   | 'agent-not-player'
   | 'restaurant-not-found'
   | 'restaurant-closed'
+  | 'admission-cutoff-reached'
   | 'invalid-location'
-  | 'already-inside';
+  | 'already-inside'
+  | 'entrance-required';
 
 export interface EnterRestaurantResult {
   success: boolean;
@@ -819,6 +1020,25 @@ export function enterRestaurant(
     return result;
   }
 
+  if (restaurant.operationalState === 'closing-soon') {
+    const schedule = findBusinessSchedule(restaurant.id);
+    if (schedule) {
+      const result: EnterRestaurantResult = {
+        success: false,
+        code: 'admission-cutoff-reached',
+        message: `Restaurant "${restaurantId}" is closing soon and no longer accepts new entries (operationalState: "${restaurant.operationalState}")`,
+        agentId,
+        restaurantId,
+      };
+      if (!options.silent) {
+        console.log(
+          `[INTERACTION] Agent "${agentId}" failed to enter restaurant "${restaurantId}": ${result.message} (${result.code})`
+        );
+      }
+      return result;
+    }
+  }
+
   if (agent.locationId !== restaurant.buildingId) {
     const result: EnterRestaurantResult = {
       success: false,
@@ -835,7 +1055,31 @@ export function enterRestaurant(
     return result;
   }
 
+  // Milestone 85 Correction Pass (F-09 Closure):
+  // Topology-backed venues with registered interior topology MUST use authoritative entrance ingress.
+  // Direct entry via legacy enterRestaurant() is prohibited for canonical topology-backed venues.
+  const canonicalInterior = CANONICAL_M85_INTERIORS.find(
+    (i) => i.associatedPlaceId === restaurant.id
+  );
+  if (canonicalInterior) {
+    const result: EnterRestaurantResult = {
+      success: false,
+      code: 'entrance-required',
+      message: `Restaurant "${restaurantId}" has registered interior topology ("${canonicalInterior.interiorId}"). Direct entry via enterRestaurant() is prohibited; enter through an authoritative building entrance using enterThroughEntranceThreshold().`,
+      agentId,
+      restaurantId,
+    };
+    if (!options.silent) {
+      console.log(
+        `[INTERACTION] Agent "${agentId}" failed to enter restaurant "${restaurantId}": ${result.message} (${result.code})`
+      );
+    }
+    return result;
+  }
+
+  // Category B: Synthetic / legacy fixture without interior topology
   agent.locationId = restaurant.id;
+  agent.interiorSpaceId = null;
 
   const result: EnterRestaurantResult = {
     success: true,
@@ -957,6 +1201,7 @@ export function exitRestaurant(
 
   // Authoritative state transition: player returns to containing building
   agent.locationId = restaurant.buildingId;
+  agent.interiorSpaceId = null;
 
   const result: ExitRestaurantResult = {
     success: true,
@@ -1015,6 +1260,7 @@ export function executeRestaurantClosureEgress(
   for (const agent of state.agents) {
     if (agent.locationId === restaurant.id) {
       agent.locationId = egressTargetId;
+      agent.interiorSpaceId = null;
       transitions.push({
         agentId: agent.id,
         previousLocationId: restaurant.id,
@@ -2542,7 +2788,7 @@ export function startAccompaniedActivity(
   }
 
   // 7. Confirm companion is co-located with player inside the restaurant
-  if (companion.locationId !== player.locationId) {
+  if (!areAgentsCoLocated(state, companionAgentId, playerId)) {
     return {
       success: false,
       code: 'agents-not-co-located',
@@ -2827,7 +3073,7 @@ export function greetAgent(
   }
 
   // 7. Confirm player and NPC occupy the same spatial location
-  if (player.locationId !== npc.locationId) {
+  if (!areAgentsCoLocated(state, playerId, npcId)) {
     return {
       success: false,
       code: 'agents-not-co-located',
@@ -2837,48 +3083,8 @@ export function greetAgent(
     };
   }
 
-  // Deterministic NPC contextual reaction grounded in derived routine phase (Milestone 61)
-  const isAcquainted = isAgentAcquainted(state, playerId, npcId);
-  const behavioral = deriveNpcBehavioralState(state, npcId);
-  let response: string;
-
-  if (
-    (behavioral?.routinePhase === 'working' && npc.locationId === behavioral.destinationId) ||
-    (npc.locationId === 'restaurant:development-restaurant' && npc.activityState === 'active')
-  ) {
-    response = isAcquainted
-      ? "Welcome back. Good to see you again. I'm working here today."
-      : "Welcome. I'm working here today.";
-  } else if (
-    (behavioral?.routinePhase === 'resting' && npc.locationId === behavioral.destinationId) ||
-    (npc.locationId === 'building:development-residence' && npc.activityState === 'idle')
-  ) {
-    response = isAcquainted
-      ? "Hello again. Good to see you. I'm resting at home right now."
-      : "Hello. I'm resting at home right now.";
-  } else if (
-    (behavioral?.routinePhase === 'commuting' && npc.locationId === 'street:development-street') ||
-    (npc.locationId === 'street:development-street' && npc.activityState === 'idle')
-  ) {
-    response = isAcquainted
-      ? "Good morning again. On my way to the restaurant."
-      : "Good morning. On my way to the restaurant.";
-  } else if (
-    (behavioral?.routinePhase === 'promenading' && npc.locationId === behavioral.destinationId) ||
-    (npc.locationId === 'street:avenida-juarez' && npc.activityState === 'idle')
-  ) {
-    response = isAcquainted
-      ? "Good evening again. It's pleasant to walk down Avenida Juárez after work."
-      : "Good evening. It's pleasant to walk down Avenida Juárez after work.";
-  } else if (npc.locationId === 'building:development-building' && npc.activityState === 'idle') {
-    response = isAcquainted
-      ? "Hello again. Good to see you around the building today."
-      : "Hello. I'm around the building today.";
-  } else {
-    response = isAcquainted
-      ? "Hello again. Good to see you."
-      : 'Hello there.';
-  }
+  // Deterministic NPC contextual reaction grounded in derived routine phase (Milestone 61 / 66)
+  const response = resolveNpcGreetingResponse(state, npcId, playerId);
 
   return {
     success: true,
@@ -2886,6 +3092,235 @@ export function greetAgent(
     message: `Player "${playerId}" successfully greeted NPC "${npcId}" at "${player.locationId}"`,
     playerId,
     npcId,
+    response,
+  };
+}
+
+/**
+ * Resolves the deterministic dialogue reaction response for an NPC greeting or responding to another agent.
+ * Grounded strictly in the NPC's derived behavioral state, location, and acquaintance status (Milestone 18-A / 61 / 66).
+ *
+ * Invariant: Pure deterministic derivation, ZERO state mutation.
+ */
+export function resolveNpcGreetingResponse(
+  state: WorldState,
+  npcId: string,
+  targetAgentId: string
+): string {
+  const npc = state.agents?.find((a) => a.id === npcId);
+  if (!npc) {
+    return 'Hello there.';
+  }
+  const isAcquainted = isAgentAcquainted(state, npcId, targetAgentId);
+  const behavioral = deriveNpcBehavioralState(state, npcId);
+
+  if (
+    (behavioral?.routinePhase === 'working' && npc.locationId === behavioral.destinationId) ||
+    (npc.locationId === 'restaurant:development-restaurant' && npc.activityState === 'active')
+  ) {
+    return isAcquainted
+      ? "Welcome back. Good to see you again. I'm working here today."
+      : "Welcome. I'm working here today.";
+  } else if (
+    (behavioral?.routinePhase === 'resting' && npc.locationId === behavioral.destinationId) ||
+    (npc.locationId === 'building:development-residence' && npc.activityState === 'idle')
+  ) {
+    return isAcquainted
+      ? "Hello again. Good to see you. I'm resting at home right now."
+      : "Hello. I'm resting at home right now.";
+  } else if (
+    (behavioral?.routinePhase === 'commuting' && npc.locationId === 'street:development-street') ||
+    (npc.locationId === 'street:development-street' && npc.activityState === 'idle')
+  ) {
+    return isAcquainted
+      ? "Good morning again. On my way to the restaurant."
+      : "Good morning. On my way to the restaurant.";
+  } else if (
+    (behavioral?.routinePhase === 'promenading' && npc.locationId === behavioral.destinationId) ||
+    (npc.locationId === 'street:avenida-juarez' && npc.activityState === 'idle')
+  ) {
+    return isAcquainted
+      ? "Good evening again. It's pleasant to walk down Avenida Juárez after work."
+      : "Good evening. It's pleasant to walk down Avenida Juárez after work.";
+  } else if (npc.locationId === 'building:development-building' && npc.activityState === 'idle') {
+    return isAcquainted
+      ? "Hello again. Good to see you around the building today."
+      : "Hello. I'm around the building today.";
+  } else {
+    return isAcquainted
+      ? "Hello again. Good to see you."
+      : 'Hello there.';
+  }
+}
+
+export type ExecuteNpcGreetingResultCode =
+  | 'success'
+  | 'npc-not-found'
+  | 'actor-not-npc'
+  | 'target-not-found'
+  | 'self-interaction-not-allowed'
+  | 'target-not-valid-agent'
+  | 'actor-location-invalid'
+  | 'target-location-invalid'
+  | 'agents-not-co-located'
+  | 'venue-not-operational';
+
+export interface ExecuteNpcGreetingResult {
+  readonly success: boolean;
+  readonly code: ExecuteNpcGreetingResultCode;
+  readonly message: string;
+  readonly actorId: string;
+  readonly targetId: string;
+  readonly response?: string;
+}
+
+/**
+ * Authoritative social operation: An NPC initiates a greeting to another agent (Milestone 66).
+ *
+ * Enforces authoritative Social Authority preconditions:
+ * 1. Actor exists and is an NPC (code: 'npc-not-found' / 'actor-not-npc')
+ * 2. Target exists and is distinct from actor (code: 'target-not-found' / 'self-interaction-not-allowed')
+ * 3. Target is a valid agent entity (code: 'target-not-valid-agent')
+ * 4. Actor and target both occupy valid locations in places/restaurants (code: 'actor-location-invalid' / 'target-location-invalid')
+ * 5. Actor and target are spatially co-located (code: 'agents-not-co-located')
+ * 6. Business domain constraints: if at a restaurant, venue must not be closed (code: 'venue-not-operational')
+ *
+ * Invariants:
+ * - Pure deterministic evaluation with ZERO state mutation.
+ * - Does NOT alter locations, activityState, balances, relationships, or worldTime.
+ * - Returns authoritative greeting dialogue response.
+ */
+export function executeNpcGreeting(
+  state: WorldState,
+  npcId: string,
+  targetAgentId: string
+): ExecuteNpcGreetingResult {
+  if (!state || typeof state !== 'object') {
+    throw new Error('WorldState must be provided');
+  }
+
+  // 1. Confirm actor exists
+  const actor = state.agents?.find((a) => a.id === npcId);
+  if (!actor) {
+    return {
+      success: false,
+      code: 'npc-not-found',
+      message: `Actor NPC "${npcId}" not found in world state`,
+      actorId: npcId,
+      targetId: targetAgentId,
+    };
+  }
+
+  // 2. Confirm actor is actually an NPC
+  if (actor.agentType !== 'npc') {
+    return {
+      success: false,
+      code: 'actor-not-npc',
+      message: `Actor "${npcId}" is not an NPC (agentType: "${actor.agentType}")`,
+      actorId: npcId,
+      targetId: targetAgentId,
+    };
+  }
+
+  // 3. Confirm target exists
+  const target = state.agents?.find((a) => a.id === targetAgentId);
+  if (!target) {
+    return {
+      success: false,
+      code: 'target-not-found',
+      message: `Target agent "${targetAgentId}" not found in world state`,
+      actorId: npcId,
+      targetId: targetAgentId,
+    };
+  }
+
+  // 4. Confirm actor and target are distinct
+  if (npcId === targetAgentId) {
+    return {
+      success: false,
+      code: 'self-interaction-not-allowed',
+      message: `Agent "${npcId}" cannot greet itself`,
+      actorId: npcId,
+      targetId: targetAgentId,
+    };
+  }
+
+  // 5. Confirm target is a valid agent type
+  if (target.agentType !== 'player' && target.agentType !== 'npc') {
+    return {
+      success: false,
+      code: 'target-not-valid-agent',
+      message: `Target agent "${targetAgentId}" has invalid agentType "${target.agentType}"`,
+      actorId: npcId,
+      targetId: targetAgentId,
+    };
+  }
+
+  // Helper to validate spatial location
+  const isValidLocation = (locationId: string): boolean => {
+    if (typeof locationId !== 'string' || locationId.trim() === '') {
+      return false;
+    }
+    return (
+      (state.places?.some((p) => p.id === locationId) ?? false) ||
+      (state.restaurants?.some((r) => r.id === locationId) ?? false)
+    );
+  };
+
+  // 6. Confirm actor location is valid
+  if (!isValidLocation(actor.locationId)) {
+    return {
+      success: false,
+      code: 'actor-location-invalid',
+      message: `Actor NPC "${npcId}" has invalid spatial location "${actor.locationId}"`,
+      actorId: npcId,
+      targetId: targetAgentId,
+    };
+  }
+
+  // 7. Confirm target location is valid
+  if (!isValidLocation(target.locationId)) {
+    return {
+      success: false,
+      code: 'target-location-invalid',
+      message: `Target agent "${targetAgentId}" has invalid spatial location "${target.locationId}"`,
+      actorId: npcId,
+      targetId: targetAgentId,
+    };
+  }
+
+  // 8. Confirm actor and target occupy the same spatial location
+  if (!areAgentsCoLocated(state, npcId, targetAgentId)) {
+    return {
+      success: false,
+      code: 'agents-not-co-located',
+      message: `Actor NPC "${npcId}" (at "${actor.locationId}") and target "${targetAgentId}" (at "${target.locationId}") are not co-located`,
+      actorId: npcId,
+      targetId: targetAgentId,
+    };
+  }
+
+  // 9. Business Authority domain constraint: closed restaurant precludes interaction
+  const restaurant = state.restaurants?.find((r) => r.id === actor.locationId);
+  if (restaurant && restaurant.operationalState === 'closed') {
+    return {
+      success: false,
+      code: 'venue-not-operational',
+      message: `Restaurant "${restaurant.id}" is closed (operationalState: "${restaurant.operationalState}"); social interaction unavailable`,
+      actorId: npcId,
+      targetId: targetAgentId,
+    };
+  }
+
+  // 10. Generate deterministic greeting response
+  const response = resolveNpcGreetingResponse(state, npcId, targetAgentId);
+
+  return {
+    success: true,
+    code: 'success',
+    message: `NPC "${npcId}" successfully greeted agent "${targetAgentId}" at "${actor.locationId}"`,
+    actorId: npcId,
+    targetId: targetAgentId,
     response,
   };
 }
@@ -3018,7 +3453,7 @@ export function introduceToAgent(
   }
 
   // 7. Confirm player and NPC occupy the same spatial location
-  if (player.locationId !== npc.locationId) {
+  if (!areAgentsCoLocated(state, playerId, npcId)) {
     return {
       success: false,
       code: 'agents-not-co-located',
@@ -3184,7 +3619,7 @@ export function inquireAgentSchedule(
   if (
     !isValidLocation(player.locationId) ||
     !isValidLocation(npc.locationId) ||
-    player.locationId !== npc.locationId
+    !areAgentsCoLocated(state, playerId, npcId)
   ) {
     return {
       success: false,
@@ -3415,7 +3850,7 @@ export function issueNpcScheduleDisclosure(
   if (
     !isValidLocation(player.locationId) ||
     !isValidLocation(npc.locationId) ||
-    player.locationId !== npc.locationId
+    !areAgentsCoLocated(state, playerId, npcId)
   ) {
     return {
       success: false,
@@ -3607,7 +4042,23 @@ function evaluateRestaurantOpportunity(
 }
 
 /**
- * Observed world location representation for the player's current spatial presence (Milestone 12, extended M21-A, M23).
+ * Authoritative attendant summary for an observed establishment/place (Milestone 90).
+ */
+export interface ObservableAttendantSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly establishmentId: string;
+  readonly role: 'attendant';
+  readonly isPresent: boolean;
+  readonly locationId: string;
+  readonly interiorSpaceId: string | null;
+  readonly activityState: ActivityState;
+  readonly interactionState?: AttendantInteractionState;
+  readonly lastInteractionTime?: string;
+}
+
+/**
+ * Observed world location representation for the player's current spatial presence (Milestone 12, extended M21-A, M23, M90).
  */
 export interface ObservedLocation {
   id: string;
@@ -3626,6 +4077,7 @@ export interface ObservedLocation {
   opportunities?: ObservableOpportunity[];        // Projected situational opportunities (present at Restaurant)
   actionConsiderations?: ActionConsideration[];   // Derived agent-specific action considerations (Milestone 48)
   temporalContext?: PlayerTemporalContext;        // Authoritative geographic temporal context
+  attendant?: ObservableAttendantSummary;         // Authoritative attendant projection (Milestone 90)
 }
 
 export interface InspectCurrentLocationResult {
@@ -3642,49 +4094,6 @@ export interface InspectCurrentLocationResult {
   temporalContext?: PlayerTemporalContext;
 }
 
-/**
- * Pure domain predicate evaluating whether two agents currently share the same
- * authoritative topological location in the world state (Milestone 60).
- *
- * Guarantees:
- * - Pure evaluation with ZERO state mutation.
- * - Returns true iff both agents exist in world state, both have a valid non-empty
- *   locationId, and both locationIds are strictly equal.
- * - Note: Evaluates topological co-presence only; does NOT evaluate line-of-sight,
- *   lighting, visual obstruction, distance, or observation.
- */
-export function areAgentsCoLocated(
-  state: WorldState,
-  agentIdA: string,
-  agentIdB: string
-): boolean {
-  if (
-    typeof agentIdA !== 'string' ||
-    agentIdA.trim() === '' ||
-    typeof agentIdB !== 'string' ||
-    agentIdB.trim() === ''
-  ) {
-    return false;
-  }
-
-  const agentA = state.agents.find((a) => a.id === agentIdA);
-  const agentB = state.agents.find((a) => a.id === agentIdB);
-
-  if (!agentA || !agentB) {
-    return false;
-  }
-
-  if (
-    typeof agentA.locationId !== 'string' ||
-    agentA.locationId.trim() === '' ||
-    typeof agentB.locationId !== 'string' ||
-    agentB.locationId.trim() === ''
-  ) {
-    return false;
-  }
-
-  return agentA.locationId === agentB.locationId;
-}
 
 /**
  * Gathers and projects all agents that share the observer's authoritative location (Milestone 60).
@@ -3938,6 +4347,36 @@ export function inspectCurrentLocation(
           id: parentBuilding.id,
           name: parentBuilding.name,
           type: parentBuilding.type,
+        };
+      }
+    }
+  }
+
+  // Milestone 90: Authoritative Attendant Projection for the Observed Location
+  if (state.siteAgentAssociations) {
+    const attendantAssoc = getSiteAttendant(state, observedLocation.id);
+    if (attendantAssoc) {
+      const attendantAgent = state.agents.find((a) => a.id === attendantAssoc.agentId);
+      if (attendantAgent) {
+        const isPresent = areAgentsCoLocated(state, playerId, attendantAgent.id);
+        const activeService = getActiveRestaurantService(playerId, observedLocation.id);
+        const interactionState: AttendantInteractionState =
+          isPresent && activeService && activeService.attendantId === attendantAgent.id
+            ? 'service-accepted'
+            : 'idle';
+        observedLocation.attendant = {
+          id: attendantAgent.id,
+          name: attendantAgent.name,
+          establishmentId: attendantAssoc.placeId,
+          role: 'attendant',
+          isPresent,
+          locationId: attendantAgent.locationId,
+          interiorSpaceId: attendantAgent.interiorSpaceId ?? null,
+          activityState: attendantAgent.activityState,
+          interactionState,
+          ...(activeService && activeService.attendantId === attendantAgent.id
+            ? { lastInteractionTime: activeService.worldTime }
+            : {}),
         };
       }
     }
@@ -4536,6 +4975,23 @@ export function validateWorldState(data: unknown): asserts data is WorldState {
   ]);
   validateAgents(candidate.agents as unknown[], validLocationIds);
   const agents = candidate.agents as Agent[];
+
+  // Validate Agent spatial presence & interior identity (Milestone 85)
+  for (const agent of agents) {
+    if (agent.interiorSpaceId === undefined) {
+      throw new Error(
+        `Invalid WorldState: agent "${agent.id}" is missing required field "interiorSpaceId" in version 19 schema`
+      );
+    }
+    if (agent.interiorSpaceId !== null) {
+      const place = places.find((p) => p.id === agent.locationId);
+      if (place && place.type === 'street') {
+        throw new Error(
+          `Invalid WorldState: agent "${agent.id}" is at street place "${agent.locationId}" but has non-null interiorSpaceId "${agent.interiorSpaceId}" (Invariant A violation)`
+        );
+      }
+    }
+  }
 
   // Validate Offerings referencing Restaurants
   const validRestaurantIds = new Set<string>(restaurants.map((r) => r.id));
@@ -8733,14 +9189,14 @@ export function validateWorldStateV17(data: unknown): asserts data is WorldState
  * siteAgentAssociations collection rather than inventing associations from
  * entity existence.
  */
-export function migrateWorldStateV17ToV18(v17: WorldStateV17): WorldState {
+export function migrateWorldStateV17ToV18(v17: WorldStateV17): WorldStateV18 {
   return {
     worldId: v17.worldId,
     version: 18,
     worldTime: v17.worldTime,
     places: v17.places,
     restaurants: v17.restaurants,
-    agents: v17.agents,
+    agents: v17.agents as unknown as AgentV18[],
     offerings: v17.offerings,
     purchases: v17.purchases,
     activityCompletions: v17.activityCompletions,
@@ -8750,6 +9206,361 @@ export function migrateWorldStateV17ToV18(v17: WorldStateV17): WorldState {
     orders: v17.orders,
     properties: v17.properties,
     siteAgentAssociations: [],
+  };
+}
+
+/**
+ * Validates that an arbitrary object conforms to the strict Milestone 57-84 (Version 18) WorldState contract.
+ * Preserved for pre-migration integrity checking.
+ */
+export function validateWorldStateV18(data: unknown): asserts data is WorldStateV18 {
+  if (typeof data !== 'object' || data === null) {
+    throw new Error('Invalid WorldState: state must be a non-null object');
+  }
+
+  const candidate = data as Record<string, unknown>;
+
+  if (typeof candidate.worldId !== 'string' || candidate.worldId.trim() === '') {
+    throw new Error(
+      `Invalid WorldState: worldId must be a non-empty string. Received: ${JSON.stringify(candidate.worldId)}`
+    );
+  }
+
+  if (candidate.worldId !== DEFAULT_WORLD_ID) {
+    throw new Error(
+      `Invalid WorldState: worldId must be "${DEFAULT_WORLD_ID}". Received: ${JSON.stringify(candidate.worldId)}`
+    );
+  }
+
+  if (
+    typeof candidate.version !== 'number' ||
+    !Number.isInteger(candidate.version) ||
+    candidate.version <= 0
+  ) {
+    throw new Error(
+      `Invalid WorldState: version must be a positive integer. Received: ${JSON.stringify(candidate.version)}`
+    );
+  }
+
+  if (candidate.version !== 18) {
+    throw new Error(
+      `Unsupported WorldState version: ${candidate.version}. Expected version 18. Incompatible schemas must be rejected explicitly.`
+    );
+  }
+
+  if (typeof candidate.worldTime !== 'string' || candidate.worldTime.trim() === '') {
+    throw new Error(
+      `Invalid WorldState: worldTime must be a non-empty string. Received: ${JSON.stringify(candidate.worldTime)}`
+    );
+  }
+
+  const parsedTime = Date.parse(candidate.worldTime);
+  if (Number.isNaN(parsedTime)) {
+    throw new Error(
+      `Invalid WorldState: worldTime must be a valid ISO-8601 timestamp. Received: "${candidate.worldTime}"`
+    );
+  }
+
+  validatePlaces(candidate.places as unknown[]);
+  const places = candidate.places as Place[];
+
+  const buildingIds = new Set<string>(
+    places.filter((p) => p.type === 'building').map((p) => p.id)
+  );
+  validateRestaurants(candidate.restaurants as unknown[], buildingIds);
+  const restaurants = candidate.restaurants as Restaurant[];
+
+  const validLocationIds = new Set<string>([
+    ...places.map((p) => p.id),
+    ...restaurants.map((r) => r.id),
+  ]);
+  validateAgents(candidate.agents as unknown[], validLocationIds);
+  const agents = candidate.agents as AgentV18[];
+
+  const validRestaurantIds = new Set<string>(restaurants.map((r) => r.id));
+  validateOfferings(candidate.offerings as unknown[], validRestaurantIds);
+  const offerings = candidate.offerings as Offering[];
+
+  validateBusinessAuthority(candidate as unknown as WorldState);
+
+  for (const agent of agents) {
+    if (agent.playerActivity) {
+      if (!validRestaurantIds.has(agent.playerActivity.restaurantId)) {
+        throw new Error(
+          `Invalid playerActivity for agent "${agent.id}": restaurantId "${agent.playerActivity.restaurantId}" references non-existent restaurant`
+        );
+      }
+      if (
+        typeof agent.playerActivity.durationMs !== 'number' ||
+        !Number.isInteger(agent.playerActivity.durationMs) ||
+        agent.playerActivity.durationMs <= 0
+      ) {
+        throw new Error(
+          `Invalid playerActivity durationMs for agent "${agent.id}": must be a positive integer`
+        );
+      }
+      if (
+        typeof agent.playerActivity.offeringId !== 'string' ||
+        agent.playerActivity.offeringId.trim() === ''
+      ) {
+        throw new Error(
+          `Invalid playerActivity offeringId for agent "${agent.id}": must be a non-empty string`
+        );
+      }
+      if (
+        agent.playerActivity.itemId !== null &&
+        (typeof agent.playerActivity.itemId !== 'string' || agent.playerActivity.itemId.trim() === '')
+      ) {
+        throw new Error(
+          `Invalid playerActivity itemId for agent "${agent.id}": must be null or a non-empty string`
+        );
+      }
+      if (
+        agent.playerActivity.companionAgentId !== undefined &&
+        agent.playerActivity.companionAgentId !== null &&
+        (typeof agent.playerActivity.companionAgentId !== 'string' || agent.playerActivity.companionAgentId.trim() === '')
+      ) {
+        throw new Error(
+          `Invalid playerActivity companionAgentId for agent "${agent.id}": must be null or a non-empty string`
+        );
+      }
+    }
+  }
+
+  // Global ID uniqueness across all entity collections
+  const globalIdSet = new Set<string>();
+  for (const place of places) globalIdSet.add(place.id);
+  for (const restaurant of restaurants) {
+    if (globalIdSet.has(restaurant.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${restaurant.id}"`);
+    }
+    globalIdSet.add(restaurant.id);
+  }
+  for (const agent of agents) {
+    if (globalIdSet.has(agent.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${agent.id}"`);
+    }
+    globalIdSet.add(agent.id);
+  }
+  for (const offering of offerings) {
+    if (globalIdSet.has(offering.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${offering.id}"`);
+    }
+    globalIdSet.add(offering.id);
+  }
+
+  // Validate Purchases
+  if (!Array.isArray(candidate.purchases)) {
+    throw new Error('Invalid WorldState: purchases must be an array');
+  }
+  const purchaseIdSet = new Set<string>();
+  for (let i = 0; i < candidate.purchases.length; i++) {
+    const p = candidate.purchases[i];
+    if (typeof p !== 'object' || p === null) {
+      throw new Error(`Invalid PurchaseRecord at index ${i}: record must be a non-null object`);
+    }
+    const rec = p as Record<string, unknown>;
+    validateEntityId(rec.id);
+    if (purchaseIdSet.has(rec.id as string)) {
+      throw new Error(`Duplicate purchase record id found: "${rec.id}"`);
+    }
+    if (globalIdSet.has(rec.id as string)) {
+      throw new Error(`Duplicate entity id found across collections: "${rec.id}"`);
+    }
+    purchaseIdSet.add(rec.id as string);
+    globalIdSet.add(rec.id as string);
+  }
+
+  // Validate Activity Completions
+  if (!Array.isArray(candidate.activityCompletions)) {
+    throw new Error('Invalid WorldState: activityCompletions must be an array');
+  }
+  for (let i = 0; i < candidate.activityCompletions.length; i++) {
+    const c = candidate.activityCompletions[i];
+    if (typeof c !== 'object' || c === null) {
+      throw new Error(`Invalid ActivityCompletionRecord at index ${i}: record must be a non-null object`);
+    }
+    const rec = c as Record<string, unknown>;
+    validateEntityId(rec.id);
+    if (globalIdSet.has(rec.id as string)) {
+      throw new Error(`Duplicate entity id found across collections: "${rec.id}"`);
+    }
+    globalIdSet.add(rec.id as string);
+  }
+
+  // Validate Acquaintances
+  validateAcquaintances(candidate.acquaintances as unknown[]);
+  for (const acq of candidate.acquaintances as Acquaintance[]) {
+    if (globalIdSet.has(acq.id)) {
+      throw new Error(`Duplicate entity id found across collections: "${acq.id}"`);
+    }
+    globalIdSet.add(acq.id);
+  }
+
+  // Validate Items
+  validateItemAuthority(candidate as unknown as ItemWorldState);
+  if (Array.isArray(candidate.items)) {
+    for (const item of candidate.items as OwnedItem[]) {
+      if (globalIdSet.has(item.id)) {
+        throw new Error(`Duplicate entity id found across collections: "${item.id}"`);
+      }
+      globalIdSet.add(item.id);
+    }
+  }
+
+  // Validate Knowledge
+  if (!Array.isArray(candidate.knowledge)) {
+    throw new Error('Invalid WorldState: knowledge must be an array');
+  }
+  for (let i = 0; i < candidate.knowledge.length; i++) {
+    const k = candidate.knowledge[i];
+    if (typeof k !== 'object' || k === null) {
+      throw new Error(`Invalid AgentKnowledgeRecord at index ${i}: record must be a non-null object`);
+    }
+    const rec = k as Record<string, unknown>;
+    validateEntityId(rec.id);
+    if (globalIdSet.has(rec.id as string)) {
+      throw new Error(`Duplicate entity id found across collections: "${rec.id}"`);
+    }
+    globalIdSet.add(rec.id as string);
+  }
+
+  // Validate Orders
+  if (!Array.isArray(candidate.orders)) {
+    throw new Error('Invalid WorldState: orders must be an array');
+  }
+  for (let i = 0; i < candidate.orders.length; i++) {
+    const o = candidate.orders[i];
+    if (typeof o === 'object' && o !== null && typeof (o as Record<string, unknown>).id === 'string') {
+      const orderId = (o as Record<string, unknown>).id as string;
+      if (globalIdSet.has(orderId)) {
+        throw new Error(`Duplicate entity id found across collections: "${orderId}"`);
+      }
+      globalIdSet.add(orderId);
+    }
+  }
+  validateOrderAuthority(candidate as unknown as OrderWorldState);
+
+  // Validate Properties
+  if (!Array.isArray(candidate.properties)) {
+    throw new Error('Invalid WorldState: properties must be an array');
+  }
+  for (let i = 0; i < candidate.properties.length; i++) {
+    const p = candidate.properties[i];
+    if (typeof p === 'object' && p !== null && typeof (p as Record<string, unknown>).id === 'string') {
+      const propertyId = (p as Record<string, unknown>).id as string;
+      if (globalIdSet.has(propertyId)) {
+        throw new Error(`Duplicate entity id found across collections: "${propertyId}"`);
+      }
+      globalIdSet.add(propertyId);
+    }
+  }
+  validatePropertyAuthority(candidate as unknown as PropertyWorldState);
+
+  // Validate Site Agent Associations (Milestone 57 / Version 18)
+  validateSiteAgentAssociations(candidate.siteAgentAssociations as unknown[]);
+}
+
+export interface InteriorSpaceReference {
+  readonly interiorId: string;
+  readonly associatedPlaceId: string;
+}
+
+export const CANONICAL_M85_INTERIORS: readonly InteriorSpaceReference[] = Object.freeze([
+  { interiorId: 'interior:wing-spot', associatedPlaceId: 'restaurant:wing-spot' },
+  { interiorId: 'interior:tia-lupe', associatedPlaceId: 'restaurant:pasteleria-tia-lupe' },
+]);
+
+/**
+ * Migrates a valid Version 18 WorldState to Version 19 (Milestone 85).
+ *
+ * Establishes Hierarchical Spatial Identity:
+ * - Outdoors / exterior locations: interiorSpaceId = null
+ * - Single-room interior venues (canonical M82 Wing Spot & M83 Tía Lupe):
+ *   interiorSpaceId = interiorId
+ * - Ambiguous multi-interior venues: Explicitly rejected rather than guessing.
+ */
+export function migrateWorldStateV18ToV19(
+  v18: WorldStateV18,
+  knownInteriors: readonly InteriorSpaceReference[] = CANONICAL_M85_INTERIORS
+): WorldState {
+  const migratedAgents: Agent[] = v18.agents.map((agent) => {
+    // 1. Explicit pre-existing interiorSpaceId
+    if ((agent as any).interiorSpaceId !== undefined) {
+      const explicitId = (agent as any).interiorSpaceId;
+      if (explicitId === null) {
+        return {
+          ...agent,
+          interiorSpaceId: null,
+        };
+      }
+      if (typeof explicitId !== 'string' || explicitId.trim() === '') {
+        throw new Error(
+          `Cannot migrate agent "${agent.id}" to Version 19: malformed interiorSpaceId "${JSON.stringify(explicitId)}"`
+        );
+      }
+      if (explicitId.startsWith('entrance:')) {
+        throw new Error(
+          `Cannot migrate agent "${agent.id}" to Version 19: interiorSpaceId cannot reference an entrance ("${explicitId}")`
+        );
+      }
+      if (explicitId.startsWith('node:nav:')) {
+        throw new Error(
+          `Cannot migrate agent "${agent.id}" to Version 19: interiorSpaceId cannot reference a navigation node ("${explicitId}")`
+        );
+      }
+      if (!explicitId.startsWith('interior:')) {
+        throw new Error(
+          `Cannot migrate agent "${agent.id}" to Version 19: corrupt interiorSpaceId "${explicitId}" (must start with "interior:")`
+        );
+      }
+      // Validate that explicitId exists in knownInteriors and matches agent's locationId
+      const matchingInterior = knownInteriors.find((i) => i.interiorId === explicitId);
+      if (!matchingInterior) {
+        throw new Error(
+          `Cannot migrate agent "${agent.id}" to Version 19: nonexistent interiorSpaceId "${explicitId}"`
+        );
+      }
+      if (matchingInterior.associatedPlaceId !== agent.locationId) {
+        throw new Error(
+          `Cannot migrate agent "${agent.id}" to Version 19: mismatched interior "${explicitId}" (associated with "${matchingInterior.associatedPlaceId}") for agent at location "${agent.locationId}"`
+        );
+      }
+      return {
+        ...agent,
+        interiorSpaceId: explicitId,
+      };
+    }
+
+    // 2. No pre-existing interiorSpaceId (undefined)
+    // Milestone 85 Correction Pass (F-08 Closure):
+    // V18 predates the hierarchical spatial identity model.
+    // Organizational affiliation, work assignment, activity state, or business association
+    // is NOT evidence that an agent was physically inside an interior partition at snapshot time.
+    // The migration must never manufacture physical reality.
+    // All V18 agents without explicit interior identity safely receive interiorSpaceId = null.
+    return {
+      ...agent,
+      interiorSpaceId: null,
+    };
+  });
+
+  return {
+    worldId: v18.worldId,
+    version: 19,
+    worldTime: v18.worldTime,
+    places: v18.places,
+    restaurants: v18.restaurants,
+    agents: migratedAgents,
+    offerings: v18.offerings,
+    purchases: v18.purchases,
+    activityCompletions: v18.activityCompletions,
+    acquaintances: v18.acquaintances,
+    items: v18.items,
+    knowledge: v18.knowledge,
+    orders: v18.orders,
+    properties: v18.properties,
+    siteAgentAssociations: v18.siteAgentAssociations,
   };
 }
 

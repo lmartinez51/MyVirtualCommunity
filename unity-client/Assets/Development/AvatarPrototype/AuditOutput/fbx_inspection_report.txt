@@ -1,0 +1,421 @@
+================================================================================
+CHARACTERS_SHAUN.FBX — UNITY 6000.3.25f1 IMPORT & MORPHOLOGY INSPECTION REPORT
+================================================================================
+
+--- 1. MODEL IMPORTER SETTINGS ---
+Asset Path: Assets/Development/AvatarPrototype/Source/Characters_Shaun.fbx
+Default AnimationType: Generic
+Global Scale: 1
+File Scale: 0.01
+Use File Scale: True
+Import BlendShapes: True
+Import Normals: Import
+Material Import Mode: ImportViaMaterialDescription
+Import Animation: True
+
+--- 2. SUB-ASSETS (170 total) ---
+  [AnimationClip] name='__preview__CharacterArmature|Death'
+  [AnimationClip] name='__preview__CharacterArmature|Duck'
+  [AnimationClip] name='__preview__CharacterArmature|HitReact'
+  [AnimationClip] name='__preview__CharacterArmature|Idle'
+  [AnimationClip] name='__preview__CharacterArmature|Idle_Gun'
+  [AnimationClip] name='__preview__CharacterArmature|Jump'
+  [AnimationClip] name='__preview__CharacterArmature|Jump_Idle'
+  [AnimationClip] name='__preview__CharacterArmature|Jump_Land'
+  [AnimationClip] name='__preview__CharacterArmature|No'
+  [AnimationClip] name='__preview__CharacterArmature|Punch'
+  [AnimationClip] name='__preview__CharacterArmature|Run'
+  [AnimationClip] name='__preview__CharacterArmature|Run_Gun'
+  [AnimationClip] name='__preview__CharacterArmature|Run_Slash'
+  [AnimationClip] name='__preview__CharacterArmature|Run_Stab'
+  [AnimationClip] name='__preview__CharacterArmature|Slash'
+  [AnimationClip] name='__preview__CharacterArmature|Stab'
+  [AnimationClip] name='__preview__CharacterArmature|Walk'
+  [AnimationClip] name='__preview__CharacterArmature|Walk_Gun'
+  [AnimationClip] name='__preview__CharacterArmature|Wave'
+  [AnimationClip] name='__preview__CharacterArmature|Yes'
+  [AnimationClip] name='CharacterArmature|Death'
+  [AnimationClip] name='CharacterArmature|Duck'
+  [AnimationClip] name='CharacterArmature|HitReact'
+  [AnimationClip] name='CharacterArmature|Idle'
+  [AnimationClip] name='CharacterArmature|Idle_Gun'
+  [AnimationClip] name='CharacterArmature|Jump'
+  [AnimationClip] name='CharacterArmature|Jump_Idle'
+  [AnimationClip] name='CharacterArmature|Jump_Land'
+  [AnimationClip] name='CharacterArmature|No'
+  [AnimationClip] name='CharacterArmature|Punch'
+  [AnimationClip] name='CharacterArmature|Run'
+  [AnimationClip] name='CharacterArmature|Run_Gun'
+  [AnimationClip] name='CharacterArmature|Run_Slash'
+  [AnimationClip] name='CharacterArmature|Run_Stab'
+  [AnimationClip] name='CharacterArmature|Slash'
+  [AnimationClip] name='CharacterArmature|Stab'
+  [AnimationClip] name='CharacterArmature|Walk'
+  [AnimationClip] name='CharacterArmature|Walk_Gun'
+  [AnimationClip] name='CharacterArmature|Wave'
+  [AnimationClip] name='CharacterArmature|Yes'
+  [Material] name='Atlas'
+  [Mesh] name='Shaun'
+  [Mesh] name='WoodenBat_Saw'
+  [MeshFilter] name='WoodenBat_Saw'
+  [MeshRenderer] name='WoodenBat_Saw'
+  [SkinnedMeshRenderer] name='Shaun'
+
+--- 3. TRANSFORM HIERARCHY ---
+- Characters_Shaun | localPos=(0.0000, 0.0000, 0.0000) worldPos=(0.0000, 0.0000, 0.0000) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+  - CharacterArmature | localPos=(0.0000, 0.0000, 0.0000) worldPos=(0.0000, 0.0000, 0.0000) localRot=(270.02, 0.00, 0.00) localScale=(100.000, 100.000, 100.000)
+    - Root | localPos=(0.0000, 0.0012, 0.0000) worldPos=(0.0007, -0.0013, -0.1240) localRot=(89.98, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+      - Body | localPos=(0.0000, 0.0038, 0.0009) worldPos=(-0.0004, 0.3774, -0.0357) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+        - Hips | localPos=(0.0000, -0.0001, -0.0013) worldPos=(0.0003, 0.3707, -0.1676) localRot=(354.18, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+          - Abdomen | localPos=(0.0000, 0.0017, 0.0000) worldPos=(0.0003, 0.5354, -0.1844) localRot=(16.16, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+            - Torso | localPos=(0.0000, 0.0012, 0.0000) worldPos=(0.0003, 0.6566, -0.1623) localRot=(18.34, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+              - Neck | localPos=(0.0000, 0.0016, 0.0000) worldPos=(0.0003, 0.8006, -0.0835) localRot=(346.15, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+                - Head | localPos=(0.0000, 0.0006, 0.0000) worldPos=(0.0003, 0.8622, -0.0672) localRot=(350.16, 0.03, -0.01) localScale=(1.000, 1.000, 1.000)
+                  - Head_end | localPos=(0.0000, 0.0042, 0.0000) worldPos=(0.0003, 1.2772, -0.0310) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+              - Shoulder.L | localPos=(-0.0007, 0.0000, 0.0008) worldPos=(-0.0710, 0.6236, -0.0930) localRot=(331.25, 344.80, 52.84) localScale=(1.000, 1.000, 1.000)
+                - UpperArm.L | localPos=(0.0000, 0.0017, 0.0000) worldPos=(-0.1893, 0.7431, -0.1229) localRot=(282.57, 0.94, 88.83) localScale=(1.000, 1.000, 1.000)
+                  - LowerArm.L | localPos=(0.0000, 0.0023, 0.0000) worldPos=(-0.3489, 0.5775, -0.1587) localRot=(340.33, 345.09, 71.60) localScale=(1.000, 1.000, 1.000)
+                    - Index1.L | localPos=(0.0000, 0.0032, 0.0000) worldPos=(-0.3556, 0.3916, 0.1061) localRot=(18.46, 352.04, 31.46) localScale=(1.000, 1.000, 1.000)
+                      - Index2.L | localPos=(0.0000, 0.0014, 0.0000) worldPos=(-0.3501, 0.3935, 0.2501) localRot=(336.92, 34.73, 335.79) localScale=(1.000, 1.000, 1.000)
+                        - Index3.L | localPos=(0.0000, 0.0006, 0.0000) worldPos=(-0.3282, 0.3687, 0.2995) localRot=(292.40, 346.21, 18.04) localScale=(1.000, 1.000, 1.000)
+                          - Index3.L_end | localPos=(0.0000, 0.0006, 0.0000) worldPos=(-0.2709, 0.3620, 0.2960) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+                    - Middle1.L | localPos=(0.0000, 0.0032, 0.0000) worldPos=(-0.3556, 0.3916, 0.1061) localRot=(13.43, 0.53, 2.87) localScale=(1.000, 1.000, 1.000)
+                      - Middle2.L | localPos=(0.0000, 0.0014, 0.0000) worldPos=(-0.3853, 0.3296, 0.2289) localRot=(36.20, 218.79, 10.91) localScale=(1.000, 1.000, 1.000)
+                        - Middle3.L | localPos=(0.0000, 0.0006, 0.0000) worldPos=(-0.3594, 0.3021, 0.2763) localRot=(287.60, 141.20, 14.81) localScale=(1.000, 1.000, 1.000)
+                          - Middle3.L_end | localPos=(0.0000, 0.0008, 0.0000) worldPos=(-0.2846, 0.2917, 0.2585) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+                      - WoodenBat_Saw [MeshFilter, MeshRenderer] | localPos=(-0.0001, 0.0010, -0.0005) worldPos=(-0.3324, 0.3328, 0.2019) localRot=(346.25, 0.36, 269.51) localScale=(1.000, 1.000, 1.000)
+                    - Pinky1.L | localPos=(0.0000, 0.0032, 0.0000) worldPos=(-0.3556, 0.3916, 0.1061) localRot=(7.13, 347.04, 328.77) localScale=(1.000, 1.000, 1.000)
+                      - Pinky2.L | localPos=(0.0000, 0.0012, 0.0000) worldPos=(-0.4073, 0.2970, 0.1666) localRot=(329.04, 17.17, 36.05) localScale=(1.000, 1.000, 1.000)
+                        - Pinky3.L | localPos=(0.0000, 0.0007, 0.0000) worldPos=(-0.3940, 0.2661, 0.2237) localRot=(287.91, 326.16, 21.47) localScale=(1.000, 1.000, 1.000)
+                          - Pinky3.L_end | localPos=(0.0000, 0.0006, 0.0000) worldPos=(-0.3397, 0.2486, 0.2206) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+                    - Thumb1.L | localPos=(0.0000, 0.0032, 0.0000) worldPos=(-0.3556, 0.3916, 0.1061) localRot=(65.69, 314.98, 57.31) localScale=(1.000, 1.000, 1.000)
+                      - Thumb2.L | localPos=(0.0000, 0.0017, 0.0000) worldPos=(-0.2522, 0.4724, 0.2112) localRot=(355.68, 92.34, 289.51) localScale=(1.000, 1.000, 1.000)
+                        - Thumb2.L_end | localPos=(0.0000, 0.0006, 0.0000) worldPos=(-0.2304, 0.4342, 0.2505) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+              - Shoulder.R | localPos=(0.0007, 0.0000, 0.0008) worldPos=(0.0710, 0.6236, -0.0930) localRot=(331.25, 15.20, 307.16) localScale=(1.000, 1.000, 1.000)
+                - UpperArm.R | localPos=(0.0000, 0.0017, 0.0000) worldPos=(0.1893, 0.7431, -0.1229) localRot=(282.57, 359.06, 271.17) localScale=(1.000, 1.000, 1.000)
+                  - LowerArm.R | localPos=(0.0000, 0.0023, 0.0000) worldPos=(0.3489, 0.5775, -0.1587) localRot=(1.26, 30.24, 339.61) localScale=(1.000, 1.000, 1.000)
+                    - Index1.R | localPos=(0.0000, 0.0032, 0.0000) worldPos=(0.5276, 0.3125, -0.1079) localRot=(27.29, 8.62, 327.58) localScale=(1.000, 1.000, 1.000)
+                      - Index2.R | localPos=(0.0000, 0.0014, 0.0000) worldPos=(0.5712, 0.2310, 0.0027) localRot=(342.14, 336.91, 21.43) localScale=(1.000, 1.000, 1.000)
+                        - Index3.R | localPos=(0.0000, 0.0006, 0.0000) worldPos=(0.5934, 0.1810, 0.0256) localRot=(335.46, 2.66, 348.78) localScale=(1.000, 1.000, 1.000)
+                          - Index3.R_end | localPos=(0.0000, 0.0006, 0.0000) worldPos=(0.5903, 0.1251, 0.0402) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+                    - Middle1.R | localPos=(0.0000, 0.0032, 0.0000) worldPos=(0.5276, 0.3125, -0.1079) localRot=(13.43, 359.47, 357.13) localScale=(1.000, 1.000, 1.000)
+                      - Middle2.R | localPos=(0.0000, 0.0014, 0.0000) worldPos=(0.6208, 0.2170, -0.0634) localRot=(8.38, 147.49, 354.37) localScale=(1.000, 1.000, 1.000)
+                        - Middle3.R | localPos=(0.0000, 0.0006, 0.0000) worldPos=(0.6550, 0.1689, -0.0498) localRot=(320.85, 212.85, 351.71) localScale=(1.000, 1.000, 1.000)
+                          - Middle3.R_end | localPos=(0.0000, 0.0008, 0.0000) worldPos=(0.6530, 0.0914, -0.0533) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+                    - Pinky1.R | localPos=(0.0000, 0.0032, 0.0000) worldPos=(0.5276, 0.3125, -0.1079) localRot=(7.13, 12.96, 31.23) localScale=(1.000, 1.000, 1.000)
+                      - Pinky2.R | localPos=(0.0000, 0.0012, 0.0000) worldPos=(0.6343, 0.2529, -0.1263) localRot=(336.95, 355.72, 341.23) localScale=(1.000, 1.000, 1.000)
+                        - Pinky3.R | localPos=(0.0000, 0.0007, 0.0000) worldPos=(0.6684, 0.1965, -0.1340) localRot=(335.17, 3.62, 347.65) localScale=(1.000, 1.000, 1.000)
+                          - Pinky3.R_end | localPos=(0.0000, 0.0006, 0.0000) worldPos=(0.6718, 0.1403, -0.1434) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+                    - Thumb1.R | localPos=(0.0000, 0.0032, 0.0000) worldPos=(0.5276, 0.3125, -0.1079) localRot=(79.67, 1.44, 284.64) localScale=(1.000, 1.000, 1.000)
+                      - Thumb2.R | localPos=(0.0000, 0.0017, 0.0000) worldPos=(0.4706, 0.2948, 0.0492) localRot=(346.26, 274.53, 43.26) localScale=(1.000, 1.000, 1.000)
+                        - Thumb2.R_end | localPos=(0.0000, 0.0006, 0.0000) worldPos=(0.4682, 0.2504, 0.0880) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+        - UpperLeg.L | localPos=(-0.0012, 0.0001, -0.0011) worldPos=(-0.1216, 0.3865, -0.1447) localRot=(42.42, 185.61, 187.33) localScale=(1.000, 1.000, 1.000)
+          - LowerLeg.L | localPos=(0.0000, 0.0025, 0.0000) worldPos=(-0.1369, 0.2045, 0.0239) localRot=(84.98, 347.56, 347.54) localScale=(1.000, 1.000, 1.000)
+            - LowerLeg.L_end | localPos=(0.0000, 0.0025, 0.0000) worldPos=(-0.1560, 0.0197, -0.1456) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+        - UpperLeg.R | localPos=(0.0012, 0.0001, -0.0011) worldPos=(0.1216, 0.3865, -0.1447) localRot=(42.92, 177.94, 177.30) localScale=(1.000, 1.000, 1.000)
+          - LowerLeg.R | localPos=(0.0000, 0.0025, 0.0000) worldPos=(0.1273, 0.2047, 0.0246) localRot=(85.48, 13.86, 13.88) localScale=(1.000, 1.000, 1.000)
+            - LowerLeg.R_end | localPos=(0.0000, 0.0025, 0.0000) worldPos=(0.1341, 0.0199, -0.1457) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+      - Foot.L | localPos=(-0.0016, 0.0002, -0.0002) worldPos=(-0.1559, 0.0217, -0.1477) localRot=(270.21, 359.48, 180.52) localScale=(1.000, 1.000, 1.000)
+        - Foot.L_end | localPos=(0.0000, 0.0018, 0.0000) worldPos=(-0.1559, 0.0210, 0.0323) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+      - Foot.R | localPos=(0.0013, 0.0002, -0.0002) worldPos=(0.1341, 0.0217, -0.1477) localRot=(270.21, 0.52, 179.48) localScale=(1.000, 1.000, 1.000)
+        - Foot.R_end | localPos=(0.0000, 0.0018, 0.0000) worldPos=(0.1341, 0.0210, 0.0323) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+      - PoleTarget.L | localPos=(-0.0013, 0.0026, 0.0098) worldPos=(-0.1252, 0.2576, 0.8543) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+        - PoleTarget.L_end | localPos=(0.0000, 0.0014, 0.0000) worldPos=(-0.1252, 0.4018, 0.8543) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+      - PoleTarget.R | localPos=(0.0012, 0.0026, 0.0098) worldPos=(0.1252, 0.2576, 0.8543) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+        - PoleTarget.R_end | localPos=(0.0000, 0.0014, 0.0000) worldPos=(0.1252, 0.4018, 0.8543) localRot=(0.00, 0.00, 0.00) localScale=(1.000, 1.000, 1.000)
+  - Shaun [SkinnedMeshRenderer] | localPos=(0.0000, 0.0000, 0.0000) worldPos=(0.0000, 0.0000, 0.0000) localRot=(270.02, 0.00, 0.00) localScale=(100.000, 100.000, 100.000)
+
+--- 4. MESH & SKINNING ANALYSIS ---
+SkinnedMeshRenderer count: 1
+MeshRenderer (unskinned) count: 1
+
+[SkinnedMeshRenderer] GameObject='Shaun' Mesh='Shaun'
+  RootBone: Root
+  Bones array count: 43 -> [Root, Foot.L, Body, Hips, Abdomen, Torso, Neck, Head, Shoulder.L, UpperArm.L, LowerArm.L, Pinky1.L, Pinky2.L, Pinky3.L, Middle1.L, Middle2.L, Middle3.L, Index1.L, Index2.L, Index3.L, Thumb1.L, Thumb2.L, Shoulder.R, UpperArm.R, LowerArm.R, Pinky1.R, Pinky2.R, Pinky3.R, Middle1.R, Middle2.R, Middle3.R, Index1.R, Index2.R, Index3.R, Thumb1.R, Thumb2.R, UpperLeg.L, LowerLeg.L, UpperLeg.R, LowerLeg.R, PoleTarget.L, Foot.R, PoleTarget.R]
+  SharedMaterials (1): [Atlas]
+  True World Bounds (Rest Pose): center=(0.1203, 0.6876, -0.1411), size=(1.1190, 1.3929, 0.9143), min=(-0.4393, -0.0088, -0.5982), max=(0.6798, 1.3841, 0.3161)
+  Vertices: 6639, Triangles: 8454, SubMeshCount: 1
+  Has Normals: True, Has Tangents: True
+  Has UV0: True, Has Colors: False
+    SubMesh[0]: indexStart=0, indexCount=25362 (8454 tris), bounds=Center: (0.00, 0.00, 0.01), Extents: (0.01, 0.00, 0.01)
+  Bone Weight Breakdown:
+    Bone 'Hips': influences 2162/6639 verts (total weight sum=1945.87)
+    Bone 'Head': influences 1785/6639 verts (total weight sum=1645.76)
+    Bone 'Shoulder.L': influences 617/6639 verts (total weight sum=171.60)
+    Bone 'Torso': influences 601/6639 verts (total weight sum=78.54)
+    Bone 'Shoulder.R': influences 582/6639 verts (total weight sum=164.97)
+    Bone 'UpperArm.L': influences 421/6639 verts (total weight sum=211.05)
+    Bone 'UpperArm.R': influences 404/6639 verts (total weight sum=201.45)
+    Bone 'LowerLeg.R': influences 371/6639 verts (total weight sum=233.75)
+    Bone 'UpperLeg.R': influences 366/6639 verts (total weight sum=143.55)
+    Bone 'LowerLeg.L': influences 358/6639 verts (total weight sum=162.93)
+    Bone 'UpperLeg.L': influences 338/6639 verts (total weight sum=163.70)
+    Bone 'Foot.L': influences 338/6639 verts (total weight sum=207.89)
+    Bone 'LowerArm.L': influences 313/6639 verts (total weight sum=252.71)
+    Bone 'Abdomen': influences 292/6639 verts (total weight sum=50.24)
+    Bone 'Foot.R': influences 288/6639 verts (total weight sum=167.40)
+    Bone 'LowerArm.R': influences 215/6639 verts (total weight sum=154.71)
+    Bone 'Neck': influences 194/6639 verts (total weight sum=21.50)
+    Bone 'Thumb1.L': influences 150/6639 verts (total weight sum=48.41)
+    Bone 'Thumb1.R': influences 150/6639 verts (total weight sum=48.41)
+    Bone 'Index1.L': influences 115/6639 verts (total weight sum=22.33)
+    Bone 'Index1.R': influences 115/6639 verts (total weight sum=22.33)
+    Bone 'Pinky1.L': influences 114/6639 verts (total weight sum=27.99)
+    Bone 'Pinky1.R': influences 114/6639 verts (total weight sum=27.99)
+    Bone 'Middle1.L': influences 104/6639 verts (total weight sum=14.45)
+    Bone 'Middle2.L': influences 104/6639 verts (total weight sum=49.35)
+    Bone 'Middle1.R': influences 104/6639 verts (total weight sum=14.45)
+    Bone 'Middle2.R': influences 104/6639 verts (total weight sum=49.35)
+    Bone 'Middle3.L': influences 68/6639 verts (total weight sum=32.49)
+    Bone 'Middle3.R': influences 68/6639 verts (total weight sum=32.49)
+    Bone 'Thumb2.L': influences 67/6639 verts (total weight sum=38.07)
+    Bone 'Thumb2.R': influences 67/6639 verts (total weight sum=38.07)
+    Bone 'Index2.L': influences 66/6639 verts (total weight sum=20.49)
+    Bone 'Index2.R': influences 66/6639 verts (total weight sum=20.49)
+    Bone 'Pinky2.L': influences 62/6639 verts (total weight sum=21.29)
+    Bone 'Pinky2.R': influences 62/6639 verts (total weight sum=21.29)
+    Bone 'Index3.L': influences 47/6639 verts (total weight sum=28.16)
+    Bone 'Index3.R': influences 47/6639 verts (total weight sum=28.16)
+    Bone 'Pinky3.L': influences 45/6639 verts (total weight sum=27.68)
+    Bone 'Pinky3.R': influences 45/6639 verts (total weight sum=27.68)
+  Atlas Color / UV Swatch Regions (14 distinct hex colors sampled):
+    #5F4009 (RGB 0.37,0.25,0.04) -> 1480 verts | Y:[-0.009, 0.969] X:[-0.263, 0.261] Z:[-0.598, 0.119] | sampleUV=(0.141, 0.957)
+    #C09264 (RGB 0.75,0.57,0.39) -> 1213 verts | Y:[0.036, 1.272] X:[-0.416, 0.680] Z:[-0.228, 0.316] | sampleUV=(0.045, 0.953)
+    #A58A3B (RGB 0.65,0.54,0.23) -> 720 verts | Y:[0.169, 0.735] X:[-0.439, 0.249] Z:[-0.586, 0.087] | sampleUV=(0.360, 0.954)
+    #923C12 (RGB 0.57,0.24,0.07) -> 643 verts | Y:[0.847, 1.337] X:[-0.214, 0.214] Z:[-0.313, 0.170] | sampleUV=(0.080, 0.954)
+    #4C3A21 (RGB 0.30,0.23,0.13) -> 524 verts | Y:[0.169, 0.814] X:[-0.436, 0.669] Z:[-0.573, 0.296] | sampleUV=(0.298, 0.955)
+    #466469 (RGB 0.27,0.39,0.41) -> 479 verts | Y:[0.137, 1.384] X:[-0.230, 0.222] Z:[-0.339, 0.315] | sampleUV=(0.330, 0.956)
+    #4E694B (RGB 0.31,0.41,0.29) -> 319 verts | Y:[0.387, 0.863] X:[-0.322, 0.322] Z:[-0.332, 0.006] | sampleUV=(0.235, 0.956)
+    #9E731D (RGB 0.62,0.45,0.11) -> 300 verts | Y:[0.812, 0.968] X:[-0.296, 0.296] Z:[-0.483, -0.305] | sampleUV=(0.393, 0.952)
+    #946529 (RGB 0.58,0.40,0.16) -> 256 verts | Y:[0.029, 0.199] X:[-0.258, 0.216] Z:[-0.197, 0.058] | sampleUV=(0.107, 0.951)
+    #B5B999 (RGB 0.71,0.73,0.60) -> 256 verts | Y:[0.547, 0.749] X:[-0.384, 0.384] Z:[-0.264, -0.045] | sampleUV=(0.202, 0.953)
+    #2A2927 (RGB 0.16,0.16,0.15) -> 148 verts | Y:[0.388, 1.032] X:[-0.427, 0.505] Z:[-0.244, 0.096] | sampleUV=(0.175, 0.955)
+    #141414 (RGB 0.08,0.08,0.08) -> 124 verts | Y:[1.035, 1.113] X:[-0.166, 0.166] Z:[0.037, 0.115] | sampleUV=(0.016, 0.955)
+    #AF8D68 (RGB 0.69,0.55,0.41) -> 110 verts | Y:[0.058, 0.165] X:[-0.237, 0.198] Z:[-0.048, 0.067] | sampleUV=(0.266, 0.952)
+    #C0C0C0 (RGB 0.75,0.75,0.75) -> 67 verts | Y:[0.411, 1.363] X:[-0.225, 0.219] Z:[-0.023, 0.137] | sampleUV=(0.420, 0.954)
+
+  --- TOPOLOGICAL MESH ISLANDS & HEAD/NECK BOUNDARY ANALYSIS ---
+  Bone Indices: Head=7, Neck=6, Torso=5
+  Head Weight Distribution: pureHead(>0.99)=1450, mixedHead(0.001..0.99)=335, pureNeck(>0.99)=0
+  Triangle Breakdown by [Region | SwatchHex | DominantBone] (93 groups):
+    BODY | #2A2927 | LowerArm.L      ->   96 tris | WorldY:[0.417, 0.655] WorldX:[-0.427, -0.259] WorldZ:[-0.244, 0.032]
+    BODY | #2A2927 | LowerArm.R      ->   96 tris | WorldY:[0.388, 0.667] WorldX:[0.258, 0.505] WorldZ:[-0.244, -0.063]
+    BODY | #466469 | Hips            ->   68 tris | WorldY:[0.259, 0.505] WorldX:[-0.176, 0.170] WorldZ:[-0.279, -0.006]
+    BODY | #466469 | LowerLeg.L      ->   16 tris | WorldY:[0.144, 0.207] WorldX:[-0.216, -0.084] WorldZ:[-0.030, 0.062]
+    BODY | #466469 | UpperLeg.L      ->  186 tris | WorldY:[0.137, 0.512] WorldX:[-0.230, 0.000] WorldZ:[-0.279, 0.096]
+    BODY | #466469 | UpperLeg.R      ->  108 tris | WorldY:[0.138, 0.507] WorldX:[-0.001, 0.222] WorldZ:[-0.279, 0.060]
+    BODY | #4C3A21 | Hips            ->   66 tris | WorldY:[0.557, 0.814] WorldX:[-0.238, 0.235] WorldZ:[-0.573, -0.312]
+    BODY | #4C3A21 | Index1.L        ->   32 tris | WorldY:[0.358, 0.462] WorldX:[-0.436, -0.259] WorldZ:[0.073, 0.264]
+    BODY | #4C3A21 | Index1.R        ->   32 tris | WorldY:[0.207, 0.388] WorldX:[0.474, 0.623] WorldZ:[-0.107, 0.028]
+    BODY | #4C3A21 | Index2.L        ->   16 tris | WorldY:[0.348, 0.422] WorldX:[-0.406, -0.312] WorldZ:[0.220, 0.296]
+    BODY | #4C3A21 | Index2.R        ->   16 tris | WorldY:[0.183, 0.254] WorldX:[0.538, 0.623] WorldZ:[-0.049, 0.040]
+    BODY | #4C3A21 | LowerArm.L      ->   80 tris | WorldY:[0.306, 0.505] WorldX:[-0.430, -0.267] WorldZ:[0.000, 0.149]
+    BODY | #4C3A21 | LowerArm.R      ->   80 tris | WorldY:[0.242, 0.419] WorldX:[0.421, 0.567] WorldZ:[-0.190, -0.011]
+    BODY | #4C3A21 | Middle1.L       ->   24 tris | WorldY:[0.300, 0.413] WorldX:[-0.436, -0.276] WorldZ:[0.103, 0.245]
+    BODY | #4C3A21 | Middle1.R       ->   24 tris | WorldY:[0.187, 0.328] WorldX:[0.477, 0.655] WorldZ:[-0.158, -0.013]
+    BODY | #4C3A21 | Middle2.L       ->   48 tris | WorldY:[0.284, 0.369] WorldX:[-0.432, -0.325] WorldZ:[0.200, 0.276]
+    BODY | #4C3A21 | Middle2.R       ->   48 tris | WorldY:[0.169, 0.264] WorldX:[0.562, 0.665] WorldZ:[-0.101, -0.013]
+    BODY | #4C3A21 | Pinky1.L        ->   40 tris | WorldY:[0.274, 0.414] WorldX:[-0.436, -0.301] WorldZ:[0.029, 0.200]
+    BODY | #4C3A21 | Pinky1.R        ->   40 tris | WorldY:[0.211, 0.388] WorldX:[0.508, 0.655] WorldZ:[-0.190, -0.089]
+    BODY | #4C3A21 | Pinky2.L        ->   24 tris | WorldY:[0.253, 0.313] WorldX:[-0.432, -0.358] WorldZ:[0.132, 0.235]
+    BODY | #4C3A21 | Pinky2.R        ->   24 tris | WorldY:[0.190, 0.267] WorldX:[0.599, 0.669] WorldZ:[-0.170, -0.076]
+    BODY | #4C3A21 | Shoulder.L      ->   40 tris | WorldY:[0.683, 0.753] WorldX:[-0.179, -0.064] WorldZ:[-0.020, 0.069]
+    BODY | #4C3A21 | Shoulder.R      ->   40 tris | WorldY:[0.683, 0.753] WorldX:[0.064, 0.179] WorldZ:[-0.020, 0.069]
+    BODY | #4C3A21 | Thumb1.L        ->   32 tris | WorldY:[0.370, 0.489] WorldX:[-0.409, -0.238] WorldZ:[0.073, 0.220]
+    BODY | #4C3A21 | Thumb1.R        ->   32 tris | WorldY:[0.241, 0.382] WorldX:[0.433, 0.585] WorldZ:[-0.114, 0.031]
+    BODY | #4E694B | Abdomen         ->   12 tris | WorldY:[0.595, 0.685] WorldX:[-0.136, 0.136] WorldZ:[-0.297, -0.284]
+    BODY | #4E694B | Head            ->    4 tris | WorldY:[0.816, 0.857] WorldX:[-0.045, 0.045] WorldZ:[-0.236, -0.183]
+    BODY | #4E694B | Hips            ->   32 tris | WorldY:[0.387, 0.495] WorldX:[-0.179, 0.177] WorldZ:[-0.332, -0.278]
+    BODY | #4E694B | Shoulder.L      ->   50 tris | WorldY:[0.562, 0.863] WorldX:[-0.228, -0.087] WorldZ:[-0.286, -0.016]
+    BODY | #4E694B | Shoulder.R      ->   50 tris | WorldY:[0.562, 0.863] WorldX:[0.087, 0.228] WorldZ:[-0.286, -0.016]
+    BODY | #4E694B | Torso           ->   28 tris | WorldY:[0.668, 0.863] WorldX:[-0.104, 0.103] WorldZ:[-0.294, -0.169]
+    BODY | #4E694B | UpperArm.L      ->   72 tris | WorldY:[0.613, 0.830] WorldX:[-0.322, -0.180] WorldZ:[-0.277, -0.035]
+    BODY | #4E694B | UpperArm.R      ->   72 tris | WorldY:[0.613, 0.830] WorldX:[0.180, 0.322] WorldZ:[-0.277, -0.035]
+    BODY | #4E694B | UpperLeg.L      ->   32 tris | WorldY:[0.388, 0.511] WorldX:[-0.232, -0.053] WorldZ:[-0.290, 0.006]
+    BODY | #4E694B | UpperLeg.R      ->   32 tris | WorldY:[0.387, 0.510] WorldX:[0.058, 0.234] WorldZ:[-0.290, 0.006]
+    BODY | #5F4009 | Abdomen         ->   20 tris | WorldY:[0.467, 0.685] WorldX:[-0.180, 0.180] WorldZ:[-0.299, -0.277]
+    BODY | #5F4009 | Foot.L          ->  186 tris | WorldY:[-0.009, 0.104] WorldX:[-0.262, -0.085] WorldZ:[-0.216, 0.119]
+    BODY | #5F4009 | Foot.R          ->  178 tris | WorldY:[-0.002, 0.067] WorldX:[0.057, 0.220] WorldZ:[-0.210, 0.112]
+    BODY | #5F4009 | Hips            ->  966 tris | WorldY:[0.421, 0.969] WorldX:[-0.263, 0.261] WorldZ:[-0.598, -0.285]
+    BODY | #5F4009 | LowerLeg.L      ->   32 tris | WorldY:[-0.009, 0.130] WorldX:[-0.259, -0.089] WorldZ:[-0.207, -0.007]
+    BODY | #5F4009 | LowerLeg.R      ->   40 tris | WorldY:[-0.002, 0.098] WorldX:[0.059, 0.217] WorldZ:[-0.201, 0.015]
+    BODY | #5F4009 | Shoulder.L      ->  104 tris | WorldY:[0.469, 0.863] WorldX:[-0.224, 0.069] WorldZ:[-0.285, 0.060]
+    BODY | #5F4009 | Shoulder.R      ->   96 tris | WorldY:[0.467, 0.863] WorldX:[0.000, 0.224] WorldZ:[-0.285, 0.060]
+    BODY | #5F4009 | Torso           ->   16 tris | WorldY:[0.767, 0.822] WorldX:[-0.132, 0.132] WorldZ:[-0.050, 0.001]
+    BODY | #5F4009 | UpperArm.L      ->    8 tris | WorldY:[0.808, 0.857] WorldX:[-0.233, -0.139] WorldZ:[-0.134, -0.067]
+    BODY | #5F4009 | UpperArm.R      ->    8 tris | WorldY:[0.808, 0.857] WorldX:[0.139, 0.233] WorldZ:[-0.134, -0.067]
+    BODY | #946529 | Foot.L          ->   50 tris | WorldY:[0.031, 0.120] WorldX:[-0.258, -0.091] WorldZ:[-0.143, 0.058]
+    BODY | #946529 | Foot.R          ->   40 tris | WorldY:[0.029, 0.069] WorldX:[0.063, 0.216] WorldZ:[-0.142, 0.057]
+    BODY | #946529 | LowerLeg.L      ->  134 tris | WorldY:[0.035, 0.199] WorldX:[-0.257, -0.091] WorldZ:[-0.197, 0.001]
+    BODY | #946529 | LowerLeg.R      ->  144 tris | WorldY:[0.036, 0.189] WorldX:[0.064, 0.216] WorldZ:[-0.191, 0.029]
+    BODY | #9E731D | Hips            ->  320 tris | WorldY:[0.812, 0.968] WorldX:[-0.296, 0.296] WorldZ:[-0.483, -0.305]
+    BODY | #A58A3B | Hips            ->  400 tris | WorldY:[0.502, 0.735] WorldX:[-0.251, 0.249] WorldZ:[-0.586, -0.388]
+    BODY | #A58A3B | LowerArm.L      ->   96 tris | WorldY:[0.380, 0.614] WorldX:[-0.439, -0.264] WorldZ:[-0.196, 0.056]
+    BODY | #A58A3B | UpperLeg.L      ->   36 tris | WorldY:[0.169, 0.326] WorldX:[-0.230, -0.059] WorldZ:[-0.123, 0.087]
+    BODY | #AF8D68 | Foot.L          ->   40 tris | WorldY:[0.063, 0.111] WorldX:[-0.237, -0.111] WorldZ:[-0.048, 0.067]
+    BODY | #AF8D68 | Foot.R          ->   24 tris | WorldY:[0.058, 0.070] WorldX:[0.081, 0.198] WorldZ:[-0.046, 0.065]
+    BODY | #AF8D68 | LowerLeg.L      ->   16 tris | WorldY:[0.119, 0.165] WorldX:[-0.218, -0.111] WorldZ:[-0.024, 0.008]
+    BODY | #AF8D68 | LowerLeg.R      ->   32 tris | WorldY:[0.059, 0.137] WorldX:[0.084, 0.188] WorldZ:[-0.046, 0.035]
+    BODY | #B5B999 | UpperArm.L      ->  128 tris | WorldY:[0.547, 0.749] WorldX:[-0.384, -0.196] WorldZ:[-0.264, -0.045]
+    BODY | #B5B999 | UpperArm.R      ->  128 tris | WorldY:[0.547, 0.749] WorldX:[0.196, 0.384] WorldZ:[-0.264, -0.045]
+    BODY | #C09264 | Head            ->   22 tris | WorldY:[0.807, 0.886] WorldX:[-0.145, 0.145] WorldZ:[-0.197, -0.007]
+    BODY | #C09264 | Index2.L        ->   16 tris | WorldY:[0.342, 0.406] WorldX:[-0.362, -0.307] WorldZ:[0.262, 0.316]
+    BODY | #C09264 | Index2.R        ->   16 tris | WorldY:[0.156, 0.212] WorldX:[0.558, 0.618] WorldZ:[-0.015, 0.050]
+    BODY | #C09264 | Index3.L        ->   40 tris | WorldY:[0.342, 0.393] WorldX:[-0.323, -0.276] WorldZ:[0.270, 0.316]
+    BODY | #C09264 | Index3.R        ->   40 tris | WorldY:[0.129, 0.176] WorldX:[0.565, 0.618] WorldZ:[0.000, 0.054]
+    BODY | #C09264 | LowerArm.L      ->   96 tris | WorldY:[0.393, 0.525] WorldX:[-0.416, -0.287] WorldZ:[-0.040, 0.078]
+    BODY | #C09264 | LowerArm.R      ->   96 tris | WorldY:[0.351, 0.459] WorldX:[0.396, 0.529] WorldZ:[-0.192, -0.049]
+    BODY | #C09264 | LowerLeg.L      ->    4 tris | WorldY:[0.040, 0.066] WorldX:[-0.212, -0.128] WorldZ:[-0.208, -0.185]
+    BODY | #C09264 | LowerLeg.R      ->   90 tris | WorldY:[0.036, 0.227] WorldX:[0.082, 0.184] WorldZ:[-0.203, 0.064]
+    BODY | #C09264 | Middle2.L       ->   24 tris | WorldY:[0.276, 0.347] WorldX:[-0.396, -0.321] WorldZ:[0.227, 0.291]
+    BODY | #C09264 | Middle2.R       ->   24 tris | WorldY:[0.132, 0.207] WorldX:[0.599, 0.672] WorldZ:[-0.094, -0.023]
+    BODY | #C09264 | Middle3.L       ->   48 tris | WorldY:[0.277, 0.340] WorldX:[-0.353, -0.291] WorldZ:[0.227, 0.289]
+    BODY | #C09264 | Middle3.R       ->   48 tris | WorldY:[0.098, 0.174] WorldX:[0.599, 0.671] WorldZ:[-0.094, -0.027]
+    BODY | #C09264 | Pinky2.L        ->   16 tris | WorldY:[0.244, 0.293] WorldX:[-0.413, -0.364] WorldZ:[0.183, 0.238]
+    BODY | #C09264 | Pinky2.R        ->   16 tris | WorldY:[0.168, 0.226] WorldX:[0.631, 0.680] WorldZ:[-0.166, -0.110]
+    BODY | #C09264 | Pinky3.L        ->   40 tris | WorldY:[0.238, 0.278] WorldX:[-0.386, -0.342] WorldZ:[0.194, 0.238]
+    BODY | #C09264 | Pinky3.R        ->   40 tris | WorldY:[0.144, 0.186] WorldX:[0.645, 0.680] WorldZ:[-0.166, -0.121]
+    BODY | #C09264 | Thumb1.L        ->   16 tris | WorldY:[0.422, 0.485] WorldX:[-0.291, -0.227] WorldZ:[0.158, 0.228]
+    BODY | #C09264 | Thumb1.R        ->   16 tris | WorldY:[0.251, 0.328] WorldX:[0.441, 0.512] WorldZ:[0.002, 0.054]
+    BODY | #C09264 | Thumb2.L        ->   72 tris | WorldY:[0.413, 0.485] WorldX:[-0.274, -0.216] WorldZ:[0.190, 0.257]
+    BODY | #C09264 | Thumb2.R        ->   72 tris | WorldY:[0.231, 0.310] WorldX:[0.442, 0.504] WorldZ:[0.028, 0.094]
+    BODY | #C09264 | UpperLeg.R      ->   82 tris | WorldY:[0.165, 0.361] WorldX:[0.077, 0.186] WorldZ:[-0.118, 0.067]
+    BODY | #C0C0C0 | Shoulder.L      ->    6 tris | WorldY:[0.554, 0.762] WorldX:[-0.064, 0.001] WorldZ:[-0.008, 0.020]
+    BODY | #C0C0C0 | Shoulder.R      ->    6 tris | WorldY:[0.554, 0.762] WorldX:[0.000, 0.065] WorldZ:[-0.008, 0.020]
+    BODY | #C0C0C0 | Torso           ->    4 tris | WorldY:[0.762, 0.787] WorldX:[-0.050, 0.050] WorldZ:[-0.018, -0.001]
+    BODY | #C0C0C0 | UpperLeg.L      ->    4 tris | WorldY:[0.411, 0.481] WorldX:[-0.059, 0.003] WorldZ:[-0.023, 0.001]
+    BODY | #C0C0C0 | UpperLeg.R      ->    4 tris | WorldY:[0.411, 0.482] WorldX:[0.002, 0.063] WorldZ:[-0.023, 0.001]
+    HEAD | #141414 | Head            ->  240 tris | WorldY:[1.035, 1.113] WorldX:[-0.166, 0.166] WorldZ:[0.037, 0.115]
+    HEAD | #2A2927 | Head            ->   16 tris | WorldY:[0.988, 1.032] WorldX:[-0.187, 0.187] WorldZ:[0.019, 0.096]
+    HEAD | #466469 | Head            ->  324 tris | WorldY:[1.113, 1.384] WorldX:[-0.227, 0.220] WorldZ:[-0.339, 0.315]
+    HEAD | #923C12 | Head            -> 1058 tris | WorldY:[0.847, 1.337] WorldX:[-0.214, 0.214] WorldZ:[-0.313, 0.170]
+    HEAD | #C09264 | Head            ->  876 tris | WorldY:[0.822, 1.272] WorldX:[-0.285, 0.285] WorldZ:[-0.228, 0.185]
+    HEAD | #C0C0C0 | Head            ->   48 tris | WorldY:[1.121, 1.363] WorldX:[-0.225, 0.219] WorldZ:[0.007, 0.137]
+
+  --- WELDED TOPOLOGICAL ISLANDS (46 distinct 3D mesh parts) ---
+    Island #01: 1952 tris | avgHeadW=0.47 | Y:[0.387,1.337] X:[-0.384,0.384] Z:[-0.332,0.185] | Swatches:[#C09264(554),#923C12(386),#4E694B(384),#B5B999(256),#5F4009(252)] | Bones:[Head(960),UpperArm.L(208),UpperArm.R(208),Shoulder.L(200)]
+      -> Open boundary edges: 58 | OpenY:[0.387,0.660] OpenZ:[-0.332,0.006]
+    Island #02:  760 tris | avgHeadW=0.00 | Y:[0.238,0.655] X:[-0.436,-0.216] Z:[-0.244,0.316] | Swatches:[#C09264(368),#4C3A21(296),#2A2927(96)] | Bones:[LowerArm.L(272),Middle2.L(72),Thumb2.L(72),Thumb1.L(48)]
+      -> Open boundary edges: 16 | OpenY:[0.566,0.655] OpenZ:[-0.244,-0.104]
+    Island #03:  760 tris | avgHeadW=0.00 | Y:[0.098,0.667] X:[0.258,0.680] Z:[-0.244,0.094] | Swatches:[#C09264(368),#4C3A21(296),#2A2927(96)] | Bones:[LowerArm.R(272),Middle2.R(72),Thumb2.R(72),Thumb1.R(48)]
+      -> Open boundary edges: 16 | OpenY:[0.568,0.667] OpenZ:[-0.244,-0.093]
+    Island #04:  630 tris | avgHeadW=0.00 | Y:[-0.002,0.361] X:[0.057,0.220] Z:[-0.210,0.112] | Swatches:[#5F4009(218),#946529(184),#C09264(172),#AF8D68(56)] | Bones:[LowerLeg.R(306),Foot.R(242),UpperLeg.R(82)]
+      -> Open boundary edges: 14 | OpenY:[0.291,0.361] OpenZ:[-0.118,-0.029]
+    Island #05:  462 tris | avgHeadW=0.00 | Y:[-0.009,0.199] X:[-0.262,-0.085] Z:[-0.216,0.119] | Swatches:[#5F4009(218),#946529(184),#AF8D68(56),#C09264(4)] | Bones:[Foot.L(276),LowerLeg.L(186)]
+      -> Open boundary edges: 14 | OpenY:[0.157,0.194] OpenZ:[-0.061,-0.002]
+    Island #06:  414 tris | avgHeadW=0.00 | Y:[0.137,0.512] X:[-0.230,0.222] Z:[-0.279,0.096] | Swatches:[#466469(378),#A58A3B(36)] | Bones:[UpperLeg.L(222),UpperLeg.R(108),Hips(68),LowerLeg.L(16)]
+      -> Open boundary edges: 50 | OpenY:[0.138,0.512] OpenZ:[-0.264,0.060]
+    Island #07:  372 tris | avgHeadW=1.00 | Y:[1.113,1.384] X:[-0.227,0.220] Z:[-0.339,0.315] | Swatches:[#466469(324),#C0C0C0(48)] | Bones:[Head(372)]
+      -> Watertight closed 3D manifold (0 open boundary edges)
+    Island #08:  320 tris | avgHeadW=0.00 | Y:[0.812,0.968] X:[-0.296,0.296] Z:[-0.483,-0.305] | Swatches:[#9E731D(320)] | Bones:[Hips(320)]
+      -> Watertight closed 3D manifold (0 open boundary edges)
+    Island #09:  320 tris | avgHeadW=1.00 | Y:[0.909,1.002] X:[-0.175,0.175] Z:[0.069,0.170] | Swatches:[#923C12(320)] | Bones:[Head(320)]
+      -> Watertight closed 3D manifold (0 open boundary edges)
+    Island #10:  262 tris | avgHeadW=0.00 | Y:[0.421,0.903] X:[-0.213,0.211] Z:[-0.525,-0.285] | Swatches:[#5F4009(244),#4C3A21(18)] | Bones:[Hips(262)]
+      -> Open boundary edges: 10 | OpenY:[0.726,0.798] OpenZ:[-0.522,-0.312]
+    Island #11:  176 tris | avgHeadW=1.00 | Y:[1.085,1.127] X:[-0.208,-0.045] Z:[0.046,0.150] | Swatches:[#923C12(176)] | Bones:[Head(176)]
+      -> Watertight closed 3D manifold (0 open boundary edges)
+    Island #12:  176 tris | avgHeadW=1.00 | Y:[1.085,1.127] X:[0.045,0.208] Z:[0.046,0.150] | Swatches:[#923C12(176)] | Bones:[Head(176)]
+      -> Watertight closed 3D manifold (0 open boundary edges)
+    Island #13:  172 tris | avgHeadW=1.00 | Y:[0.975,1.087] X:[-0.285,-0.187] Z:[-0.107,-0.069] | Swatches:[#C09264(172)] | Bones:[Head(172)]
+      -> Watertight closed 3D manifold (0 open boundary edges)
+    Island #14:  172 tris | avgHeadW=1.00 | Y:[0.975,1.087] X:[0.187,0.285] Z:[-0.107,-0.069] | Swatches:[#C09264(172)] | Bones:[Head(172)]
+      -> Watertight closed 3D manifold (0 open boundary edges)
+    Island #15:  120 tris | avgHeadW=1.00 | Y:[1.035,1.113] X:[0.089,0.166] Z:[0.037,0.115] | Swatches:[#141414(120)] | Bones:[Head(120)]
+      -> Watertight closed 3D manifold (0 open boundary edges)
+    Island #16:  120 tris | avgHeadW=1.00 | Y:[1.035,1.113] X:[-0.166,-0.089] Z:[0.037,0.115] | Swatches:[#141414(120)] | Bones:[Head(120)]
+      -> Watertight closed 3D manifold (0 open boundary edges)
+    Island #17:  100 tris | avgHeadW=0.00 | Y:[0.691,0.969] X:[0.072,0.118] Z:[-0.550,-0.340] | Swatches:[#5F4009(100)] | Bones:[Hips(100)]
+    Island #18:  100 tris | avgHeadW=0.00 | Y:[0.691,0.969] X:[-0.118,-0.072] Z:[-0.550,-0.340] | Swatches:[#5F4009(100)] | Bones:[Hips(100)]
+    Island #19:   96 tris | avgHeadW=0.00 | Y:[0.380,0.614] X:[-0.439,-0.264] Z:[-0.196,0.056] | Swatches:[#A58A3B(96)] | Bones:[LowerArm.L(96)]
+    Island #20:   56 tris | avgHeadW=0.00 | Y:[0.447,0.648] X:[-0.153,0.151] Z:[-0.572,-0.490] | Swatches:[#5F4009(56)] | Bones:[Hips(56)]
+    Island #21:   56 tris | avgHeadW=0.00 | Y:[0.461,0.631] X:[0.139,0.235] Z:[-0.478,-0.314] | Swatches:[#5F4009(56)] | Bones:[Hips(56)]
+    Island #22:   56 tris | avgHeadW=0.00 | Y:[0.461,0.631] X:[-0.237,-0.141] Z:[-0.478,-0.314] | Swatches:[#5F4009(56)] | Bones:[Hips(56)]
+    Island #23:   54 tris | avgHeadW=0.00 | Y:[0.560,0.655] X:[-0.157,0.154] Z:[-0.573,-0.490] | Swatches:[#5F4009(38),#4C3A21(16)] | Bones:[Hips(54)]
+    Island #24:   54 tris | avgHeadW=0.00 | Y:[0.557,0.637] X:[0.138,0.235] Z:[-0.481,-0.312] | Swatches:[#5F4009(38),#4C3A21(16)] | Bones:[Hips(54)]
+    Island #25:   54 tris | avgHeadW=0.00 | Y:[0.557,0.637] X:[-0.238,-0.140] Z:[-0.481,-0.312] | Swatches:[#5F4009(38),#4C3A21(16)] | Bones:[Hips(54)]
+    Island #26:   48 tris | avgHeadW=0.00 | Y:[0.502,0.552] X:[0.236,0.244] Z:[-0.428,-0.388] | Swatches:[#A58A3B(48)] | Bones:[Hips(48)]
+    Island #27:   48 tris | avgHeadW=0.00 | Y:[0.502,0.552] X:[-0.247,-0.238] Z:[-0.428,-0.388] | Swatches:[#A58A3B(48)] | Bones:[Hips(48)]
+    Island #28:   48 tris | avgHeadW=0.00 | Y:[0.502,0.552] X:[-0.021,0.019] Z:[-0.581,-0.573] | Swatches:[#A58A3B(48)] | Bones:[Hips(48)]
+    Island #29:   48 tris | avgHeadW=0.00 | Y:[0.685,0.735] X:[0.068,0.107] Z:[-0.538,-0.520] | Swatches:[#A58A3B(48)] | Bones:[Hips(48)]
+    Island #30:   48 tris | avgHeadW=0.00 | Y:[0.685,0.735] X:[-0.107,-0.068] Z:[-0.538,-0.520] | Swatches:[#A58A3B(48)] | Bones:[Hips(48)]
+    Island #31:   36 tris | avgHeadW=0.00 | Y:[0.458,0.549] X:[0.172,0.242] Z:[-0.422,-0.391] | Swatches:[#5F4009(36)] | Bones:[Hips(36)]
+    Island #32:   36 tris | avgHeadW=0.00 | Y:[0.507,0.629] X:[0.221,0.261] Z:[-0.422,-0.392] | Swatches:[#5F4009(36)] | Bones:[Hips(36)]
+    Island #33:   36 tris | avgHeadW=0.00 | Y:[0.458,0.549] X:[-0.244,-0.174] Z:[-0.422,-0.391] | Swatches:[#5F4009(36)] | Bones:[Hips(36)]
+    Island #34:   36 tris | avgHeadW=0.00 | Y:[0.507,0.629] X:[-0.263,-0.224] Z:[-0.422,-0.392] | Swatches:[#5F4009(36)] | Bones:[Hips(36)]
+    Island #35:   36 tris | avgHeadW=0.00 | Y:[0.443,0.549] X:[-0.015,0.016] Z:[-0.579,-0.509] | Swatches:[#5F4009(36)] | Bones:[Hips(36)]
+    Island #36:   36 tris | avgHeadW=0.00 | Y:[0.508,0.629] X:[-0.015,0.015] Z:[-0.598,-0.558] | Swatches:[#5F4009(36)] | Bones:[Hips(36)]
+    Island #37:   20 tris | avgHeadW=0.00 | Y:[0.527,0.549] X:[0.231,0.249] Z:[-0.413,-0.405] | Swatches:[#A58A3B(20)] | Bones:[Hips(20)]
+    Island #38:   20 tris | avgHeadW=0.00 | Y:[0.604,0.615] X:[0.229,0.238] Z:[-0.411,-0.404] | Swatches:[#A58A3B(20)] | Bones:[Hips(20)]
+    Island #39:   20 tris | avgHeadW=0.00 | Y:[0.527,0.549] X:[-0.251,-0.233] Z:[-0.413,-0.405] | Swatches:[#A58A3B(20)] | Bones:[Hips(20)]
+    Island #40:   20 tris | avgHeadW=0.00 | Y:[0.604,0.615] X:[-0.240,-0.231] Z:[-0.411,-0.404] | Swatches:[#A58A3B(20)] | Bones:[Hips(20)]
+    Island #41:   20 tris | avgHeadW=0.00 | Y:[0.528,0.550] X:[-0.006,0.002] Z:[-0.586,-0.568] | Swatches:[#A58A3B(20)] | Bones:[Hips(20)]
+    Island #42:   20 tris | avgHeadW=0.00 | Y:[0.604,0.616] X:[-0.004,0.003] Z:[-0.575,-0.566] | Swatches:[#A58A3B(20)] | Bones:[Hips(20)]
+    Island #43:   20 tris | avgHeadW=0.00 | Y:[0.711,0.733] X:[0.081,0.092] Z:[-0.538,-0.520] | Swatches:[#A58A3B(20)] | Bones:[Hips(20)]
+    Island #44:   20 tris | avgHeadW=0.00 | Y:[0.711,0.733] X:[-0.092,-0.081] Z:[-0.538,-0.520] | Swatches:[#A58A3B(20)] | Bones:[Hips(20)]
+    Island #45:   12 tris | avgHeadW=0.00 | Y:[0.626,0.732] X:[0.072,0.103] Z:[-0.527,-0.513] | Swatches:[#5F4009(12)] | Bones:[Hips(12)]
+    Island #46:   12 tris | avgHeadW=0.00 | Y:[0.626,0.732] X:[-0.103,-0.072] Z:[-0.527,-0.513] | Swatches:[#5F4009(12)] | Bones:[Hips(12)]
+
+[MeshRenderer] GameObject='WoodenBat_Saw' Mesh='WoodenBat_Saw'
+  World Bounds: center=(-0.1844, 0.6045, 0.3781), size=(0.7582, 1.3233, 1.0416), min=(-0.5635, -0.0571, -0.1428), max=(0.1947, 1.2662, 0.8989)
+  SharedMaterials (1): [Atlas]
+  Vertices: 1778, Triangles: 2308, SubMeshCount: 1
+  Has Normals: True, Has Tangents: True
+  Has UV0: True, Has Colors: False
+    SubMesh[0]: indexStart=0, indexCount=6924 (2308 tris), bounds=Center: (0.00, 0.00, 0.00), Extents: (0.00, 0.01, 0.00)
+  Atlas Color / UV Swatch Regions (5 distinct hex colors sampled):
+    #632125 (RGB 0.39,0.13,0.15) -> 676 verts | Y:[-0.006, -0.005] X:[-0.001, 0.001] Z:[-0.001, 0.001] | sampleUV=(0.173, 0.487)
+    #8B8786 (RGB 0.55,0.53,0.53) -> 660 verts | Y:[-0.010, -0.007] X:[-0.002, 0.002] Z:[-0.001, 0.001] | sampleUV=(0.110, 0.483)
+    #8B755E (RGB 0.55,0.46,0.37) -> 198 verts | Y:[-0.010, -0.007] X:[-0.002, 0.002] Z:[0.000, 0.000] | sampleUV=(0.142, 0.485)
+    #284A63 (RGB 0.16,0.29,0.39) -> 132 verts | Y:[-0.002, 0.001] X:[-0.001, 0.001] Z:[-0.001, 0.001] | sampleUV=(0.047, 0.482)
+    #9E731D (RGB 0.62,0.45,0.11) -> 112 verts | Y:[-0.009, 0.003] X:[-0.001, 0.001] Z:[-0.001, 0.001] | sampleUV=(0.078, 0.485)
+
+[Total Rest-Pose Character World Bounds] center=(0.0842, 0.6421, 0.1282), size=(1.3019, 1.5359, 1.5413), min=(-0.5668, -0.1258, -0.6424), max=(0.7351, 1.4100, 0.8989)
+Total Rest-Pose Height: 1.5359m (minY=-0.1258m, maxY=1.4100m)
+
+--- 5. ANIMATION CLIPS ---
+Imported AnimationClip count: 20
+  Clip 'CharacterArmature|Death': length=0.767s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Duck': length=1.667s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|HitReact': length=0.600s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Idle': length=1.000s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Idle_Gun': length=1.000s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Jump': length=0.367s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Jump_Idle': length=0.500s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Jump_Land': length=0.367s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|No': length=1.667s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Punch': length=0.767s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Run': length=0.733s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Run_Gun': length=0.733s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Run_Slash': length=0.733s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Run_Stab': length=0.733s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Slash': length=0.867s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Stab': length=0.867s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Walk': length=1.000s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Walk_Gun': length=1.000s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Wave': length=1.667s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+  Clip 'CharacterArmature|Yes': length=1.667s, fps=30, loop=False, legacy=False, humanMotion=False, curveBindings=440, animatedPaths=44
+    Sample paths: CharacterArmature, CharacterArmature/Root, CharacterArmature/Root/Body, CharacterArmature/Root/Body/Hips, CharacterArmature/Root/Body/Hips/Abdomen, CharacterArmature/Root/Body/Hips/Abdomen/Torso, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck, CharacterArmature/Root/Body/Hips/Abdomen/Torso/Neck/Head
+
+--- 6. RIG & AVATAR VALIDATION (GENERIC VS HUMANOID) ---
+Current Rig (Generic): Avatar='null', isValid=False, isHuman=False
+Humanoid Rig Test (Verified): Avatar='Characters_ShaunAvatar', isValid=True, isHuman=False (0 human bones mapped; Foot.L/Foot.R and PoleTarget.L/PoleTarget.R are parented directly under Root as IK targets, and Body sits between Root and Hips, so Generic Rig is required).

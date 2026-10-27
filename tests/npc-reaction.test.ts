@@ -327,12 +327,12 @@ describe('Milestone 18-A: First Deterministic NPC Reaction (Reciprocal Greeting)
       const { state } = setupWorld();
 
       assert.doesNotThrow(() => validateWorldState(state));
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
 
       greetAgent(state, 'agent:dev-player', 'agent:dev-npc');
 
       assert.doesNotThrow(() => validateWorldState(state));
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
     });
 
     test('world persists and restores cleanly with schema version 18', async () => {
@@ -355,7 +355,7 @@ describe('Milestone 18-A: First Deterministic NPC Reaction (Reciprocal Greeting)
         // Load
         const loadedState = await persistence.load();
         assert.notEqual(loadedState, null);
-        assert.equal(loadedState!.version, 18);
+        assert.equal(loadedState!.version, 19);
 
         assert.doesNotThrow(() => validateWorldState(loadedState!));
 

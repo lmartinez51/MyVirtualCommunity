@@ -591,7 +591,7 @@ describe('Milestone 39: Order & Service Fulfillment Foundation', () => {
         // 3. Restore in clean runtime
         const restored = persistence.load();
         assert.ok(restored !== null);
-        assert.strictEqual(restored.version, 18);
+        assert.strictEqual(restored.version, 19);
         assert.strictEqual(restored.orders.length, 1);
         assert.strictEqual(restored.orders[0].status, 'preparing');
         validateWorldState(restored);
@@ -615,7 +615,7 @@ describe('Milestone 39: Order & Service Fulfillment Foundation', () => {
         persistence.save(snapshotWorldState(clock2, restored));
         const finalRestored = persistence.load();
         assert.ok(finalRestored !== null);
-        assert.strictEqual(finalRestored.version, 18);
+        assert.strictEqual(finalRestored.version, 19);
         assert.strictEqual(finalRestored.orders[0].status, 'fulfilled');
         assert.strictEqual(finalRestored.items.length, 2);
         validateWorldState(finalRestored);

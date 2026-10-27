@@ -199,7 +199,7 @@ describe('Milestone 39: Migration v14 -> v15 & Order Authority Invariants', () =
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.deepEqual(loaded.orders, []);
         assert.doesNotThrow(() => validateWorldState(loaded));
 
@@ -207,7 +207,7 @@ describe('Milestone 39: Migration v14 -> v15 & Order Authority Invariants', () =
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 18);
+        assert.equal(reloaded.version, 19);
         assert.deepEqual(reloaded.orders, []);
         assert.doesNotThrow(() => validateWorldState(reloaded));
       } finally {
@@ -228,7 +228,7 @@ describe('Milestone 39: Migration v14 -> v15 & Order Authority Invariants', () =
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.deepEqual(loaded.orders, []);
         assert.deepEqual(loaded.knowledge, []);
         assert.doesNotThrow(() => validateWorldState(loaded));
@@ -236,7 +236,7 @@ describe('Milestone 39: Migration v14 -> v15 & Order Authority Invariants', () =
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 18);
+        assert.equal(reloaded.version, 19);
         assert.deepEqual(reloaded.orders, []);
         assert.deepEqual(reloaded.knowledge, []);
       } finally {
@@ -257,7 +257,7 @@ describe('Milestone 39: Migration v14 -> v15 & Order Authority Invariants', () =
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.deepEqual(loaded.orders, []);
         assert.deepEqual(loaded.knowledge, []);
         assert.doesNotThrow(() => validateWorldState(loaded));
@@ -265,7 +265,7 @@ describe('Milestone 39: Migration v14 -> v15 & Order Authority Invariants', () =
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 18);
+        assert.equal(reloaded.version, 19);
         assert.deepEqual(reloaded.orders, []);
       } finally {
         if (existsSync(testFile)) {
@@ -285,7 +285,7 @@ describe('Milestone 39: Migration v14 -> v15 & Order Authority Invariants', () =
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.deepEqual(loaded.orders, []);
         assert.deepEqual(loaded.knowledge, []);
         assert.doesNotThrow(() => validateWorldState(loaded));
@@ -293,7 +293,7 @@ describe('Milestone 39: Migration v14 -> v15 & Order Authority Invariants', () =
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 18);
+        assert.equal(reloaded.version, 19);
         assert.deepEqual(reloaded.orders, []);
       } finally {
         if (existsSync(testFile)) {

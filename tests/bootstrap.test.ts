@@ -27,7 +27,7 @@ describe('bootstrapWorld', () => {
     assert.equal(result.ready, true);
     assert.equal(result.isNewWorld, true);
     assert.equal(result.state.worldId, 'juarez-el-paso');
-    assert.equal(result.state.version, 18);
+    assert.equal(result.state.version, 19);
     assert.equal(result.clock.getTime(), result.state.worldTime);
     assert.equal(result.state.places.length, 8);
     assert.equal(result.state.restaurants.length, 1);
@@ -68,7 +68,7 @@ describe('bootstrapWorld', () => {
     const persistence = new LocalFilePersistence(testFilePath);
     persistence.save({
       worldId: 'juarez-el-paso',
-      version: 18,
+      version: 19,
       worldTime: fixedTime,
       places: seed.places,
       restaurants: seed.restaurants,
@@ -90,7 +90,7 @@ describe('bootstrapWorld', () => {
     assert.equal(result.status, 'READY');
     assert.equal(result.ready, true);
     assert.equal(result.isNewWorld, false);
-    assert.equal(result.state.version, 18);
+    assert.equal(result.state.version, 19);
     assert.equal(result.state.worldTime, fixedTime);
     assert.equal(result.clock.getTime(), fixedTime);
     assert.deepEqual(result.state.places, seed.places);
@@ -118,7 +118,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 1\. Expected version 18/
+      /Unsupported WorldState version: 1\. Expected version 19/
     );
   });
 
@@ -149,7 +149,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 2\. Expected version 18/
+      /Unsupported WorldState version: 2\. Expected version 19/
     );
   });
 
@@ -182,7 +182,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 3\. Expected version 18/
+      /Unsupported WorldState version: 3\. Expected version 19/
     );
   });
 
@@ -208,7 +208,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 4\. Expected version 18/
+      /Unsupported WorldState version: 4\. Expected version 19/
     );
   });
 
@@ -229,7 +229,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 5\. Expected version 18/
+      /Unsupported WorldState version: 5\. Expected version 19/
     );
   });
 
@@ -251,7 +251,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 6\. Expected version 18/
+      /Unsupported WorldState version: 6\. Expected version 19/
     );
   });
 
@@ -273,7 +273,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 7\. Expected version 18/
+      /Unsupported WorldState version: 7\. Expected version 19/
     );
   });
 
@@ -295,7 +295,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 8\. Expected version 18/
+      /Unsupported WorldState version: 8\. Expected version 19/
     );
   });
 
@@ -318,7 +318,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 9\. Expected version 18/
+      /Unsupported WorldState version: 9\. Expected version 19/
     );
   });
 
@@ -342,7 +342,7 @@ describe('bootstrapWorld', () => {
 
     assert.throws(
       () => bootstrapWorld({ persistencePath: testFilePath, silent: true }),
-      /Unsupported WorldState version: 10\. Expected version 18/
+      /Unsupported WorldState version: 10\. Expected version 19/
     );
   });
 });

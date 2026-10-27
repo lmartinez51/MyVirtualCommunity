@@ -233,11 +233,11 @@ describe('Commercial Offering (Milestone 7)', () => {
   });
 
   describe('WorldState Integration & Global Uniqueness', () => {
-    test('version 18 accepts valid offerings', () => {
+    test('version 19 accepts valid offerings', () => {
       const clock = WorldClock.create('2026-09-14T08:00:00.000Z');
       const state = createInitialWorldState(clock);
 
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
       assert.doesNotThrow(() => validateWorldState(state));
     });
 
@@ -256,7 +256,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
         assert.throws(
           () => validateWorldState(state),
-          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 18`)
+          new RegExp(`Unsupported WorldState version: ${v}\\. Expected version 19`)
         );
       }
     });
@@ -275,7 +275,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
       const invalidState = {
         worldId: 'juarez-el-paso',
-        version: 18,
+        version: 19,
         worldTime: '2026-09-14T08:00:00.000Z',
         places: seed.places,
         restaurants: seed.restaurants,
@@ -310,7 +310,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
       const invalidState = {
         worldId: 'juarez-el-paso',
-        version: 18,
+        version: 19,
         worldTime: '2026-09-14T08:00:00.000Z',
         places: seed.places,
         restaurants: seed.restaurants,
@@ -364,7 +364,7 @@ describe('Commercial Offering (Milestone 7)', () => {
 
         assert.ok(restoredState !== null);
         assert.doesNotThrow(() => validateWorldState(restoredState));
-        assert.equal(restoredState.version, 18);
+        assert.equal(restoredState.version, 19);
         assert.deepEqual(restoredState.offerings, state.offerings);
       } finally {
         if (existsSync(testPath)) {
@@ -379,7 +379,7 @@ describe('Commercial Offering (Milestone 7)', () => {
         const seed = createDevelopmentSeedWorld();
         const corruptState = {
           worldId: 'juarez-el-paso',
-          version: 18,
+          version: 19,
           worldTime: '2026-09-14T08:00:00.000Z',
           places: seed.places,
           restaurants: seed.restaurants,

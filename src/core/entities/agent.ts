@@ -26,12 +26,17 @@ export interface PlayerActivityState {
 }
 
 /**
- * Minimal Agent entity representing persistent identity, dynamic activity presence,
- * authoritative spatial presence (locationId referencing a Place), economic balances,
- * and optional concrete player activity state.
+ * Agent entity representing persistent identity, dynamic activity presence,
+ * authoritative hierarchical spatial presence (locationId referencing a logical Place/context,
+ * and interiorSpaceId referencing an authoritative physical InteriorSpace when indoors),
+ * economic balances, and optional concrete player activity state.
  *
- * NOTE: Location represents a static reference to an existing Place entity.
- * It does NOT represent coordinates, movement, walking, physics, or navigation.
+ * Hierarchical Spatial Identity Invariant (Milestone 85):
+ * - locationId: Authoritative logical world Place or context (e.g. street, building, restaurant).
+ * - interiorSpaceId: Authoritative physical interior space partition when indoors (e.g. 'interior:wing-spot'),
+ *   or null when outdoors / exterior.
+ *
+ * NOTE: Neither field represents presentation coordinates, transforms, vectors, meshes, or navigation nodes.
  */
 export interface Agent extends BaseEntity {
   id: string;
@@ -41,6 +46,7 @@ export interface Agent extends BaseEntity {
   activityState: ActivityState;
   activitySince: string;
   locationId: string;
+  interiorSpaceId: string | null;
   balanceMinor: number;
   currency: string;
   playerActivity?: PlayerActivityState | null;
@@ -117,6 +123,29 @@ export function validateAgents(
       throw new Error(
         `Invalid Agent location: agent "${agent.id}" references non-existent or invalid place locationId: "${agent.locationId}"`
       );
+    }
+
+    if (agent.interiorSpaceId !== undefined && agent.interiorSpaceId !== null) {
+      if (typeof agent.interiorSpaceId !== 'string' || agent.interiorSpaceId.trim() === '') {
+        throw new Error(
+          `Invalid interiorSpaceId: must be null or a non-empty string for agent "${agent.id}". Received: ${JSON.stringify(agent.interiorSpaceId)}`
+        );
+      }
+      if (agent.interiorSpaceId.startsWith('entrance:')) {
+        throw new Error(
+          `Invalid interiorSpaceId: cannot reference an entrance ("${agent.interiorSpaceId}") for agent "${agent.id}"`
+        );
+      }
+      if (agent.interiorSpaceId.startsWith('node:nav:')) {
+        throw new Error(
+          `Invalid interiorSpaceId: cannot reference a navigation node ("${agent.interiorSpaceId}") for agent "${agent.id}"`
+        );
+      }
+      if (!agent.interiorSpaceId.startsWith('interior:')) {
+        throw new Error(
+          `Invalid interiorSpaceId: must reference an interior space ("interior:...") for agent "${agent.id}". Received: "${agent.interiorSpaceId}"`
+        );
+      }
     }
 
     if (

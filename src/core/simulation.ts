@@ -13,11 +13,15 @@ import {
   type IssueNpcScheduleDisclosureResultCode,
   type MakeDevelopmentOfferingAvailableResultCode,
 } from './world-state.js';
-import { ActivityState } from './entities/agent.js';
+import { ActivityState, type Agent } from './entities/agent.js';
 import {
   RestaurantOperationalState,
   evaluateDevelopmentRestaurantOperationalRule,
 } from './entities/restaurant.js';
+import {
+  findBusinessSchedule,
+  evaluateBusinessScheduleStatus,
+} from './business-schedule.js';
 import {
   DEVELOPMENT_NPC_WORK_SCHEDULE,
   isTimeWithinScheduleInterval,
@@ -25,7 +29,30 @@ import {
 } from './development-npc-schedule.js';
 import { deriveCivilTime, resolveLocationTimeZone } from './civil-time.js';
 import { tickOrderPreparation, OrderPreparationTransition } from './order.js';
-import { executeNpcRoutineAction } from './npc-behavior.js';
+import {
+  executeNpcRoutineAction,
+  deriveNpcContextualAction,
+  executeNpcContextualAction,
+  type NpcContextualAction,
+  type NpcContextualActionType,
+  type ExecuteNpcContextualActionResultCode,
+} from './npc-behavior.js';
+import { deriveAgentContext, type AgentContext } from './agent-context.js';
+import {
+  type AgentDecisionProvider,
+  DeterministicAgentDecisionProvider,
+  type AgentIntent,
+  dispatchAgentIntent,
+} from './agent-intent.js';
+import {
+  type RuntimeTraversalCoordinator,
+  type CompleteTraversalResult,
+} from './traversal-coordinator.js';
+import {
+  type NavigationProvider,
+  type NavigationResult,
+} from './navigation-contract.js';
+import { areAgentsCoLocated } from './co-presence.js';
 
 export {
   evaluateDevelopmentRestaurantOperationalRule,
@@ -178,6 +205,26 @@ export interface NpcDecisionTransitionResult {
   offeringId?: string;
 }
 
+/**
+ * Reports the outcome of a contextual NPC interaction executed during a simulation tick (Milestone 67).
+ * Derived tick-level representation; strictly non-persistent.
+ */
+export interface NpcContextualInteractionResult {
+  readonly actorNpcId: string;
+  readonly targetAgentId: string;
+  readonly actionType: NpcContextualActionType;
+  readonly success: boolean;
+  readonly code: ExecuteNpcContextualActionResultCode | string;
+  readonly response?: string;
+  readonly message?: string;
+}
+
+export interface AgentDecisionFailure {
+  readonly agentId: string;
+  readonly providerId?: string;
+  readonly error: string;
+}
+
 export interface TickResult {
   worldTime: string;
   transitions: TransitionResult[];
@@ -188,6 +235,11 @@ export interface TickResult {
   orderTransitions?: OrderPreparationTransition[];
   npcDecisionTransitions?: NpcDecisionTransitionResult[];
   closureEgressTransitions?: ClosureEgressTransitionResult[];
+  npcContextualInteractions?: NpcContextualInteractionResult[];
+  contextualInteractions?: NpcContextualInteractionResult[];
+  agentIntents?: AgentIntent[];
+  decisionFailures?: AgentDecisionFailure[];
+  traversalCompletions?: CompleteTraversalResult[];
 }
 
 /**
@@ -207,7 +259,7 @@ export function evaluateNpcScheduleDisclosureContext(
   if (!npc || !player) return 'no-action';
   if (npc.agentType !== 'npc' || player.agentType !== 'player') return 'no-action';
   if (npc.activityState !== 'active') return 'no-action';
-  if (npc.locationId !== player.locationId) return 'no-action';
+  if (!areAgentsCoLocated(state, npc.id, player.id)) return 'no-action';
   if (!isAgentAcquainted(state, playerId, npcId)) return 'no-action';
   const hasRecord = state.knowledge.some(
     (k) => k.agentId === playerId && k.factType === 'agent-schedule' && k.subjectId === npcId
@@ -250,6 +302,11 @@ export interface SimulationOptions {
   activityEvaluator?: (isoTime: string) => boolean;
   restaurantEvaluator?: (isoTime: string) => RestaurantOperationalState;
   silent?: boolean;
+  onBeforeContextualActionExecution?: (action: NpcContextualAction, state: WorldState) => void;
+  // Milestone 78: Traversal & Decision infrastructure
+  coordinator?: RuntimeTraversalCoordinator;
+  decisionProvider?: AgentDecisionProvider;
+  navigationProvider?: NavigationProvider;
 }
 
 /**
@@ -291,6 +348,9 @@ export class Simulation {
     const offeringTransitions: OfferingTransitionResult[] = [];
     const npcDecisionTransitions: NpcDecisionTransitionResult[] = [];
     const closureEgressTransitions: ClosureEgressTransitionResult[] = [];
+    const agentIntents: AgentIntent[] = [];
+    const decisionFailures: AgentDecisionFailure[] = [];
+    const traversalCompletions: CompleteTraversalResult[] = [];
 
     for (const agent of this.state.agents) {
       // Player isolation: Simulation rules apply strictly to NPC agents
@@ -388,9 +448,8 @@ export class Simulation {
       }
 
       // Milestone 63 / 64: Deterministic NPC Routine Execution Integration
-      // Executes routine actions for any NPC with a defined deterministic schedule:
-      // Simulation.tick() -> Deterministic Schedule -> M61 Behavioral Interpretation -> M62 Routine Action -> executeNpcRoutineAction() -> transitionAgentLocation() -> World State
-      if (npcSchedule !== null) {
+      // When NO coordinator is supplied, execute legacy M63 direct routine movement.
+      if (!this.options.coordinator && npcSchedule !== null) {
         const execResult = executeNpcRoutineAction(this.state, agent.id);
 
         if (execResult.success) {
@@ -429,16 +488,152 @@ export class Simulation {
       }
     }
 
+    // =========================================================================
+    // Milestone 78: Autonomous Agent Simulation Runtime
+    // Phased Execution: Observation Barrier -> Cognition -> Dispatch -> Navigation -> Commit
+    // =========================================================================
+    if (this.options.coordinator) {
+      const coordinator = this.options.coordinator;
+
+      // Phase 1: Observation & Eligibility
+      // Derive all agent contexts from consistent pre-commit world state
+      const eligibleAgentContexts: { agent: Agent; context: AgentContext }[] = [];
+      for (const agent of this.state.agents) {
+        if (agent.agentType !== 'npc') {
+          continue;
+        }
+
+        // Eligibility Gating: Skip cognition if agent already has an active traversal
+        if (coordinator.hasActiveTraversal(agent.id)) {
+          continue;
+        }
+
+        const context = deriveAgentContext(this.state, agent.id);
+        if (context) {
+          eligibleAgentContexts.push({ agent, context });
+        }
+      }
+
+      // Phase 2: Cognition
+      // Evaluate decision provider synchronously; isolate per-agent runtime errors
+      const defaultDecisionProvider = new DeterministicAgentDecisionProvider();
+      const decisionProvider = this.options.decisionProvider ?? defaultDecisionProvider;
+      const candidateIntents: { agent: Agent; intent: AgentIntent }[] = [];
+
+      for (const { agent, context } of eligibleAgentContexts) {
+        try {
+          const result = decisionProvider.decideIntent(context);
+
+          // Synchronous decision check: detect and reject Promise-like results
+          if (
+            result !== null &&
+            typeof result === 'object' &&
+            typeof (result as { then?: unknown }).then === 'function'
+          ) {
+            throw new Error(
+              `Asynchronous decision provider "${decisionProvider.providerId}" is not supported by synchronous Simulation.tick() in M78.`
+            );
+          }
+
+          if (result) {
+            const syncIntent = result as AgentIntent;
+            agentIntents.push(syncIntent);
+            candidateIntents.push({ agent, intent: syncIntent });
+          }
+        } catch (err: unknown) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          // If this is the explicit async rejection error, rethrow immediately out of tick()
+          if (errMsg.includes('Asynchronous decision provider')) {
+            throw err;
+          }
+          // Otherwise isolate provider exception per agent
+          decisionFailures.push({
+            agentId: agent.id,
+            providerId: decisionProvider.providerId,
+            error: errMsg,
+          });
+        }
+      }
+
+      // Phase 3 & 4: Intent Dispatch & Headless Navigation
+      const immediateResults: { agent: Agent; navResult: NavigationResult }[] = [];
+
+      for (const { agent, intent } of candidateIntents) {
+        if (intent.intentType === 'move-to-place') {
+          const dispatchResult = dispatchAgentIntent(this.state, intent, {
+            coordinator,
+            currentTime: worldTime,
+            provider: this.options.navigationProvider,
+          });
+
+          if (
+            dispatchResult.success &&
+            dispatchResult.code === 'traversal-started' &&
+            dispatchResult.traversalPromise
+          ) {
+            const promiseOrResult = dispatchResult.traversalPromise;
+            if (
+              promiseOrResult &&
+              typeof promiseOrResult === 'object' &&
+              typeof (promiseOrResult as any).then !== 'function' &&
+              'status' in promiseOrResult
+            ) {
+              immediateResults.push({
+                agent,
+                navResult: promiseOrResult as NavigationResult,
+              });
+            }
+          }
+        }
+      }
+
+      // Phase 5: Authoritative Arrival
+      // Commit immediate navigation results via coordinator -> M69 validateArrivalAndCommit()
+      for (const { agent, navResult } of immediateResults) {
+        const completeResult = coordinator.completeTraversal(this.state, navResult);
+        traversalCompletions.push(completeResult);
+
+        if (completeResult.success) {
+          npcLocationTransitions.push({
+            agentId: completeResult.agentId,
+            previousLocationId: completeResult.previousLocationId,
+            newLocationId: completeResult.currentLocationId,
+            changed: completeResult.changed,
+          });
+
+          if (!this.options.silent) {
+            console.log(`SIMULATION TICK`);
+            console.log(`WORLD TIME: ${worldTime}`);
+            console.log(`NPC ${completeResult.agentId}`);
+            if (completeResult.changed) {
+              console.log(
+                `LOCATION: ${completeResult.previousLocationId} -> ${completeResult.currentLocationId}`
+              );
+            } else {
+              console.log(`LOCATION: ${completeResult.previousLocationId} (unchanged)`);
+            }
+          }
+        }
+      }
+    }
+
     const restaurantTransitions: RestaurantTransitionResult[] = [];
 
     for (const restaurant of this.state.restaurants) {
-      if (!this.options.restaurantEvaluator && restaurant.id !== 'restaurant:development-restaurant') {
-        continue;
+      let targetState: RestaurantOperationalState;
+      if (this.options.restaurantEvaluator) {
+        targetState = this.options.restaurantEvaluator(worldTime);
+      } else {
+        const schedule = findBusinessSchedule(restaurant.id);
+        if (schedule) {
+          targetState = evaluateBusinessScheduleStatus(schedule, worldTime);
+        } else if (restaurant.id === 'restaurant:development-restaurant') {
+          const restaurantTimeZone = resolveLocationTimeZone(this.state, restaurant.id);
+          targetState = evaluateDevelopmentRestaurantOperationalRule(worldTime, restaurantTimeZone);
+        } else {
+          continue;
+        }
       }
-      const restaurantTimeZone = resolveLocationTimeZone(this.state, restaurant.id);
-      const targetState: RestaurantOperationalState = this.options.restaurantEvaluator
-        ? this.options.restaurantEvaluator(worldTime)
-        : evaluateDevelopmentRestaurantOperationalRule(worldTime, restaurantTimeZone);
 
       const transitionResult = transitionRestaurantOperationalState(
         this.state,
@@ -571,6 +766,82 @@ export class Simulation {
       }
     }
 
+    // Milestone 67: Contextual NPC Behavior & Simulation Integration
+    // Sequence: NPC routine evaluation -> Context inspection -> Contextual intent -> Contextual action -> Authority validation -> Contextual interaction execution
+    const npcContextualInteractions: NpcContextualInteractionResult[] = [];
+    const tickExecutedContextualActions = new Set<string>();
+
+    for (const agent of this.state.agents) {
+      // NPC Eligibility: Contextual interaction evaluation applies strictly to NPC agents
+      if (agent.agentType !== 'npc') {
+        continue;
+      }
+
+      // Step 5 & 6: Evaluate contextual behavior and derive contextual action
+      const contextualAction = deriveNpcContextualAction(this.state, agent.id);
+      if (!contextualAction) {
+        continue;
+      }
+
+      // Step 9: Tick-Level Duplicate Protection
+      // Ephemeral tick-local key: prevents the same NPC from executing the same action
+      // targeting the same agent more than once within the single simulation tick.
+      const actionKey = `${contextualAction.npcId}:${contextualAction.targetAgentId}:${contextualAction.actionType}`;
+      if (tickExecutedContextualActions.has(actionKey)) {
+        continue;
+      }
+      tickExecutedContextualActions.add(actionKey);
+
+      // Testing / simulation hook for pre-execution mutation (e.g. stale target scenario)
+      if (this.options.onBeforeContextualActionExecution) {
+        this.options.onBeforeContextualActionExecution(contextualAction, this.state);
+      }
+
+      // Step 7: Execute contextual action through existing Social Authority (executeNpcGreeting)
+      try {
+        const execResult = executeNpcContextualAction(this.state, contextualAction);
+
+        npcContextualInteractions.push({
+          actorNpcId: contextualAction.npcId,
+          targetAgentId: contextualAction.targetAgentId,
+          actionType: contextualAction.actionType,
+          success: execResult.success,
+          code: execResult.code,
+          message: execResult.message,
+          response: execResult.success ? execResult.response : undefined,
+        });
+
+        if (!this.options.silent) {
+          if (execResult.success) {
+            console.log(
+              `[SIMULATION TICK] CONTEXTUAL INTERACTION: ${contextualAction.npcId} -> ${contextualAction.targetAgentId} (${contextualAction.actionType}): "${execResult.response}"`
+            );
+          } else {
+            console.warn(
+              `[SIMULATION TICK] CONTEXTUAL INTERACTION REJECTED: ${contextualAction.npcId} -> ${contextualAction.targetAgentId} (${contextualAction.actionType}): [${execResult.code}] ${execResult.message}`
+            );
+          }
+        }
+      } catch (err: unknown) {
+        // Step 15: Failure Isolation - unexpected errors must not abort the tick
+        const errMessage = err instanceof Error ? err.message : String(err);
+        npcContextualInteractions.push({
+          actorNpcId: contextualAction.npcId,
+          targetAgentId: contextualAction.targetAgentId,
+          actionType: contextualAction.actionType,
+          success: false,
+          code: 'unsupported-action-type',
+          message: `Unexpected execution failure: ${errMessage}`,
+        });
+
+        if (!this.options.silent) {
+          console.warn(
+            `[SIMULATION TICK] CONTEXTUAL INTERACTION EXCEPTION: ${contextualAction.npcId}: ${errMessage}`
+          );
+        }
+      }
+    }
+
     const playerActivityTransitions: PlayerActivityTransitionResult[] = [];
 
     for (const agent of this.state.agents) {
@@ -643,6 +914,12 @@ export class Simulation {
         npcDecisionTransitions.length > 0 ? npcDecisionTransitions : undefined,
       closureEgressTransitions:
         closureEgressTransitions.length > 0 ? closureEgressTransitions : undefined,
+      npcContextualInteractions,
+      contextualInteractions: npcContextualInteractions,
+      agentIntents: agentIntents.length > 0 ? agentIntents : undefined,
+      decisionFailures: decisionFailures.length > 0 ? decisionFailures : undefined,
+      traversalCompletions:
+        traversalCompletions.length > 0 ? traversalCompletions : undefined,
     };
   }
 }

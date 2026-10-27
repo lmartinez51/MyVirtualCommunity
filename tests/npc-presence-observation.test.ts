@@ -274,7 +274,7 @@ describe('Milestone 60: NPC Presence & Observation Boundary', () => {
       inspectCurrentLocation(state, player.id);
 
       // Strict schema verification
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
       assert.equal(state.version, CURRENT_WORLD_STATE_VERSION);
       assert.equal((state as any).encounters, undefined);
       assert.equal((state as any).encounterHistory, undefined);

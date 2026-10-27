@@ -387,7 +387,7 @@ describe('Milestone 34: Unified Consumable Activity Lifecycle', () => {
         const restored1 = persistence1.load()!;
         assert.ok(restored1);
         validateWorldState(restored1);
-        assert.equal(restored1.version, 18);
+        assert.equal(restored1.version, 19);
         const restoredPlayer = restored1.agents.find((a) => a.id === player.id)!;
         assert.equal(restoredPlayer.playerActivity?.activity, 'eating-pastry');
         assert.equal(restoredPlayer.playerActivity?.durationMs, 900_000);
@@ -409,7 +409,7 @@ describe('Milestone 34: Unified Consumable Activity Lifecycle', () => {
         const restored2 = persistence2.load()!;
         assert.ok(restored2);
         validateWorldState(restored2);
-        assert.equal(restored2.version, 18);
+        assert.equal(restored2.version, 19);
         assert.equal(restored2.activityCompletions.length, 1);
         assert.equal(restored2.activityCompletions[0].activity, 'eating-pastry');
       } finally {

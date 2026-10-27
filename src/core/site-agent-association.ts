@@ -326,3 +326,15 @@ export function getAgentSiteAssociations(
 ): readonly SiteAgentAssociation[] {
   return state.siteAgentAssociations.filter((a) => a.agentId === agentId);
 }
+
+/**
+ * Pure query: returns the designated attended site association for an agent, if any (Milestone 90).
+ */
+export function getAgentAttendedSite(
+  state: { readonly siteAgentAssociations: readonly SiteAgentAssociation[] },
+  agentId: string
+): SiteAgentAssociation | undefined {
+  return state.siteAgentAssociations.find(
+    (a) => a.agentId === agentId && a.role === 'attendant'
+  );
+}

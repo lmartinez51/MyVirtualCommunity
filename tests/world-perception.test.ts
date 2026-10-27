@@ -318,7 +318,7 @@ describe('Milestone 12: First World Perception (inspectCurrentLocation)', () => 
         const loadedState = persistence.load();
         assert.ok(loadedState !== null);
         assert.doesNotThrow(() => validateWorldState(loadedState));
-        assert.equal(loadedState.version, 18);
+        assert.equal(loadedState.version, 19);
 
         const loadedPlayer = loadedState.agents.find((a) => a.id === 'agent:dev-player')!;
         assert.equal(loadedPlayer.locationId, 'building:development-building');
