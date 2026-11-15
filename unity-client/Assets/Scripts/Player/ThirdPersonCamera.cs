@@ -139,10 +139,16 @@ namespace MyVirtualCommunity.Player
 
         private void LateUpdate()
         {
+            if (AerialInspectionController.IsAerialModeActive)
+            {
+                return;
+            }
+
             bool isModalActive = ProductHudController.Instance != null &&
                 (ProductHudController.Instance.IsMenuModalOpen ||
                  ProductHudController.Instance.IsPauseMenuOpen ||
-                 ProductHudController.Instance.IsExitConfirmOpen);
+                 ProductHudController.Instance.IsExitConfirmOpen ||
+                 ProductHudController.Instance.IsAvatarModalOpen);
 
             bool isPointerOverUI = ProductHudController.Instance != null && ProductHudController.Instance.IsMouseOverUI();
 

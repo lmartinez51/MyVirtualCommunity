@@ -158,8 +158,8 @@ namespace MyVirtualCommunity.UI
                 }
             }
 
-            // Hotkeys [1] to [6] for camera preset switching
-            if (!isMenuModalOpen && !IsAvatarModalOpen)
+            // Hotkeys [1] to [6] for camera preset switching (only in GroundView; in Aerial mode 1..6 jump to sectors)
+            if (!isMenuModalOpen && !IsAvatarModalOpen && !AerialInspectionController.IsAerialModeActive)
             {
                 if (Input.GetKeyDown(KeyCode.Alpha1)) SetCameraPreset(CameraPreset.ThirdPerson);
                 else if (Input.GetKeyDown(KeyCode.Alpha2)) SetCameraPreset(CameraPreset.FirstPerson);
@@ -172,22 +172,22 @@ namespace MyVirtualCommunity.UI
             // [M] key toggles the Wing Spot Restaurant Menu
             if (Input.GetKeyDown(KeyCode.M))
             {
-                if (!isPauseMenuOpen && !isExitConfirmOpen && !IsAvatarModalOpen)
+                if (!isPauseMenuOpen && !isExitConfirmOpen && !IsAvatarModalOpen && !AerialInspectionController.IsAerialModeActive)
                 {
                     ToggleMenuModal();
                 }
             }
 
-            // [C] key toggles the Avatar Customization Panel
+            // [C] key toggles the Avatar Customization Panel (isolated from Drone descent key)
             if (Input.GetKeyDown(KeyCode.C))
             {
-                if (!isPauseMenuOpen && !isExitConfirmOpen && !isMenuModalOpen)
+                if (!isPauseMenuOpen && !isExitConfirmOpen && !isMenuModalOpen && !AerialInspectionController.IsAerialModeActive)
                 {
                     ToggleAvatarCustomization();
                 }
             }
 
-            // [Escape] key handles clean priority closing / pause toggle / cursor release
+            // [Escape] key handles clean priority closing / aerial exit / pause toggle / cursor release
             if (Input.GetKeyDown(KeyCode.Escape))
             {
                 if (IsAvatarModalOpen)
@@ -205,6 +205,10 @@ namespace MyVirtualCommunity.UI
                 else if (isPauseMenuOpen)
                 {
                     ResumeGame();
+                }
+                else if (AerialInspectionController.IsAerialModeActive)
+                {
+                    AerialInspectionController.Instance?.SetAerialViewMode(AerialViewMode.GroundView);
                 }
                 else if (Cursor.lockState == CursorLockMode.Locked)
                 {
@@ -294,8 +298,10 @@ namespace MyVirtualCommunity.UI
         {
             isPauseMenuOpen = false;
             isExitConfirmOpen = false;
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
+            bool keepCursorFree = AerialInspectionController.Instance != null &&
+                                  AerialInspectionController.Instance.CurrentMode == AerialViewMode.SatelliteTopDown;
+            Cursor.lockState = keepCursorFree ? CursorLockMode.None : CursorLockMode.Locked;
+            Cursor.visible = keepCursorFree;
         }
 
         public void RequestExitGame()
@@ -347,18 +353,25 @@ namespace MyVirtualCommunity.UI
             float qtHeight = isQuickTravelMenuOpen ? 340f : 85f;
             if (new Rect(10, 10, 350, qtHeight).Contains(guiMouse)) return true;
 
-            // Top-Center: Camera preset toolbar
-            float barWidth = 580f;
-            float barX = (Screen.width - barWidth) / 2f;
-            if (new Rect(barX - 10, 10, barWidth + 20, 50).Contains(guiMouse)) return true;
+            // Top-Center: Responsive Camera preset & Aerial toolbar
+            Rect toolbarRect = GetTopToolbarRect();
+            if (new Rect(toolbarRect.x - 8f, toolbarRect.y - 6f, toolbarRect.width + 16f, toolbarRect.height + 12f).Contains(guiMouse)) return true;
 
             // Top-Right: Pause shortcut button, Clock, & Avatar button
             if (new Rect(Screen.width - 430, 10, 425, 48).Contains(guiMouse)) return true;
+
+            // Aerial UI (Google Maps Launcher Card, Drone OSD, or Satellite HUD)
+            if (AerialInspectionController.Instance != null &&
+                AerialInspectionController.Instance.IsMouseOverAerialUI(Input.mousePosition))
+            {
+                return true;
+            }
 
             // F3 Developer diagnostics overlay
             if (showDiagnostics && new Rect(10, 55, 410, 235).Contains(guiMouse)) return true;
 
             // Bottom controls / dialogue / prompt areas
+            if (new Rect(10, Screen.height - 50, 780, 40).Contains(guiMouse)) return true;
             if (dialogueDismissTimer > 0f && new Rect(Screen.width / 2f - 275, Screen.height - 185, 550, 85).Contains(guiMouse)) return true;
             if (!string.IsNullOrEmpty(activePrompt) && new Rect(Screen.width / 2f - 225, Screen.height - 90, 450, 50).Contains(guiMouse)) return true;
 
@@ -464,11 +477,13 @@ namespace MyVirtualCommunity.UI
         {
             if (Screen.width <= 0 || Screen.height <= 0) return;
 
+            bool isAerialActive = AerialInspectionController.IsAerialModeActive;
+
             // 1. Top-Left Location Badge
             GUI.Box(new Rect(15, 15, 340, 35), $"<b>📍 {activeLocationName}</b>");
 
-            // 1b. Quick Travel Dropdown (Top-Left, below location badge)
-            if (!isMenuModalOpen && !isPauseMenuOpen && !isExitConfirmOpen && !IsAvatarModalOpen)
+            // 1b. Quick Travel Dropdown (Top-Left, below location badge, GroundView only)
+            if (!isMenuModalOpen && !isPauseMenuOpen && !isExitConfirmOpen && !IsAvatarModalOpen && !isAerialActive)
             {
                 DrawQuickTravelUI();
             }
@@ -483,9 +498,12 @@ namespace MyVirtualCommunity.UI
             DrawTeleportationEffect();
 
             // 2. Top-Right World Clock Badge, Avatar Customization Button & Pause Shortcut Button
-            if (GUI.Button(new Rect(Screen.width - 415, 15, 85, 35), "<b>👤 Avatar</b>"))
+            if (!isAerialActive)
             {
-                ToggleAvatarCustomization();
+                if (GUI.Button(new Rect(Screen.width - 415, 15, 85, 35), "<b>👤 Avatar</b>"))
+                {
+                    ToggleAvatarCustomization();
+                }
             }
 
             GUI.Box(new Rect(Screen.width - 295, 15, 235, 35), $"<b>🕒 {activeCivilTimeString}</b>");
@@ -502,29 +520,45 @@ namespace MyVirtualCommunity.UI
             GUI.Box(new Rect(Screen.width - 325, 20, 20, 25), "●");
             GUI.color = originalCol;
 
-            // 3. Top-Center Camera Presets Toolbar (visible when no modal window is open)
+            // 3. Top-Center Camera Presets & Aerial Mode Toolbar (visible when no modal window is open)
             if (!isMenuModalOpen && !isPauseMenuOpen && !isExitConfirmOpen && !IsAvatarModalOpen)
             {
                 DrawCameraPresetToolbar();
             }
 
-            // 4. Bottom-Left Controls Guide & Cursor State Indicator
-            bool isLocked = Cursor.lockState == CursorLockMode.Locked;
-            string cursorStatus = isLocked ? "<color=#FFCC00>🔒 [Fijado]</color> (Alt/Tab/Esc para Liberar)" : "<color=#55FF88>🔓 [Libre]</color> (Clic en escena para Fijar)";
-            GUI.Box(new Rect(15, Screen.height - 45, 680, 30),
-                $"<b><size=11>WASD: Mover | Shift: Correr | C: Avatar | Cursor: {cursorStatus} | 1-6: Cámara | M: Menú | Esc: Menú</size></b>");
-
-            // 5. Center-Bottom Interaction Prompt (only if no modal active)
-            if (!isMenuModalOpen && !isPauseMenuOpen && !isExitConfirmOpen && !IsAvatarModalOpen && !string.IsNullOrEmpty(activePrompt))
+            if (isAerialActive)
             {
-                GUI.Box(new Rect(Screen.width / 2f - 220, Screen.height - 85, 440, 42), $"<b><size=14>{activePrompt}</size></b>");
+                if (!isMenuModalOpen && !isPauseMenuOpen && !isExitConfirmOpen && !IsAvatarModalOpen)
+                {
+                    AerialInspectionController.Instance?.DrawActiveAerialHUD();
+                }
             }
-
-            // 6. Elena Dialogue Bubble
-            if (dialogueDismissTimer > 0f && !string.IsNullOrEmpty(activeDialogue))
+            else
             {
-                GUI.Box(new Rect(Screen.width / 2f - 270, Screen.height - 180, 540, 75),
-                    $"<b><color=#E05030>{activeSpeaker}</color></b>\n<size=13>\"{activeDialogue}\"</size>");
+                // 3b. Floating Google Maps Satellite / Drone Layer Switcher Card (Bottom-Left above controls legend)
+                if (!isMenuModalOpen && !isPauseMenuOpen && !isExitConfirmOpen && !IsAvatarModalOpen)
+                {
+                    AerialInspectionController.Instance?.DrawGoogleMapsLayerSwitcherCard();
+                }
+
+                // 4. Bottom-Left Controls Guide & Cursor State Indicator
+                bool isLocked = Cursor.lockState == CursorLockMode.Locked;
+                string cursorStatus = isLocked ? "<color=#FFCC00>🔒 [Fijado]</color> (Alt/Tab/Esc)" : "<color=#55FF88>🔓 [Libre]</color> (Clic en escena)";
+                GUI.Box(new Rect(15, Screen.height - 45, 765, 30),
+                    $"<b><size=11>WASD: Mover | Shift: Correr | V: Dron 3D | G: Satélite | C: Avatar | Cursor: {cursorStatus} | 1-6: Cámara | M: Menú</size></b>");
+
+                // 5. Center-Bottom Interaction Prompt (only if no modal active)
+                if (!isMenuModalOpen && !isPauseMenuOpen && !isExitConfirmOpen && !IsAvatarModalOpen && !string.IsNullOrEmpty(activePrompt))
+                {
+                    GUI.Box(new Rect(Screen.width / 2f - 220, Screen.height - 85, 440, 42), $"<b><size=14>{activePrompt}</size></b>");
+                }
+
+                // 6. Elena Dialogue Bubble
+                if (dialogueDismissTimer > 0f && !string.IsNullOrEmpty(activeDialogue))
+                {
+                    GUI.Box(new Rect(Screen.width / 2f - 270, Screen.height - 180, 540, 75),
+                        $"<b><color=#E05030>{activeSpeaker}</color></b>\n<size=13>\"{activeDialogue}\"</size>");
+                }
             }
 
             // 7. F3 Developer Diagnostics Overlay
@@ -552,77 +586,122 @@ namespace MyVirtualCommunity.UI
             }
         }
 
+        private Rect GetTopToolbarRect()
+        {
+            bool isAerialActive = AerialInspectionController.IsAerialModeActive;
+            float leftLimit = 362f;
+            float rightLimit = isAerialActive ? (Screen.width - 332f) : (Screen.width - 422f);
+            float availW = Mathf.Max(420f, rightLimit - leftLimit);
+            float barWidth = Mathf.Min(748f, availW - 12f);
+            float barX = leftLimit + (availW - barWidth) * 0.5f;
+            return new Rect(barX, 16f, barWidth, 32f);
+        }
+
         /// <summary>
-        /// Renders an in-game Camera Preset Toolbar with 6 clickable views and active preset highlighting.
+        /// Renders a responsive in-game Camera Preset & Aerial Mode Toolbar with 6 clickable ground views + Drone [V] & Satellite [G].
+        /// Automatically adapts width to fit between the left Location badge and right Avatar/Clock badges at 1280x720, 1366x768, and 1080p+.
         /// </summary>
         private void DrawCameraPresetToolbar()
         {
             var cam = Camera.main != null ? Camera.main.GetComponent<ThirdPersonCamera>() : FindFirstObjectByType<ThirdPersonCamera>();
             CameraPreset activePreset = cam != null ? cam.ActivePreset : CameraPreset.ThirdPerson;
+            var aerial = AerialInspectionController.Instance;
+            AerialViewMode aerialMode = aerial != null ? aerial.CurrentMode : AerialViewMode.GroundView;
+            bool isGround = (aerialMode == AerialViewMode.GroundView);
 
-            float barWidth = 560f;
-            float barHeight = 32f;
-            float barX = (Screen.width - barWidth) / 2f;
-            float barY = 16f;
+            Rect barRect = GetTopToolbarRect();
+            float barX = barRect.x;
+            float barY = barRect.y;
+            float barWidth = barRect.width;
+            float barHeight = barRect.height;
 
-            GUI.Box(new Rect(barX - 6, barY - 4, barWidth + 12, barHeight + 8), "");
+            GUI.Box(new Rect(barX - 6f, barY - 4f, barWidth + 12f, barHeight + 8f), "");
 
-            float btnW = 88f;
-            float spacing = 5f;
+            float spacing = 4f;
+            float btnW = (barWidth - spacing * 7f) / 8f;
+            bool compact = btnW < 78f;
             float startX = barX;
 
             Color origBg = GUI.backgroundColor;
 
             // 1. Third Person
-            if (activePreset == CameraPreset.ThirdPerson) GUI.backgroundColor = new Color(0.25f, 0.85f, 0.45f);
-            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), "<b>3rd Person</b>"))
+            if (isGround && activePreset == CameraPreset.ThirdPerson) GUI.backgroundColor = new Color(0.25f, 0.85f, 0.45f);
+            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), compact ? "<b>3rd [1]</b>" : "<b>3rd Person</b>"))
             {
+                aerial?.SetAerialViewMode(AerialViewMode.GroundView);
                 SetCameraPreset(CameraPreset.ThirdPerson);
             }
             GUI.backgroundColor = origBg;
 
             // 2. First Person
             startX += btnW + spacing;
-            if (activePreset == CameraPreset.FirstPerson) GUI.backgroundColor = new Color(0.25f, 0.85f, 0.45f);
-            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), "<b>1st Person</b>"))
+            if (isGround && activePreset == CameraPreset.FirstPerson) GUI.backgroundColor = new Color(0.25f, 0.85f, 0.45f);
+            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), compact ? "<b>1st [2]</b>" : "<b>1st Person</b>"))
             {
+                aerial?.SetAerialViewMode(AerialViewMode.GroundView);
                 SetCameraPreset(CameraPreset.FirstPerson);
             }
             GUI.backgroundColor = origBg;
 
             // 3. Front View
             startX += btnW + spacing;
-            if (activePreset == CameraPreset.FrontView) GUI.backgroundColor = new Color(0.25f, 0.85f, 0.45f);
-            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), "<b>Front View</b>"))
+            if (isGround && activePreset == CameraPreset.FrontView) GUI.backgroundColor = new Color(0.25f, 0.85f, 0.45f);
+            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), compact ? "<b>Front [3]</b>" : "<b>Front View</b>"))
             {
+                aerial?.SetAerialViewMode(AerialViewMode.GroundView);
                 SetCameraPreset(CameraPreset.FrontView);
             }
             GUI.backgroundColor = origBg;
 
             // 4. Side View
             startX += btnW + spacing;
-            if (activePreset == CameraPreset.SideView) GUI.backgroundColor = new Color(0.25f, 0.85f, 0.45f);
-            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), "<b>Side View</b>"))
+            if (isGround && activePreset == CameraPreset.SideView) GUI.backgroundColor = new Color(0.25f, 0.85f, 0.45f);
+            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), compact ? "<b>Side [4]</b>" : "<b>Side View</b>"))
             {
+                aerial?.SetAerialViewMode(AerialViewMode.GroundView);
                 SetCameraPreset(CameraPreset.SideView);
             }
             GUI.backgroundColor = origBg;
 
             // 5. Top-Down
             startX += btnW + spacing;
-            if (activePreset == CameraPreset.TopDown) GUI.backgroundColor = new Color(0.25f, 0.85f, 0.45f);
-            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), "<b>Top-Down</b>"))
+            if (isGround && activePreset == CameraPreset.TopDown) GUI.backgroundColor = new Color(0.25f, 0.85f, 0.45f);
+            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), compact ? "<b>Top [5]</b>" : "<b>Top-Down</b>"))
             {
+                aerial?.SetAerialViewMode(AerialViewMode.GroundView);
                 SetCameraPreset(CameraPreset.TopDown);
             }
             GUI.backgroundColor = origBg;
 
             // 6. Reset Camera
             startX += btnW + spacing;
-            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), "<b>Reset [6]</b>"))
+            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), compact ? "<b>Reset</b>" : "<b>Reset [6]</b>"))
             {
+                aerial?.SetAerialViewMode(AerialViewMode.GroundView);
                 ResetCameraPreset();
             }
+
+            // 7. 3D Free Drone [V]
+            startX += btnW + spacing;
+            if (aerialMode == AerialViewMode.DroneFreeFlight) GUI.backgroundColor = new Color(0.18f, 0.92f, 0.68f);
+            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), compact ? "<b>🚁 [V]</b>" : "<b>🚁 Dron [V]</b>"))
+            {
+                aerial?.SetAerialViewMode(aerialMode == AerialViewMode.DroneFreeFlight
+                    ? AerialViewMode.GroundView
+                    : AerialViewMode.DroneFreeFlight);
+            }
+            GUI.backgroundColor = origBg;
+
+            // 8. Satellite Map View [G]
+            startX += btnW + spacing;
+            if (aerialMode == AerialViewMode.SatelliteTopDown) GUI.backgroundColor = new Color(0.28f, 0.78f, 1.0f);
+            if (GUI.Button(new Rect(startX, barY, btnW, barHeight), compact ? "<b>🛰️ [G]</b>" : "<b>🛰️ Satélite [G]</b>"))
+            {
+                aerial?.SetAerialViewMode(aerialMode == AerialViewMode.SatelliteTopDown
+                    ? AerialViewMode.GroundView
+                    : AerialViewMode.SatelliteTopDown);
+            }
+            GUI.backgroundColor = origBg;
         }
 
         /// <summary>
