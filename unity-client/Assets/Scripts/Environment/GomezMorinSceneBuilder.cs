@@ -6775,8 +6775,8 @@ namespace MyVirtualCommunity.Environment
             //    diagonal de Rosaleda (cada una entra bajo su asfalto).
             //    Top en Y = -0.01, 1 cm bajo las calles.
             // ---------------------------------------------------------------
-            // Losa A: X 18.5..95, Z 45..126
-            CreateBox(root.transform, "Terreno_Suelo_A", new Vector3(56.75f, -0.06f, 85.5f), new Vector3(76.5f, 0.1f, 81f), groundCol);
+            // Losa A: X 18.5..95, Z 31..126 (llega 1 m bajo el estacionamiento, que termina en Z = 32)
+            CreateBox(root.transform, "Terreno_Suelo_A", new Vector3(56.75f, -0.06f, 78.5f), new Vector3(76.5f, 0.1f, 95f), groundCol);
             // Losa B: X 55..95, Z 126..141 (Rosaleda pasa por Z 140.1 en X = 55)
             CreateBox(root.transform, "Terreno_Suelo_B", new Vector3(75f, -0.06f, 133.5f), new Vector3(40f, 0.1f, 15f), groundCol);
             // Losa C: X 80..95, Z 141..154 (Rosaleda pasa por Z 148.4 en X = 80)
@@ -6784,41 +6784,49 @@ namespace MyVirtualCommunity.Environment
 
             // ---------------------------------------------------------------
             // 2. Calle Del Porvenir, prolongacion norte (X 8.5..18.5,
-            //    Z 45..126, hasta el eje de Rosaleda). Banquetas Z 40..126
-            //    para empalmar con las del frente, que terminan en Z = 40.
+            //    Z 45..132, hasta el borde norte de Rosaleda), para que el
+            //    cruce sea en T completo. Banquetas Z 40..130 (oeste) y
+            //    Z 40..135 (este, hasta la banqueta norte de Rosaleda).
             // ---------------------------------------------------------------
-            CreateBox(root.transform, "Porvenir_Norte_Asphalt", new Vector3(13.5f, -0.1f, 85.5f), new Vector3(10f, 0.2f, 81f), asphaltCol);
-            for (float z = 48f; z < 122f; z += 5f)
+            CreateBox(root.transform, "Porvenir_Norte_Asphalt", new Vector3(13.5f, -0.1f, 88.5f), new Vector3(10f, 0.2f, 87f), asphaltCol);
+            for (float z = 48f; z < 128f; z += 5f)
             {
                 CreateBox(root.transform, $"Porvenir_Norte_Yellow_{z}", new Vector3(13.5f, 0.02f, z), new Vector3(0.15f, 0.04f, 2.5f), yellowCol);
             }
-            CreateBox(root.transform, "Porvenir_Norte_West_Sidewalk", new Vector3(7.5f, 0.12f, 83f), new Vector3(2f, 0.24f, 86f), sidewalkColor);
-            CreateBox(root.transform, "Porvenir_Norte_West_Curb", new Vector3(8.55f, 0.12f, 83f), new Vector3(0.12f, 0.24f, 86f), curbColor);
-            CreateBox(root.transform, "Porvenir_Norte_East_Sidewalk", new Vector3(19.5f, 0.12f, 83f), new Vector3(2f, 0.24f, 86f), sidewalkColor);
-            CreateBox(root.transform, "Porvenir_Norte_East_Curb", new Vector3(18.45f, 0.14f, 83f), new Vector3(0.12f, 0.28f, 86f), curbColor);
-            for (float z = 42.5f; z <= 124f; z += 2.5f)
+            CreateBox(root.transform, "Porvenir_Norte_West_Sidewalk", new Vector3(7.5f, 0.12f, 85f), new Vector3(2f, 0.24f, 90f), sidewalkColor);
+            CreateBox(root.transform, "Porvenir_Norte_West_Curb", new Vector3(8.55f, 0.12f, 85f), new Vector3(0.12f, 0.24f, 90f), curbColor);
+            CreateBox(root.transform, "Porvenir_Norte_East_Sidewalk", new Vector3(19.5f, 0.12f, 87.5f), new Vector3(2f, 0.24f, 95f), sidewalkColor);
+            CreateBox(root.transform, "Porvenir_Norte_East_Curb", new Vector3(18.45f, 0.14f, 87.5f), new Vector3(0.12f, 0.28f, 95f), curbColor);
+            for (float z = 42.5f; z <= 128f; z += 2.5f)
             {
                 CreateBox(root.transform, $"Porvenir_Norte_West_Joint_{z:F1}", new Vector3(7.5f, 0.245f, z), new Vector3(1.96f, 0.01f, 0.04f), jointDark, false);
+            }
+            for (float z = 42.5f; z <= 133f; z += 2.5f)
+            {
                 CreateBox(root.transform, $"Porvenir_Norte_East_Joint_{z:F1}", new Vector3(19.5f, 0.245f, z), new Vector3(1.96f, 0.01f, 0.04f), jointDark, false);
             }
 
             // ---------------------------------------------------------------
             // 3. Av. La Arboleda, prolongacion norte (X 95..107,
-            //    Z 45..150, hasta el eje de Rosaleda). Banquetas de 1.5 m,
-            //    igual que en el frente.
+            //    Z 45..161, hasta el borde norte de Rosaleda), para que el
+            //    cruce sea en T completo. Banquetas de 1.5 m, igual que
+            //    en el frente (oeste hasta Z = 160, este hasta Z = 163).
             // ---------------------------------------------------------------
-            CreateBox(root.transform, "Arboleda_Norte_Asphalt", new Vector3(101f, -0.1f, 97.5f), new Vector3(12f, 0.2f, 105f), asphaltCol);
-            for (float z = 48f; z < 147f; z += 5f)
+            CreateBox(root.transform, "Arboleda_Norte_Asphalt", new Vector3(101f, -0.1f, 103f), new Vector3(12f, 0.2f, 116f), asphaltCol);
+            for (float z = 48f; z < 158f; z += 5f)
             {
                 CreateBox(root.transform, $"Arboleda_Norte_Yellow_{z}", new Vector3(101f, 0.02f, z), new Vector3(0.15f, 0.04f, 2.5f), yellowCol);
             }
-            CreateBox(root.transform, "Arboleda_Norte_West_Sidewalk", new Vector3(94.25f, 0.12f, 97.5f), new Vector3(1.5f, 0.24f, 105f), sidewalkColor);
-            CreateBox(root.transform, "Arboleda_Norte_West_Curb", new Vector3(94.95f, 0.14f, 97.5f), new Vector3(0.12f, 0.28f, 105f), curbColor);
-            CreateBox(root.transform, "Arboleda_Norte_East_Sidewalk", new Vector3(107.75f, 0.12f, 97.5f), new Vector3(1.5f, 0.24f, 105f), sidewalkColor);
-            CreateBox(root.transform, "Arboleda_Norte_East_Curb", new Vector3(107.05f, 0.14f, 97.5f), new Vector3(0.12f, 0.28f, 105f), curbColor);
-            for (float z = 47.5f; z <= 148f; z += 2.5f)
+            CreateBox(root.transform, "Arboleda_Norte_West_Sidewalk", new Vector3(94.25f, 0.12f, 102.5f), new Vector3(1.5f, 0.24f, 115f), sidewalkColor);
+            CreateBox(root.transform, "Arboleda_Norte_West_Curb", new Vector3(94.95f, 0.14f, 102.5f), new Vector3(0.12f, 0.28f, 115f), curbColor);
+            CreateBox(root.transform, "Arboleda_Norte_East_Sidewalk", new Vector3(107.75f, 0.12f, 104f), new Vector3(1.5f, 0.24f, 118f), sidewalkColor);
+            CreateBox(root.transform, "Arboleda_Norte_East_Curb", new Vector3(107.05f, 0.14f, 104f), new Vector3(0.12f, 0.28f, 118f), curbColor);
+            for (float z = 47.5f; z <= 158f; z += 2.5f)
             {
                 CreateBox(root.transform, $"Arboleda_Norte_West_Joint_{z:F1}", new Vector3(94.25f, 0.245f, z), new Vector3(1.46f, 0.01f, 0.04f), jointDark, false);
+            }
+            for (float z = 47.5f; z <= 161f; z += 2.5f)
+            {
                 CreateBox(root.transform, $"Arboleda_Norte_East_Joint_{z:F1}", new Vector3(107.75f, 0.245f, z), new Vector3(1.46f, 0.01f, 0.04f), jointDark, false);
             }
 
@@ -6826,7 +6834,12 @@ namespace MyVirtualCommunity.Environment
             // 4. Calle Rosaleda (borde norte de la manzana): calle diagonal
             //    de (12.5, 125.9) a (100.4, 155.2), 92.7 m de largo, 10 m de
             //    ancho, rotacion Y -18.43 grados. Banquetas de 2 m a ambos
-            //    lados, guarniciones en el borde del asfalto.
+            //    lados, guarniciones en el borde del asfalto. Las banquetas
+            //    y guarniciones van SOLO entre Del Porvenir y Arboleda
+            //    (norte: X 18.5..95, sur: X 19.5..94.25); si llegaran hasta
+            //    los extremos del asfalto flotarian sobre el terreno vacio
+            //    mas alla de los cruces, porque Rosaleda es diagonal y las
+            //    calles laterales terminan antes que su borde norte.
             // ---------------------------------------------------------------
             float rosaledaAngleY = -18.43f;
             Vector3 rosaledaDir = new Vector3(0.949f, 0f, 0.316f);
@@ -6839,13 +6852,13 @@ namespace MyVirtualCommunity.Environment
                 GameObject dash = CreateBox(root.transform, $"Rosaleda_Yellow_{s}", new Vector3(dashPos.x, 0.03f, dashPos.z), new Vector3(0.15f, 0.04f, 2.5f), yellowCol);
                 dash.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
             }
-            GameObject rosaledaSouthWalk = CreateBox(root.transform, "Rosaleda_South_Sidewalk", new Vector3(58.3f, 0.13f, 134.9f), new Vector3(92.7f, 0.24f, 2f), sidewalkColor);
+            GameObject rosaledaSouthWalk = CreateBox(root.transform, "Rosaleda_South_Sidewalk", new Vector3(56.9f, 0.13f, 134.4f), new Vector3(78.8f, 0.24f, 2f), sidewalkColor);
             rosaledaSouthWalk.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
-            GameObject rosaledaNorthWalk = CreateBox(root.transform, "Rosaleda_North_Sidewalk", new Vector3(54.6f, 0.13f, 146.2f), new Vector3(92.7f, 0.24f, 2f), sidewalkColor);
+            GameObject rosaledaNorthWalk = CreateBox(root.transform, "Rosaleda_North_Sidewalk", new Vector3(56.75f, 0.13f, 146.9f), new Vector3(80.6f, 0.24f, 2f), sidewalkColor);
             rosaledaNorthWalk.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
-            GameObject rosaledaSouthCurb = CreateBox(root.transform, "Rosaleda_South_Curb", new Vector3(58.1f, 0.15f, 135.7f), new Vector3(92.7f, 0.28f, 0.12f), curbColor);
+            GameObject rosaledaSouthCurb = CreateBox(root.transform, "Rosaleda_South_Curb", new Vector3(56.9f, 0.15f, 135.3f), new Vector3(78.8f, 0.28f, 0.12f), curbColor);
             rosaledaSouthCurb.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
-            GameObject rosaledaNorthCurb = CreateBox(root.transform, "Rosaleda_North_Curb", new Vector3(54.8f, 0.15f, 145.4f), new Vector3(92.7f, 0.28f, 0.12f), curbColor);
+            GameObject rosaledaNorthCurb = CreateBox(root.transform, "Rosaleda_North_Curb", new Vector3(56.75f, 0.15f, 146.05f), new Vector3(80.6f, 0.28f, 0.12f), curbColor);
             rosaledaNorthCurb.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
 
             // ---------------------------------------------------------------
