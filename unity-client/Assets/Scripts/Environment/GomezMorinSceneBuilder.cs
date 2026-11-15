@@ -92,6 +92,7 @@ namespace MyVirtualCommunity.Environment
             CreateCatZooClinica();
             CreateAvenidaLaArboleda();
             CreateCorporativoArboleda();
+            CreateRinconesBlockTerrain();
             CreateOverheadPowerGrid();
             SetupLighting();
         }
@@ -120,14 +121,14 @@ namespace MyVirtualCommunity.Environment
             foundation.transform.SetParent(transform);
 
             // Immense sub-foundation floor covering the entire regional slice (matte low-reflectivity finish)
-            CreateBox(foundation.transform, "Bedrock_Floor", new Vector3(55f, -0.6f, 0f), new Vector3(240f, 1.0f, 100f), new Color(0.16f, 0.16f, 0.18f), true, 0.05f);
+            CreateBox(foundation.transform, "Bedrock_Floor", new Vector3(55f, -0.6f, 55f), new Vector3(240f, 1.0f, 210f), new Color(0.16f, 0.16f, 0.18f), true, 0.05f);
 
             // Perimeter safety barrier colliders along outer edges (strictly invisible physics colliders)
-            GameObject bw = CreateBox(foundation.transform, "Boundary_West", new Vector3(-60f, 2.0f, 0f), new Vector3(2f, 6.0f, 100f), Color.clear, true);
+            GameObject bw = CreateBox(foundation.transform, "Boundary_West", new Vector3(-60f, 2.0f, 55f), new Vector3(2f, 6.0f, 210f), Color.clear, true);
             var rw = bw.GetComponent<MeshRenderer>(); if (rw != null) Destroy(rw);
             var fw = bw.GetComponent<MeshFilter>(); if (fw != null) Destroy(fw);
 
-            GameObject be = CreateBox(foundation.transform, "Boundary_East", new Vector3(170f, 2.0f, 0f), new Vector3(2f, 6.0f, 100f), Color.clear, true);
+            GameObject be = CreateBox(foundation.transform, "Boundary_East", new Vector3(170f, 2.0f, 55f), new Vector3(2f, 6.0f, 210f), Color.clear, true);
             var re = be.GetComponent<MeshRenderer>(); if (re != null) Destroy(re);
             var fe = be.GetComponent<MeshFilter>(); if (fe != null) Destroy(fe);
 
@@ -135,7 +136,7 @@ namespace MyVirtualCommunity.Environment
             var rs = bs.GetComponent<MeshRenderer>(); if (rs != null) Destroy(rs);
             var fs = bs.GetComponent<MeshFilter>(); if (fs != null) Destroy(fs);
 
-            GameObject bn = CreateBox(foundation.transform, "Boundary_North", new Vector3(55f, 2.0f, 48f), new Vector3(240f, 6.0f, 2f), Color.clear, true);
+            GameObject bn = CreateBox(foundation.transform, "Boundary_North", new Vector3(55f, 2.0f, 162f), new Vector3(240f, 6.0f, 2f), Color.clear, true);
             var rn = bn.GetComponent<MeshRenderer>(); if (rn != null) Destroy(rn);
             var fn = bn.GetComponent<MeshFilter>(); if (fn != null) Destroy(fn);
         }
@@ -6740,6 +6741,155 @@ namespace MyVirtualCommunity.Environment
         // 12. Overhead Electrical Power Grid (Pastelería La Tía Lupe to Avenida La Arboleda East)
         // Surgically connects all 4 aligned corner utility poles along Blvd. Gómez Morín at Z = 1.4m
         // =========================================================================
+        // ====================================================================
+        // TERRENO COMPLETO DE LA MANZANA - RINCONES DE SANTA RITA
+        // Extiende el frente ya construido (Z 0..45) hacia el norte hasta
+        // Calle Rosaleda. Solo terreno, calles y banquetas: sin casas.
+        // Medidas reales de OpenStreetMap, convertidas al sistema de la
+        // escena (X = este, Z = norte, Z = 0 es la banqueta norte del
+        // bulevar; 1 unidad = 1 m). Anclaje verificado: eje de Del Porvenir
+        // X = 13.5, eje de Arboleda X = 101 (87.5 m en escena vs 87.7 m
+        // reales). La avenida es recta en la escena, pero en la realidad
+        // baja al sureste; por eso Rosaleda queda diagonal en la escena,
+        // de (12.5, 125.9) a (100.4, 155.2). La manzana mide 88 m de ancho
+        // x 140 m (oeste) a 169 m (este) de fondo; area 16,021 m2.
+        // Nota: Rosaleda va 1 cm mas alta que las calles laterales para
+        // evitar z-fighting en los cruces; el circuito interno alterna
+        // 4 mm por segmento por la misma razon.
+        // ====================================================================
+        private void CreateRinconesBlockTerrain()
+        {
+            GameObject root = new GameObject("Manzana_Rincones_Terreno");
+            root.transform.SetParent(transform);
+
+            Color asphaltCol = new Color(0.20f, 0.20f, 0.22f);
+            Color sidewalkColor = new Color(0.70f, 0.70f, 0.72f);
+            Color curbColor = new Color(0.58f, 0.58f, 0.60f);
+            Color jointDark = new Color(0.52f, 0.52f, 0.54f);
+            Color yellowCol = new Color(0.95f, 0.82f, 0.10f);
+            // Suelo del interior de la manzana (tierra compactada, base para las casas)
+            Color groundCol = new Color(0.60f, 0.55f, 0.45f);
+
+            // ---------------------------------------------------------------
+            // 1. Suelo del interior: 3 losas escalonadas siguiendo la
+            //    diagonal de Rosaleda (cada una entra bajo su asfalto).
+            //    Top en Y = -0.01, 1 cm bajo las calles.
+            // ---------------------------------------------------------------
+            // Losa A: X 18.5..95, Z 45..126
+            CreateBox(root.transform, "Terreno_Suelo_A", new Vector3(56.75f, -0.06f, 85.5f), new Vector3(76.5f, 0.1f, 81f), groundCol);
+            // Losa B: X 55..95, Z 126..141 (Rosaleda pasa por Z 140.1 en X = 55)
+            CreateBox(root.transform, "Terreno_Suelo_B", new Vector3(75f, -0.06f, 133.5f), new Vector3(40f, 0.1f, 15f), groundCol);
+            // Losa C: X 80..95, Z 141..154 (Rosaleda pasa por Z 148.4 en X = 80)
+            CreateBox(root.transform, "Terreno_Suelo_C", new Vector3(87.5f, -0.06f, 147.5f), new Vector3(15f, 0.1f, 13f), groundCol);
+
+            // ---------------------------------------------------------------
+            // 2. Calle Del Porvenir, prolongacion norte (X 8.5..18.5,
+            //    Z 45..126, hasta el eje de Rosaleda). Banquetas Z 40..126
+            //    para empalmar con las del frente, que terminan en Z = 40.
+            // ---------------------------------------------------------------
+            CreateBox(root.transform, "Porvenir_Norte_Asphalt", new Vector3(13.5f, -0.1f, 85.5f), new Vector3(10f, 0.2f, 81f), asphaltCol);
+            for (float z = 48f; z < 122f; z += 5f)
+            {
+                CreateBox(root.transform, $"Porvenir_Norte_Yellow_{z}", new Vector3(13.5f, 0.02f, z), new Vector3(0.15f, 0.04f, 2.5f), yellowCol);
+            }
+            CreateBox(root.transform, "Porvenir_Norte_West_Sidewalk", new Vector3(7.5f, 0.12f, 83f), new Vector3(2f, 0.24f, 86f), sidewalkColor);
+            CreateBox(root.transform, "Porvenir_Norte_West_Curb", new Vector3(8.55f, 0.12f, 83f), new Vector3(0.12f, 0.24f, 86f), curbColor);
+            CreateBox(root.transform, "Porvenir_Norte_East_Sidewalk", new Vector3(19.5f, 0.12f, 83f), new Vector3(2f, 0.24f, 86f), sidewalkColor);
+            CreateBox(root.transform, "Porvenir_Norte_East_Curb", new Vector3(18.45f, 0.14f, 83f), new Vector3(0.12f, 0.28f, 86f), curbColor);
+            for (float z = 42.5f; z <= 124f; z += 2.5f)
+            {
+                CreateBox(root.transform, $"Porvenir_Norte_West_Joint_{z:F1}", new Vector3(7.5f, 0.245f, z), new Vector3(1.96f, 0.01f, 0.04f), jointDark, false);
+                CreateBox(root.transform, $"Porvenir_Norte_East_Joint_{z:F1}", new Vector3(19.5f, 0.245f, z), new Vector3(1.96f, 0.01f, 0.04f), jointDark, false);
+            }
+
+            // ---------------------------------------------------------------
+            // 3. Av. La Arboleda, prolongacion norte (X 95..107,
+            //    Z 45..150, hasta el eje de Rosaleda). Banquetas de 1.5 m,
+            //    igual que en el frente.
+            // ---------------------------------------------------------------
+            CreateBox(root.transform, "Arboleda_Norte_Asphalt", new Vector3(101f, -0.1f, 97.5f), new Vector3(12f, 0.2f, 105f), asphaltCol);
+            for (float z = 48f; z < 147f; z += 5f)
+            {
+                CreateBox(root.transform, $"Arboleda_Norte_Yellow_{z}", new Vector3(101f, 0.02f, z), new Vector3(0.15f, 0.04f, 2.5f), yellowCol);
+            }
+            CreateBox(root.transform, "Arboleda_Norte_West_Sidewalk", new Vector3(94.25f, 0.12f, 97.5f), new Vector3(1.5f, 0.24f, 105f), sidewalkColor);
+            CreateBox(root.transform, "Arboleda_Norte_West_Curb", new Vector3(94.95f, 0.14f, 97.5f), new Vector3(0.12f, 0.28f, 105f), curbColor);
+            CreateBox(root.transform, "Arboleda_Norte_East_Sidewalk", new Vector3(107.75f, 0.12f, 97.5f), new Vector3(1.5f, 0.24f, 105f), sidewalkColor);
+            CreateBox(root.transform, "Arboleda_Norte_East_Curb", new Vector3(107.05f, 0.14f, 97.5f), new Vector3(0.12f, 0.28f, 105f), curbColor);
+            for (float z = 47.5f; z <= 148f; z += 2.5f)
+            {
+                CreateBox(root.transform, $"Arboleda_Norte_West_Joint_{z:F1}", new Vector3(94.25f, 0.245f, z), new Vector3(1.46f, 0.01f, 0.04f), jointDark, false);
+                CreateBox(root.transform, $"Arboleda_Norte_East_Joint_{z:F1}", new Vector3(107.75f, 0.245f, z), new Vector3(1.46f, 0.01f, 0.04f), jointDark, false);
+            }
+
+            // ---------------------------------------------------------------
+            // 4. Calle Rosaleda (borde norte de la manzana): calle diagonal
+            //    de (12.5, 125.9) a (100.4, 155.2), 92.7 m de largo, 10 m de
+            //    ancho, rotacion Y -18.43 grados. Banquetas de 2 m a ambos
+            //    lados, guarniciones en el borde del asfalto.
+            // ---------------------------------------------------------------
+            float rosaledaAngleY = -18.43f;
+            Vector3 rosaledaDir = new Vector3(0.949f, 0f, 0.316f);
+            Vector3 rosaledaStart = new Vector3(12.5f, 0f, 125.9f);
+            GameObject rosaleda = CreateBox(root.transform, "Rosaleda_Asphalt", new Vector3(56.5f, -0.09f, 140.55f), new Vector3(92.7f, 0.2f, 10f), asphaltCol);
+            rosaleda.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
+            for (float s = 6f; s < 87f; s += 5f)
+            {
+                Vector3 dashPos = rosaledaStart + rosaledaDir * s;
+                GameObject dash = CreateBox(root.transform, $"Rosaleda_Yellow_{s}", new Vector3(dashPos.x, 0.03f, dashPos.z), new Vector3(0.15f, 0.04f, 2.5f), yellowCol);
+                dash.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
+            }
+            GameObject rosaledaSouthWalk = CreateBox(root.transform, "Rosaleda_South_Sidewalk", new Vector3(58.3f, 0.13f, 134.9f), new Vector3(92.7f, 0.24f, 2f), sidewalkColor);
+            rosaledaSouthWalk.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
+            GameObject rosaledaNorthWalk = CreateBox(root.transform, "Rosaleda_North_Sidewalk", new Vector3(54.6f, 0.13f, 146.2f), new Vector3(92.7f, 0.24f, 2f), sidewalkColor);
+            rosaledaNorthWalk.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
+            GameObject rosaledaSouthCurb = CreateBox(root.transform, "Rosaleda_South_Curb", new Vector3(58.1f, 0.15f, 135.7f), new Vector3(92.7f, 0.28f, 0.12f), curbColor);
+            rosaledaSouthCurb.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
+            GameObject rosaledaNorthCurb = CreateBox(root.transform, "Rosaleda_North_Curb", new Vector3(54.8f, 0.15f, 145.4f), new Vector3(92.7f, 0.28f, 0.12f), curbColor);
+            rosaledaNorthCurb.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
+
+            // ---------------------------------------------------------------
+            // 5. Circuito interno (calle de servicio de la privada, segun
+            //    OSM): anillo de 5 m de ancho, 14 vertices simplificados.
+            //    Entra por Gomez Morin, sube por el oeste, cruza al norte
+            //    y baja por el este. Sin banquetas (OSM no trae).
+            //    NOTA: el tramo oeste pasa bajo la tienda Dollar 2 Go del
+            //    frente (X 36..54, Z 8..22); al hacer los edificios habra
+            //    que revisar si la tienda va ~10 m al oeste o el circuito
+            //    es la entrada del estacionamiento.
+            // ---------------------------------------------------------------
+            Vector2[] loopPts = new Vector2[]
+            {
+                new Vector2(57.7f, 0.4f),
+                new Vector2(55.4f, 2.8f),
+                new Vector2(47.9f, 11.7f),
+                new Vector2(44.9f, 17.0f),
+                new Vector2(43.2f, 23.1f),
+                new Vector2(42.3f, 33.0f),
+                new Vector2(42.7f, 54.5f),
+                new Vector2(42.7f, 78.7f),
+                new Vector2(43.6f, 88.4f),
+                new Vector2(48.4f, 96.1f),
+                new Vector2(72.5f, 104.1f),
+                new Vector2(75.4f, 98.6f),
+                new Vector2(73.5f, 30.8f),
+                new Vector2(70.4f, 18.5f)
+            };
+            for (int i = 0; i < loopPts.Length; i++)
+            {
+                Vector2 a = loopPts[i];
+                Vector2 b = loopPts[(i + 1) % loopPts.Length];
+                float dx = b.x - a.x;
+                float dz = b.y - a.y;
+                float segLen = Mathf.Sqrt(dx * dx + dz * dz);
+                float angleY = Mathf.Atan2(-dz, dx) * Mathf.Rad2Deg;
+                // Y alterna 4 mm por segmento para que dos tramos vecinos
+                // no queden coplanares (evita z-fighting en las juntas).
+                GameObject seg = CreateBox(root.transform, $"Circuito_Segmento_{i}", new Vector3((a.x + b.x) / 2f, -0.1f + (i % 2) * 0.004f, (a.y + b.y) / 2f), new Vector3(segLen + 0.5f, 0.2f, 5f), asphaltCol);
+                seg.transform.localEulerAngles = new Vector3(0f, angleY, 0f);
+            }
+        }
+
         private void CreateOverheadPowerGrid()
         {
             GameObject grid = new GameObject("Overhead_Power_Grid");
