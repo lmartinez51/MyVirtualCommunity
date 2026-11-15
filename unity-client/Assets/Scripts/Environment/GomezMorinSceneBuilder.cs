@@ -349,11 +349,8 @@ namespace MyVirtualCommunity.Environment
             float roadLength = 45f;
             CreateBox(root.transform, "Porvenir_Asphalt", new Vector3(13.5f, -0.1f, 22.5f), new Vector3(roadWidth, 0.2f, roadLength), new Color(0.20f, 0.20f, 0.22f));
 
-            // Yellow Center Divider Line (starts at Z = 8.0m to maintain clean clearance from pedestrian crosswalk at Z in [0.5, 3.1])
-            for (float z = 8f; z < 42f; z += 5f)
-            {
-                CreateBox(root.transform, $"Porvenir_Yellow_{z}", new Vector3(13.5f, 0.02f, z), new Vector3(0.15f, 0.04f, 2.5f), new Color(0.95f, 0.82f, 0.10f));
-            }
+            // Sin linea divisoria central: las calles del fraccionamiento
+            // no llevan raya amarilla al centro (asi es en la realidad).
 
             // West Sidewalk (flanking Pastelería La Tía Lupe, Attached Residence & Two-Story Residence, X: 6.5 to 8.5, Z: 4.8 to 40.0)
             Color sidewalkColor = new Color(0.70f, 0.70f, 0.72f);
@@ -2763,11 +2760,8 @@ namespace MyVirtualCommunity.Environment
             float roadLen = 45f;
             CreateBox(root.transform, "Arboleda_Asphalt", new Vector3(101.0f, -0.1f, 22.5f), new Vector3(roadW, 0.2f, roadLen), new Color(0.20f, 0.20f, 0.22f));
 
-            // Yellow Center Divider Line (starts at Z = 8.0m to maintain clean clearance from pedestrian crosswalk at Z in [0.5, 3.1])
-            for (float z = 8f; z < 42f; z += 5f)
-            {
-                CreateBox(root.transform, $"Arboleda_Yellow_{z}", new Vector3(101.0f, 0.02f, z), new Vector3(0.15f, 0.04f, 2.5f), new Color(0.95f, 0.82f, 0.10f));
-            }
+            // Sin linea divisoria central: las calles del fraccionamiento
+            // no llevan raya amarilla al centro (asi es en la realidad).
 
             // Sidewalks starting north of corner plateaus (Z: 4.8m to 45m)
             float arboledaSidewalkLen = roadLen - 4.8f; // 40.2m
@@ -6754,8 +6748,10 @@ namespace MyVirtualCommunity.Environment
         // de (12.5, 125.9) a (100.4, 155.2). La manzana mide 88 m de ancho
         // x 140 m (oeste) a 169 m (este) de fondo; area 16,021 m2.
         // Nota: Rosaleda va 1 cm mas alta que las calles laterales para
-        // evitar z-fighting en los cruces; el circuito interno alterna
-        // 4 mm por segmento por la misma razon.
+        // evitar z-fighting en los cruces. Las calles del fraccionamiento
+        // no llevan linea divisoria central (sin rayas amarillas). El
+        // circuito interno de OSM ya no existe en la realidad, asi que no
+        // se construye: el interior queda como terreno baldio (tierra).
         // ====================================================================
         private void CreateRinconesBlockTerrain()
         {
@@ -6766,7 +6762,6 @@ namespace MyVirtualCommunity.Environment
             Color sidewalkColor = new Color(0.70f, 0.70f, 0.72f);
             Color curbColor = new Color(0.58f, 0.58f, 0.60f);
             Color jointDark = new Color(0.52f, 0.52f, 0.54f);
-            Color yellowCol = new Color(0.95f, 0.82f, 0.10f);
             // Suelo del interior de la manzana (tierra compactada, base para las casas)
             Color groundCol = new Color(0.60f, 0.55f, 0.45f);
 
@@ -6789,10 +6784,7 @@ namespace MyVirtualCommunity.Environment
             //    Z 40..135 (este, hasta la banqueta norte de Rosaleda).
             // ---------------------------------------------------------------
             CreateBox(root.transform, "Porvenir_Norte_Asphalt", new Vector3(13.5f, -0.1f, 88.5f), new Vector3(10f, 0.2f, 87f), asphaltCol);
-            for (float z = 48f; z < 128f; z += 5f)
-            {
-                CreateBox(root.transform, $"Porvenir_Norte_Yellow_{z}", new Vector3(13.5f, 0.02f, z), new Vector3(0.15f, 0.04f, 2.5f), yellowCol);
-            }
+            // Sin linea divisoria central (las calles del fraccionamiento no llevan).
             CreateBox(root.transform, "Porvenir_Norte_West_Sidewalk", new Vector3(7.5f, 0.12f, 85f), new Vector3(2f, 0.24f, 90f), sidewalkColor);
             CreateBox(root.transform, "Porvenir_Norte_West_Curb", new Vector3(8.55f, 0.12f, 85f), new Vector3(0.12f, 0.24f, 90f), curbColor);
             CreateBox(root.transform, "Porvenir_Norte_East_Sidewalk", new Vector3(19.5f, 0.12f, 87.5f), new Vector3(2f, 0.24f, 95f), sidewalkColor);
@@ -6813,10 +6805,7 @@ namespace MyVirtualCommunity.Environment
             //    en el frente (oeste hasta Z = 160, este hasta Z = 163).
             // ---------------------------------------------------------------
             CreateBox(root.transform, "Arboleda_Norte_Asphalt", new Vector3(101f, -0.1f, 103f), new Vector3(12f, 0.2f, 116f), asphaltCol);
-            for (float z = 48f; z < 158f; z += 5f)
-            {
-                CreateBox(root.transform, $"Arboleda_Norte_Yellow_{z}", new Vector3(101f, 0.02f, z), new Vector3(0.15f, 0.04f, 2.5f), yellowCol);
-            }
+            // Sin linea divisoria central (las calles del fraccionamiento no llevan).
             CreateBox(root.transform, "Arboleda_Norte_West_Sidewalk", new Vector3(94.25f, 0.12f, 102.5f), new Vector3(1.5f, 0.24f, 115f), sidewalkColor);
             CreateBox(root.transform, "Arboleda_Norte_West_Curb", new Vector3(94.95f, 0.14f, 102.5f), new Vector3(0.12f, 0.28f, 115f), curbColor);
             CreateBox(root.transform, "Arboleda_Norte_East_Sidewalk", new Vector3(107.75f, 0.12f, 104f), new Vector3(1.5f, 0.24f, 118f), sidewalkColor);
@@ -6842,16 +6831,9 @@ namespace MyVirtualCommunity.Environment
             //    calles laterales terminan antes que su borde norte.
             // ---------------------------------------------------------------
             float rosaledaAngleY = -18.43f;
-            Vector3 rosaledaDir = new Vector3(0.949f, 0f, 0.316f);
-            Vector3 rosaledaStart = new Vector3(12.5f, 0f, 125.9f);
             GameObject rosaleda = CreateBox(root.transform, "Rosaleda_Asphalt", new Vector3(56.5f, -0.09f, 140.55f), new Vector3(92.7f, 0.2f, 10f), asphaltCol);
             rosaleda.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
-            for (float s = 6f; s < 87f; s += 5f)
-            {
-                Vector3 dashPos = rosaledaStart + rosaledaDir * s;
-                GameObject dash = CreateBox(root.transform, $"Rosaleda_Yellow_{s}", new Vector3(dashPos.x, 0.03f, dashPos.z), new Vector3(0.15f, 0.04f, 2.5f), yellowCol);
-                dash.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
-            }
+            // Sin linea divisoria central (las calles del fraccionamiento no llevan).
             GameObject rosaledaSouthWalk = CreateBox(root.transform, "Rosaleda_South_Sidewalk", new Vector3(56.9f, 0.13f, 134.4f), new Vector3(78.8f, 0.24f, 2f), sidewalkColor);
             rosaledaSouthWalk.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
             GameObject rosaledaNorthWalk = CreateBox(root.transform, "Rosaleda_North_Sidewalk", new Vector3(56.75f, 0.13f, 146.9f), new Vector3(80.6f, 0.24f, 2f), sidewalkColor);
@@ -6861,46 +6843,6 @@ namespace MyVirtualCommunity.Environment
             GameObject rosaledaNorthCurb = CreateBox(root.transform, "Rosaleda_North_Curb", new Vector3(56.75f, 0.15f, 146.05f), new Vector3(80.6f, 0.28f, 0.12f), curbColor);
             rosaledaNorthCurb.transform.localEulerAngles = new Vector3(0f, rosaledaAngleY, 0f);
 
-            // ---------------------------------------------------------------
-            // 5. Circuito interno (calle de servicio de la privada, segun
-            //    OSM): anillo de 5 m de ancho, 14 vertices simplificados.
-            //    Entra por Gomez Morin, sube por el oeste, cruza al norte
-            //    y baja por el este. Sin banquetas (OSM no trae).
-            //    NOTA: el tramo oeste pasa bajo la tienda Dollar 2 Go del
-            //    frente (X 36..54, Z 8..22); al hacer los edificios habra
-            //    que revisar si la tienda va ~10 m al oeste o el circuito
-            //    es la entrada del estacionamiento.
-            // ---------------------------------------------------------------
-            Vector2[] loopPts = new Vector2[]
-            {
-                new Vector2(57.7f, 0.4f),
-                new Vector2(55.4f, 2.8f),
-                new Vector2(47.9f, 11.7f),
-                new Vector2(44.9f, 17.0f),
-                new Vector2(43.2f, 23.1f),
-                new Vector2(42.3f, 33.0f),
-                new Vector2(42.7f, 54.5f),
-                new Vector2(42.7f, 78.7f),
-                new Vector2(43.6f, 88.4f),
-                new Vector2(48.4f, 96.1f),
-                new Vector2(72.5f, 104.1f),
-                new Vector2(75.4f, 98.6f),
-                new Vector2(73.5f, 30.8f),
-                new Vector2(70.4f, 18.5f)
-            };
-            for (int i = 0; i < loopPts.Length; i++)
-            {
-                Vector2 a = loopPts[i];
-                Vector2 b = loopPts[(i + 1) % loopPts.Length];
-                float dx = b.x - a.x;
-                float dz = b.y - a.y;
-                float segLen = Mathf.Sqrt(dx * dx + dz * dz);
-                float angleY = Mathf.Atan2(-dz, dx) * Mathf.Rad2Deg;
-                // Y alterna 4 mm por segmento para que dos tramos vecinos
-                // no queden coplanares (evita z-fighting en las juntas).
-                GameObject seg = CreateBox(root.transform, $"Circuito_Segmento_{i}", new Vector3((a.x + b.x) / 2f, -0.1f + (i % 2) * 0.004f, (a.y + b.y) / 2f), new Vector3(segLen + 0.5f, 0.2f, 5f), asphaltCol);
-                seg.transform.localEulerAngles = new Vector3(0f, angleY, 0f);
-            }
         }
 
         private void CreateOverheadPowerGrid()
