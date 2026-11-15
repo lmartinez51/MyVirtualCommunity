@@ -210,8 +210,8 @@ describe('Milestone 63: Simulation Routine Execution Integration', () => {
       assert.ok(restTrans);
 
       // World state schema version remains strictly 18
-      assert.equal(CURRENT_WORLD_STATE_VERSION, 18);
-      assert.equal(state.version, 18);
+      assert.equal(CURRENT_WORLD_STATE_VERSION, 19);
+      assert.equal(state.version, 19);
       assert.doesNotThrow(() => validateWorldState(state));
     });
   });

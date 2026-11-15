@@ -1,0 +1,2628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Milestone 80: Real-World Spatial Slice — Blvd. Manuel Gómez Morín</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 16px 24px;
+      background: #10131a;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #2d3748;
+    }
+    h1 {
+      margin: 0;
+      color: #38bdf8;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      background: #0284c7;
+      color: #e0f2fe;
+      margin-left: 8px;
+    }
+    .badge-realworld {
+      background: #059669;
+      color: #d1fae5;
+    }
+    .subtitle {
+      color: #94a3b8;
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    #viewport-container {
+      position: relative;
+      width: 100%;
+      max-width: 1120px;
+      height: 540px;
+      margin: 0 auto 14px auto;
+      background: #090d16;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    /* Floating 3D Tag Overlays */
+    #overlay-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .world-tag {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      padding: 3px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+    }
+    .tag-gomez {
+      background: rgba(30, 41, 59, 0.9);
+      color: #f8fafc;
+      border: 1px solid #64748b;
+    }
+    .tag-porvenir {
+      background: rgba(30, 58, 138, 0.85);
+      color: #dbeafe;
+      border: 1px solid #3b82f6;
+    }
+    .tag-tialupe {
+      background: rgba(180, 83, 9, 0.9);
+      color: #fef3c7;
+      border: 1px solid #d97706;
+    }
+    .tag-wingspot {
+      background: rgba(194, 65, 12, 0.9);
+      color: #ffedd5;
+      border: 1px solid #ea580c;
+    }
+    .tag-residence {
+      background: rgba(146, 64, 14, 0.9);
+      color: #fef3c7;
+      border: 1px solid #b45309;
+    }
+    .tag-dollar2go {
+      background: rgba(22, 101, 52, 0.9);
+      color: #dcfce7;
+      border: 1px solid #16a34a;
+    }
+    .tag-hbc {
+      background: rgba(3, 105, 161, 0.9);
+      color: #e0f2fe;
+      border: 1px solid #0284c7;
+    }
+    .tag-catzoo {
+      background: rgba(13, 148, 136, 0.9);
+      color: #ccfbf1;
+      border: 1px solid #14b8a6;
+    }
+    .tag-arboleda-corp {
+      background: rgba(71, 85, 105, 0.9);
+      color: #f1f5f9;
+      border: 1px solid #94a3b8;
+    }
+    .tag-player {
+      background: rgba(2, 132, 199, 0.95);
+      color: #f0f9ff;
+      border: 1px solid #38bdf8;
+    }
+    .tag-npc {
+      background: rgba(217, 119, 6, 0.95);
+      color: #fef3c7;
+      border: 1px solid #f59e0b;
+    }
+    /* Proximity Interaction Prompt */
+    #interaction-prompt {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.94);
+      border: 2px solid #38bdf8;
+      border-radius: 8px;
+      padding: 10px 18px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 16px rgba(56, 189, 248, 0.35);
+      cursor: pointer;
+      pointer-events: auto;
+      z-index: 20;
+    }
+    #interaction-prompt.visible {
+      display: flex;
+    }
+    .key-badge {
+      background: #0284c7;
+      color: #fff;
+      font-weight: 800;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .prompt-text {
+      color: #f8fafc;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    /* Surface Warning Overlay */
+    #surface-warning {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(185, 28, 28, 0.88);
+      border: 1px solid #ef4444;
+      border-radius: 4px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      display: none;
+      z-index: 10;
+    }
+    #surface-warning.visible {
+      display: block;
+    }
+    /* Camera View Indicator */
+    #camera-indicator {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+    /* HUD Grid */
+    #hud {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      max-width: 1120px;
+      margin: 0 auto 14px auto;
+    }
+    .hud-card {
+      background: #1a202c;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .hud-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+    .hud-val {
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: #f8fafc;
+      font-weight: 700;
+    }
+    .hud-val.highlight {
+      color: #4ade80;
+    }
+    .hud-val.active {
+      color: #facc15;
+    }
+    .hud-val.arrived {
+      color: #38bdf8;
+    }
+    .hud-val.blocked {
+      color: #f87171;
+    }
+    /* Controls Section */
+    #control-panels {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 12px;
+      max-width: 1120px;
+      margin: 0 auto 14px auto;
+    }
+    .panel {
+      background: #18202f;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      padding: 12px;
+    }
+    .panel-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    button {
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      color: #f7fafc;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+    button:hover {
+      background: #3b4556;
+      border-color: #718096;
+    }
+    button:active {
+      transform: translateY(1px);
+    }
+    button.primary {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #fff;
+    }
+    button.primary:hover {
+      background: #0369a1;
+    }
+    button.step {
+      border-color: #eab308;
+      color: #fef08a;
+    }
+    button.commit {
+      border-color: #22c55e;
+      color: #86efac;
+    }
+    button.active-mode {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #fff;
+    }
+    /* D-Pad Layout */
+    .dpad-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .dpad-row {
+      display: flex;
+      gap: 4px;
+    }
+    .dpad-btn {
+      width: 44px;
+      height: 34px;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    #invariants-footer {
+      max-width: 1120px;
+      margin: 0 auto;
+      font-size: 11px;
+      color: #94a3b8;
+      background: #18202f;
+      padding: 10px 14px;
+      border-radius: 6px;
+      border: 1px solid #2d3748;
+      line-height: 1.6;
+    }
+    #invariants-footer b {
+      color: #e2e8f0;
+    }
+    .check-mark {
+      color: #4ade80;
+      margin-right: 4px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Milestone 89: Authoritative 3D Vertical Slice <span class="badge badge-realworld">Wing Spot Ingress & Egress</span></h1>
+      <div class="subtitle">Ciudad Juárez, Chihuahua: Blvd. Manuel Gómez Morín, Calle Del Porvenir, Av. La Arboleda, Pastelerías La Tía Lupe (Authoritative Interior), Wing Spot (Authoritative Interior), Residencia Del Porvenir, Lote Dollar 2 Go, Acabados HBC, CatZoo, Corporativo Arboleda.</div>
+    </div>
+    <div id="clock-display" style="text-align: right; font-family: monospace; font-size: 13px; color: #38bdf8; font-weight: bold;">
+      08:35 AM MDT (Commute Window)
+    </div>
+  </header>
+
+  <div id="viewport-container">
+    <canvas id="gl-canvas" width="1120" height="540"></canvas>
+    
+    <div id="surface-warning">NON-WALKABLE SURFACE: Use designated sidewalk or crosswalk</div>
+
+    <div id="overlay-layer">
+      <!-- 3D Projected Floating Labels -->
+      <div id="label-gomez" class="world-tag tag-gomez">BLVD. MANUEL GÓMEZ MORÍN</div>
+      <div id="label-porvenir" class="world-tag tag-porvenir">CALLE DEL PORVENIR</div>
+      <div id="label-tialupe" class="world-tag tag-tialupe">PASTELERÍAS LA TÍA LUPE</div>
+      <div id="label-wingspot" class="world-tag tag-wingspot">WING SPOT GÓMEZ MORÍN</div>
+      <div id="label-residence" class="world-tag tag-residence">RESIDENCIA DEL PORVENIR</div>
+      <div id="label-dollar2go" class="world-tag tag-dollar2go">DOLLAR 2 GO (LOTE & TIENDA)</div>
+      <div id="label-hbc" class="world-tag tag-hbc">ACABADOS HBC</div>
+      <div id="label-catzoo" class="world-tag tag-catzoo">CATZOO CLÍNICA FELINA</div>
+      <div id="label-arboleda" class="world-tag tag-arboleda-corp">CORPORATIVO ARBOLEDA</div>
+      <div id="label-player" class="world-tag tag-player">YOU (Player)</div>
+      <div id="label-npc" class="world-tag tag-npc">ELENA (Dev NPC)</div>
+    </div>
+
+    <div id="camera-indicator">Camera: Corridor Overview</div>
+
+    <div id="interaction-prompt">
+      <span class="key-badge">E</span>
+      <span id="prompt-action-text" class="prompt-text">Enter Building</span>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div class="hud-card">
+      <div class="hud-title">Player Location (World Core)</div>
+      <div id="val-player-loc" class="hud-val highlight">street:blvd-gomez-morin</div>
+    </div>
+    <div class="hud-card">
+      <div class="hud-title">Player 3D Position & Surface</div>
+      <div id="val-player-coords" class="hud-val">x: -24.00, z: -11.00 [SIDEWALK]</div>
+    </div>
+    <div class="hud-card">
+      <div class="hud-title">Elena Authoritative Location</div>
+      <div id="val-elena-loc" class="hud-val highlight">building:del-porvenir-residence</div>
+    </div>
+    <div class="hud-card">
+      <div class="hud-title">Elena Commute Status (M80 NavGraph)</div>
+      <div id="val-elena-status" class="hud-val">IDLE (At Residence Stoop)</div>
+    </div>
+    <div class="hud-card">
+      <div class="hud-title">Corridor Spatial Topology</div>
+      <div id="val-venue-status" class="hud-val">94 3D Nodes | 7 Buildings</div>
+    </div>
+  </div>
+
+  <div id="control-panels">
+    <!-- Panel 1: Player Movement & Spawns -->
+    <div class="panel">
+      <div class="panel-title">1. Pedestrian Walking & Spawns (WASD / Arrows)</div>
+      <div style="display: flex; gap: 14px; align-items: center;">
+        <div class="dpad-container">
+          <button id="btn-walk-n" class="dpad-btn" title="Walk North (W / Up)">▲</button>
+          <div class="dpad-row">
+            <button id="btn-walk-w" class="dpad-btn" title="Walk West (A / Left)">◄</button>
+            <button id="btn-walk-s" class="dpad-btn" title="Walk South (S / Down)">▼</button>
+            <button id="btn-walk-e" class="dpad-btn" title="Walk East (D / Right)">►</button>
+          </div>
+        </div>
+        <div style="flex: 1;">
+          <div class="btn-row">
+            <button id="btn-spawn-sidewalk">Gómez Morín Sidewalk</button>
+            <button id="btn-spawn-residence">Del Porvenir Stoop</button>
+            <button id="btn-spawn-dollar2go">Dollar 2 Go Lot</button>
+            <button id="btn-spawn-crosswalk">Del Porvenir Crosswalk</button>
+            <button id="btn-spawn-tialupe-interior" style="border-color: #ec4899; color: #fbcfe8;">Tía Lupe Interior</button>
+            <button id="btn-spawn-wingspot-interior" style="border-color: #f59e0b; color: #fde68a;">Wing Spot Interior</button>
+          </div>
+          <div class="btn-row">
+            <button id="btn-interact-action" class="primary" style="width: 100%;">[E] Trigger Authoritative Entrance Command</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel 2: Elena Multi-Waypoint Autonomous Commute -->
+    <div class="panel">
+      <div class="panel-title">2. Elena Sidewalk Commute (M80 NavGraph)</div>
+      <div class="btn-row">
+        <button id="btn-run-autonomous-loop" class="primary" style="width: 100%;">▶ Run Multi-Waypoint Commute</button>
+      </div>
+      <div class="btn-row">
+        <button id="btn-step-500" class="step">+500ms</button>
+        <button id="btn-step-arrival" class="step">Step to Arrival</button>
+        <button id="btn-commit-arrival" class="commit">Commit M69</button>
+      </div>
+    </div>
+
+    <!-- Panel 3: Camera & Time Controls -->
+    <div class="panel">
+      <div class="panel-title">3. Camera & World Time</div>
+      <div class="btn-row">
+        <button id="cam-overview" class="active-mode">Corridor Overview</button>
+        <button id="cam-follow-player">Follow Player</button>
+        <button id="cam-follow-elena">Follow Elena</button>
+        <button id="cam-tialupe-interior">Tía Lupe Interior</button>
+        <button id="cam-wingspot-interior">Wing Spot Interior</button>
+      </div>
+      <div class="btn-row">
+        <button id="cam-street-level">Street Eye</button>
+        <button id="cam-tialupe-corner">Corner Tía Lupe</button>
+      </div>
+      <div class="btn-row" style="margin-top: 6px;">
+        <button id="btn-time-1m">+1 Min</button>
+        <button id="btn-time-10m">+10 Min</button>
+        <button id="btn-time-1h">+1 Hour</button>
+        <button id="btn-reset-blockout" style="border-color: #ef4444; color: #fca5a5;">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="invariants-footer">
+    <b>Milestone 83 Real-World Topology & Architectural Invariants:</b>
+    <br>
+    <span class="check-mark">✓</span> <b>Second Real Building Interior:</b> Pastelerías La Tía Lupe models an authoritative interior space (<code>interior:tia-lupe</code>) with physical boundary enforcement ($X \in [-35.5, -26.5]$, $Z \in [-23.5, -13.0]$) inside building footprint <code>building:tia-lupe-building</code> alongside Wing Spot (<code>interior:wing-spot</code>).
+    <br>
+    <span class="check-mark">✓</span> <b>Generic Egress / Ingress Thresholds:</b> Entering and exiting occur strictly through primary entrance thresholds (<code>entrance:tia-lupe-main</code> and <code>entrance:wing-spot-main</code>) with zero venue-specific World Core logic.
+    <br>
+    <span class="check-mark">✓</span> <b>Contextual Bidirectional Resolution:</b> Proximity action dynamically resolves <code>[E] Enter Pastelerías La Tía Lupe</code> / <code>[E] Enter Wing Spot</code> when outside on Gómez Morín sidewalk and <code>[E] Exit Pastelerías La Tía Lupe</code> / <code>[E] Exit Wing Spot</code> when inside near doorways.
+    <br>
+    <span class="check-mark">✓</span> <b>Zero World Core Coordinate Leakage:</b> World Core state remains strictly logical schema v18. WebGL presentation layer remains an interchangeable consumer.
+  </div>
+
+  <script type="module">
+    // =========================================================================
+    // 1. Matrix Math Utilities (Column-Major 4x4)
+    // =========================================================================
+    function mat4Create() {
+      const out = new Float32Array(16);
+      out[0] = 1; out[5] = 1; out[10] = 1; out[15] = 1;
+      return out;
+    }
+
+    function mat4Perspective(out, fovyRad, aspect, near, far) {
+      const f = 1.0 / Math.tan(fovyRad / 2);
+      const nf = 1 / (near - far);
+      out[0] = f / aspect; out[1] = 0; out[2] = 0; out[3] = 0;
+      out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0;
+      out[8] = 0; out[9] = 0; out[10] = (far + near) * nf; out[11] = -1;
+      out[12] = 0; out[13] = 0; out[14] = (2 * far * near) * nf; out[15] = 0;
+      return out;
+    }
+
+    function mat4LookAt(out, eye, center, up) {
+      const eyex = eye[0], eyey = eye[1], eyez = eye[2];
+      const upx = up[0], upy = up[1], upz = up[2];
+      const centerx = center[0], centery = center[1], centerz = center[2];
+
+      let z0 = eyex - centerx, z1 = eyey - centery, z2 = eyez - centerz;
+      let len = 1 / Math.hypot(z0, z1, z2);
+      z0 *= len; z1 *= len; z2 *= len;
+
+      let x0 = upy * z2 - upz * z1, x1 = upz * z0 - upx * z2, x2 = upx * z1 - upy * z0;
+      len = Math.hypot(x0, x1, x2);
+      if (!len) {
+        x0 = 0; x1 = 0; x2 = 0;
+      } else {
+        len = 1 / len;
+        x0 *= len; x1 *= len; x2 *= len;
+      }
+
+      let y0 = z1 * x2 - z2 * x1, y1 = z2 * x0 - z0 * x2, y2 = z0 * x1 - z1 * x0;
+      len = Math.hypot(y0, y1, y2);
+      if (!len) {
+        y0 = 0; y1 = 0; y2 = 0;
+      } else {
+        len = 1 / len;
+        y0 *= len; y1 *= len; y2 *= len;
+      }
+
+      out[0] = x0; out[1] = y0; out[2] = z0; out[3] = 0;
+      out[4] = x1; out[5] = y1; out[6] = z1; out[7] = 0;
+      out[8] = x2; out[9] = y2; out[10] = z2; out[11] = 0;
+      out[12] = -(x0 * eyex + x1 * eyey + x2 * eyez);
+      out[13] = -(y0 * eyex + y1 * eyey + y2 * eyez);
+      out[14] = -(z0 * eyex + z1 * eyey + z2 * eyez);
+      out[15] = 1;
+      return out;
+    }
+
+    function mat4Multiply(out, a, b) {
+      const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
+      const a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
+      const a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
+      const a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+
+      let b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3];
+      out[0] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+      out[1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+      out[2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+      out[3] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+      b0 = b[4]; b1 = b[5]; b2 = b[6]; b3 = b[7];
+      out[4] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+      out[5] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+      out[6] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+      out[7] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+      b0 = b[8]; b1 = b[9]; b2 = b[10]; b3 = b[11];
+      out[8] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+      out[9] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+      out[10] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+      out[11] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+      b0 = b[12]; b1 = b[13]; b2 = b[14]; b3 = b[15];
+      out[12] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+      out[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+      out[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+      out[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+      return out;
+    }
+
+    // Projects 3D World Position to 2D Screen Canvas Coordinates
+    function projectToScreen(worldPos, viewProjMatrix, width, height) {
+      const x = worldPos.x, y = worldPos.y, z = worldPos.z;
+      const clipW = viewProjMatrix[3] * x + viewProjMatrix[7] * y + viewProjMatrix[11] * z + viewProjMatrix[15];
+      if (clipW <= 0.05) return null; // Behind camera
+
+      const clipX = viewProjMatrix[0] * x + viewProjMatrix[4] * y + viewProjMatrix[8] * z + viewProjMatrix[12];
+      const clipY = viewProjMatrix[1] * x + viewProjMatrix[5] * y + viewProjMatrix[9] * z + viewProjMatrix[13];
+
+      const ndcX = clipX / clipW;
+      const ndcY = clipY / clipW;
+
+      return {
+        x: (ndcX * 0.5 + 0.5) * width,
+        y: (-ndcY * 0.5 + 0.5) * height,
+        w: clipW,
+      };
+    }
+
+    // =========================================================================
+    // 2. Mesh Buffer Creators
+    // =========================================================================
+    function createBoxVertices() {
+      return new Float32Array([
+        // Front
+        -0.5, -0.5,  0.5,  0, 0, 1,   0.5, -0.5,  0.5,  0, 0, 1,   0.5,  0.5,  0.5,  0, 0, 1,
+        -0.5, -0.5,  0.5,  0, 0, 1,   0.5,  0.5,  0.5,  0, 0, 1,  -0.5,  0.5,  0.5,  0, 0, 1,
+        // Back
+        -0.5, -0.5, -0.5,  0, 0, -1, -0.5,  0.5, -0.5,  0, 0, -1,  0.5,  0.5, -0.5,  0, 0, -1,
+        -0.5, -0.5, -0.5,  0, 0, -1,  0.5,  0.5, -0.5,  0, 0, -1,  0.5, -0.5, -0.5,  0, 0, -1,
+        // Top
+        -0.5,  0.5, -0.5,  0, 1, 0,  -0.5,  0.5,  0.5,  0, 1, 0,   0.5,  0.5,  0.5,  0, 1, 0,
+        -0.5,  0.5, -0.5,  0, 1, 0,   0.5,  0.5,  0.5,  0, 1, 0,   0.5,  0.5, -0.5,  0, 1, 0,
+        // Bottom
+        -0.5, -0.5, -0.5,  0, -1, 0,  0.5, -0.5, -0.5,  0, -1, 0,  0.5, -0.5,  0.5,  0, -1, 0,
+        -0.5, -0.5, -0.5,  0, -1, 0,  0.5, -0.5,  0.5,  0, -1, 0, -0.5, -0.5,  0.5,  0, -1, 0,
+        // Right
+         0.5, -0.5, -0.5,  1, 0, 0,   0.5,  0.5, -0.5,  1, 0, 0,   0.5,  0.5,  0.5,  1, 0, 0,
+         0.5, -0.5, -0.5,  1, 0, 0,   0.5,  0.5,  0.5,  1, 0, 0,   0.5, -0.5,  0.5,  1, 0, 0,
+        // Left
+        -0.5, -0.5, -0.5, -1, 0, 0,  -0.5, -0.5,  0.5, -1, 0, 0,  -0.5,  0.5,  0.5, -1, 0, 0,
+        -0.5, -0.5, -0.5, -1, 0, 0,  -0.5,  0.5,  0.5, -1, 0, 0,  -0.5,  0.5, -0.5, -1, 0, 0,
+      ]);
+    }
+
+    function createPlaneVertices() {
+      return new Float32Array([
+        -0.5, 0, -0.5,  0, 1, 0,  -0.5, 0,  0.5,  0, 1, 0,   0.5, 0,  0.5,  0, 1, 0,
+        -0.5, 0, -0.5,  0, 1, 0,   0.5, 0,  0.5,  0, 1, 0,   0.5, 0, -0.5,  0, 1, 0,
+      ]);
+    }
+
+    function createCylinderVertices(segments = 16) {
+      const data = [];
+      const radius = 0.5;
+      for (let i = 0; i < segments; i++) {
+        const theta0 = (i / segments) * Math.PI * 2;
+        const theta1 = ((i + 1) / segments) * Math.PI * 2;
+        const x0 = Math.cos(theta0) * radius; const z0 = Math.sin(theta0) * radius;
+        const x1 = Math.cos(theta1) * radius; const z1 = Math.sin(theta1) * radius;
+        const nx0 = Math.cos(theta0); const nz0 = Math.sin(theta0);
+        const nx1 = Math.cos(theta1); const nz1 = Math.sin(theta1);
+
+        data.push(x0, -0.5, z0, nx0, 0, nz0);
+        data.push(x1, -0.5, z1, nx1, 0, nz1);
+        data.push(x1,  0.5, z1, nx1, 0, nz1);
+        data.push(x0, -0.5, z0, nx0, 0, nz0);
+        data.push(x1,  0.5, z1, nx1, 0, nz1);
+        data.push(x0,  0.5, z0, nx0, 0, nz0);
+
+        data.push(0, 0.5, 0, 0, 1, 0);
+        data.push(x0, 0.5, z0, 0, 1, 0);
+        data.push(x1, 0.5, z1, 0, 1, 0);
+
+        data.push(0, -0.5, 0, 0, -1, 0);
+        data.push(x1, -0.5, z1, 0, -1, 0);
+        data.push(x0, -0.5, z0, 0, -1, 0);
+      }
+      return new Float32Array(data);
+    }
+
+    // =========================================================================
+    // 3. Shaders
+    // =========================================================================
+    const VERTEX_SHADER_SRC = `
+    attribute vec3 aPosition;
+    attribute vec3 aNormal;
+    uniform mat4 uProjection;
+    uniform mat4 uView;
+    uniform mat4 uModel;
+    varying vec3 vNormal;
+    varying vec3 vWorldPos;
+    void main() {
+      vec4 worldPos = uModel * vec4(aPosition, 1.0);
+      vWorldPos = worldPos.xyz;
+      vNormal = normalize(mat3(uModel) * aNormal);
+      gl_Position = uProjection * uView * worldPos;
+    }`;
+
+    const FRAGMENT_SHADER_SRC = `
+    precision mediump float;
+    uniform vec3 uColor;
+    varying vec3 vNormal;
+    varying vec3 vWorldPos;
+    void main() {
+      vec3 lightDir = normalize(vec3(0.35, 0.88, 0.55));
+      float diff = max(dot(vNormal, lightDir), 0.0);
+      float ambient = 0.40;
+      float groundFade = clamp((vWorldPos.y + 4.0) * 0.1, 0.85, 1.0);
+      vec3 finalColor = uColor * (ambient + diff * 0.60) * groundFade;
+      gl_FragColor = vec4(finalColor, 1.0);
+    }`;
+
+    // =========================================================================
+    // 4. Scene & Node Data Structures
+    // =========================================================================
+    class Node3D {
+      constructor(opts) {
+        this.id = opts.id;
+        this.name = opts.name;
+        this.entityId = opts.entityId;
+        this.primitive = opts.primitive;
+        this.dimensions = opts.dimensions ?? { x: 1, y: 1, z: 1 };
+        this.color = opts.color ?? [0.8, 0.8, 0.8];
+        this.transform = {
+          position: opts.position ? { ...opts.position } : { x: 0, y: 0, z: 0 },
+        };
+        this.visible = true;
+      }
+      getWorldPosition() {
+        return { ...this.transform.position };
+      }
+    }
+
+    class Scene3D {
+      constructor() {
+        this.nodes = new Map();
+      }
+      addNode(node) {
+        this.nodes.set(node.id, node);
+        if (node.entityId) this.nodes.set(node.entityId, node);
+      }
+      getNode(id) {
+        return this.nodes.get(id);
+      }
+      getNodeByEntityId(entityId) {
+        return this.nodes.get(entityId);
+      }
+      getAllNodes() {
+        const seen = new Set();
+        const list = [];
+        for (const n of this.nodes.values()) {
+          if (!seen.has(n.id)) {
+            seen.add(n.id);
+            list.push(n);
+          }
+        }
+        return list;
+      }
+      clear() {
+        this.nodes.clear();
+      }
+    }
+
+    // =========================================================================
+    // 5. Native WebGL Renderer with Camera Modes
+    // =========================================================================
+    class WebGLRenderer {
+      constructor(canvas) {
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (!gl) throw new Error('WebGL not supported');
+        this.gl = gl;
+
+        const vs = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, VERTEX_SHADER_SRC);
+        gl.compileShader(vs);
+        const fs = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, FRAGMENT_SHADER_SRC);
+        gl.compileShader(fs);
+
+        const program = gl.createProgram();
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        gl.linkProgram(program);
+        this.program = program;
+
+        this.attribLocs = {
+          position: gl.getAttribLocation(program, 'aPosition'),
+          normal: gl.getAttribLocation(program, 'aNormal'),
+        };
+        this.uniformLocs = {
+          proj: gl.getUniformLocation(program, 'uProjection'),
+          view: gl.getUniformLocation(program, 'uView'),
+          model: gl.getUniformLocation(program, 'uModel'),
+          color: gl.getUniformLocation(program, 'uColor'),
+        };
+
+        this.boxVBO = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.boxVBO);
+        gl.bufferData(gl.ARRAY_BUFFER, createBoxVertices(), gl.STATIC_DRAW);
+
+        this.planeVBO = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.planeVBO);
+        gl.bufferData(gl.ARRAY_BUFFER, createPlaneVertices(), gl.STATIC_DRAW);
+
+        const cylData = createCylinderVertices(16);
+        this.cylVBO = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.cylVBO);
+        gl.bufferData(gl.ARRAY_BUFFER, cylData, gl.STATIC_DRAW);
+        this.cylVertexCount = cylData.length / 6;
+
+        this.cameraEye = [0, 48, 56];
+        this.cameraCenter = [-5, 0, -18];
+        this.cameraUp = [0, 1, 0];
+
+        this.projMatrix = mat4Create();
+        this.viewMatrix = mat4Create();
+        this.viewProjMatrix = mat4Create();
+        this.modelMatrix = mat4Create();
+
+        gl.enable(gl.DEPTH_TEST);
+        gl.clearColor(0.06, 0.08, 0.12, 1.0);
+      }
+
+      render(scene) {
+        const gl = this.gl;
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        gl.useProgram(this.program);
+
+        const aspect = gl.canvas.width / gl.canvas.height;
+        mat4Perspective(this.projMatrix, 45 * Math.PI / 180, aspect, 0.5, 300.0);
+        mat4LookAt(this.viewMatrix, this.cameraEye, this.cameraCenter, this.cameraUp);
+        mat4Multiply(this.viewProjMatrix, this.projMatrix, this.viewMatrix);
+
+        gl.uniformMatrix4fv(this.uniformLocs.proj, false, this.projMatrix);
+        gl.uniformMatrix4fv(this.uniformLocs.view, false, this.viewMatrix);
+
+        for (const node of scene.getAllNodes()) {
+          if (!node.visible) continue;
+
+          let vbo = this.boxVBO;
+          let count = 36;
+          if (node.primitive === 'plane') {
+            vbo = this.planeVBO;
+            count = 6;
+          } else if (node.primitive === 'cylinder') {
+            vbo = this.cylVBO;
+            count = this.cylVertexCount;
+          }
+
+          gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+          gl.vertexAttribPointer(this.attribLocs.position, 3, gl.FLOAT, false, 24, 0);
+          gl.enableVertexAttribArray(this.attribLocs.position);
+          gl.vertexAttribPointer(this.attribLocs.normal, 3, gl.FLOAT, false, 24, 12);
+          gl.enableVertexAttribArray(this.attribLocs.normal);
+
+          const m = this.modelMatrix;
+          m.fill(0);
+          m[0] = node.dimensions.x;
+          m[5] = node.dimensions.y;
+          m[10] = node.dimensions.z;
+          m[12] = node.transform.position.x;
+          m[13] = node.transform.position.y;
+          m[14] = node.transform.position.z;
+          m[15] = 1;
+
+          gl.uniformMatrix4fv(this.uniformLocs.model, false, m);
+          gl.uniform3fv(this.uniformLocs.color, node.color);
+
+          gl.drawArrays(gl.TRIANGLES, 0, count);
+        }
+      }
+    }
+
+    // =========================================================================
+    // 6. Spatial Rules & Non-Walkable Footprints
+    // =========================================================================
+    const BUILDING_FOOTPRINTS = [
+      { id: 'building:tia-lupe-building', name: 'Pastelerías La Tía Lupe', minX: -36.5, maxX: -25.5, minZ: -24.5, maxZ: -12.5 },
+      { id: 'building:wing-spot-building', name: 'Wing Spot Building', minX: -51.5, maxX: -38.5, minZ: -24.5, maxZ: -12.5 },
+      { id: 'building:del-porvenir-residence', name: 'Residencia Del Porvenir', minX: -38.5, maxX: -26.5, minZ: -42.5, maxZ: -29.5 },
+      { id: 'building:dollar-2-go-building', name: 'Dollar 2 Go Store', minX: -7.5, maxX: 3.5, minZ: -25.5, maxZ: -14.5 },
+      { id: 'building:acabados-hbc-building', name: 'Acabados HBC', minX: 10.5, maxX: 25.5, minZ: -25.5, maxZ: -12.5 },
+      { id: 'building:catzoo-building', name: 'CatZoo Clínica Felina', minX: 10.5, maxX: 25.5, minZ: -42.5, maxZ: -29.5 },
+      { id: 'building:corporativo-arboleda-building', name: 'Corporativo Arboleda', minX: 41.5, maxX: 58.5, minZ: -35.5, maxZ: -14.5 },
+    ];
+
+    function isInsideBuildingFootprint(x, z) {
+      return BUILDING_FOOTPRINTS.some(b => x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ);
+    }
+
+    function getPedestrianSurfaceType(x, z) {
+      if (isInsideBuildingFootprint(x, z)) return 'BUILDING_BLOCKED';
+
+      // Crosswalks across streets
+      if (x >= -24 && x <= -16 && z >= -12.5 && z <= -9.5) return 'CROSSWALK'; // Calle Del Porvenir crossing
+      if (x >= -22 && x <= -18 && z >= -10.0 && z <= 10.0) return 'CROSSWALK'; // Gómez Morín crossing at Porvenir
+      if (x >= 31 && x <= 39 && z >= -12.5 && z <= -9.5) return 'CROSSWALK';   // Av. La Arboleda crossing
+      if (x >= 33 && x <= 37 && z >= -10.0 && z <= 10.0) return 'CROSSWALK';   // Gómez Morín crossing at Arboleda
+
+      // Gómez Morín Sidewalks
+      if (z >= -13.0 && z <= -9.0) {
+        if (x >= -58 && x <= -24) return 'SIDEWALK'; // West
+        if (x >= -16 && x <= 31) return 'SIDEWALK';  // Central
+        if (x >= 39 && x <= 65) return 'SIDEWALK';   // East
+      }
+      if (z >= 9.0 && z <= 13.5 && x >= -65 && x <= 65) return 'SIDEWALK'; // South
+
+      // Calle Del Porvenir Sidewalks
+      if (z >= -45 && z <= -11) {
+        if (x >= -26 && x <= -22) return 'SIDEWALK'; // West
+        if (x >= -18 && x <= -14) return 'SIDEWALK'; // East
+      }
+
+      // Av. La Arboleda Sidewalks
+      if (z >= -45 && z <= -11) {
+        if (x >= 29 && x <= 33) return 'SIDEWALK'; // West
+        if (x >= 37 && x <= 41) return 'SIDEWALK'; // East
+      }
+
+      // Dollar 2 Go Paved Parking Lot
+      if (x >= -12 && x <= 8 && z >= -32 && z <= -10) return 'PARKING_LOT';
+
+      // Porch & Entrance stoops
+      if (x >= -27 && x <= -23 && z >= -37 && z <= -35) return 'PORCH_STOOP';
+      if (x >= -47 && x <= -43 && z >= -13 && z <= -11) return 'ENTRANCE';
+      if (x >= -33 && x <= -29 && z >= -13 && z <= -11) return 'ENTRANCE';
+      if (x >= -4 && x <= 0 && z >= -15 && z <= -13) return 'ENTRANCE';
+      if (x >= 16 && x <= 20 && z >= -13 && z <= -11) return 'ENTRANCE';
+
+      // Roadway Traffic Lanes (Strictly non-walkable for pedestrians outside crosswalks)
+      if (z > -9.0 && z < 9.0) return 'ROAD_BLOCKED';
+      if (x > -22 && x < -18 && z <= -9.0) return 'ROAD_BLOCKED';
+      if (x > 33 && x < 37 && z <= -9.0) return 'ROAD_BLOCKED';
+
+      return 'NON_WALKABLE';
+    }
+
+    function isPedestrianWalkable(x, z) {
+      const type = getPedestrianSurfaceType(x, z);
+      return type === 'SIDEWALK' || type === 'CROSSWALK' || type === 'PARKING_LOT' || type === 'PORCH_STOOP' || type === 'ENTRANCE';
+    }
+
+    // =========================================================================
+    // 7. Corridor Scene Assembly (Milestone 80)
+    // =========================================================================
+    const canvas = document.getElementById('gl-canvas');
+    const renderer = new WebGLRenderer(canvas);
+    const scene = new Scene3D();
+
+    let playerLocationId = 'street:blvd-gomez-morin';
+    let elenaLocationId = 'building:del-porvenir-residence';
+
+    let playerPos = { x: -24.0, y: 1.0, z: -11.0 };
+    let elenaPos = { x: -26.5, y: 1.0, z: -36.0 };
+
+    let worldTime = new Date('2026-09-14T14:35:00.000Z'); // 08:35 AM MDT
+    let isRestaurantOpen = true;
+    let activeTraversal = null;
+    let isAutonomousLoopRunning = false;
+    let currentCameraMode = 'overview';
+    let isPlayerWalking = false;
+    let walkBobTimer = 0;
+    let isCommandInFlight = false;
+
+    // Elena deterministic multi-waypoint navigation route
+    const ELENA_NAV_ROUTE = [
+      { x: -26.5, y: 1.0, z: -36.0, name: 'Umbral Residencia Del Porvenir' },
+      { x: -24.0, y: 1.0, z: -36.0, name: 'Banqueta Del Porvenir Norte' },
+      { x: -24.0, y: 1.0, z: -25.0, name: 'Banqueta Del Porvenir Media' },
+      { x: -24.0, y: 1.0, z: -11.0, name: 'Banqueta Esquina Norponiente Del Porvenir' },
+      { x: -31.0, y: 1.0, z: -11.0, name: 'Banqueta Gómez Morín Frente Tía Lupe' },
+      { x: -45.0, y: 1.0, z: -11.0, name: 'Banqueta Gómez Morín Frente Wing Spot' },
+      { x: -45.0, y: 1.0, z: -12.4, name: 'Umbral Wing Spot' },
+    ];
+
+    function buildCorridorScene() {
+      scene.clear();
+
+      // --- 1. Road Networks ---
+      // Blvd. Manuel Gómez Morín (Arterial ground plane)
+      scene.addNode(new Node3D({
+        id: 'node:road:blvd-gomez-morin',
+        name: 'Blvd. Manuel Gómez Morín',
+        entityId: 'street:blvd-gomez-morin',
+        primitive: 'plane',
+        dimensions: { x: 130, y: 0.1, z: 18 },
+        color: [0.18, 0.19, 0.21],
+        position: { x: 0, y: 0.0, z: 0 },
+      }));
+
+      // Calle Del Porvenir (Secondary North)
+      scene.addNode(new Node3D({
+        id: 'node:road:calle-del-porvenir',
+        name: 'Calle Del Porvenir',
+        entityId: 'street:calle-del-porvenir',
+        primitive: 'box',
+        dimensions: { x: 10, y: 0.1, z: 42 },
+        color: [0.22, 0.23, 0.25],
+        position: { x: -20, y: 0.05, z: -30 },
+      }));
+
+      // Av. La Arboleda (Secondary North)
+      scene.addNode(new Node3D({
+        id: 'node:road:av-la-arboleda',
+        name: 'Avenida La Arboleda',
+        entityId: 'street:av-la-arboleda',
+        primitive: 'box',
+        dimensions: { x: 10, y: 0.1, z: 42 },
+        color: [0.22, 0.23, 0.25],
+        position: { x: 35, y: 0.05, z: -30 },
+      }));
+
+      // Gómez Morín Double Yellow Center Dashes
+      const gomezDashes = [-55, -45, -35, -5, 5, 15, 25, 48, 58];
+      gomezDashes.forEach((dx, i) => {
+        scene.addNode(new Node3D({
+          id: `node:marking:gomez-center-${i + 1}`,
+          name: `Gómez Morín Center Line ${i + 1}`,
+          primitive: 'box',
+          dimensions: { x: 4.5, y: 0.02, z: 0.3 },
+          color: [0.92, 0.82, 0.20],
+          position: { x: dx, y: 0.06, z: 0 },
+        }));
+      });
+
+      // Del Porvenir Yellow Center Divider
+      [-18, -26, -34, -42].forEach((dz, i) => {
+        scene.addNode(new Node3D({
+          id: `node:marking:porvenir-center-${i + 1}`,
+          name: `Del Porvenir Center Line ${i + 1}`,
+          primitive: 'box',
+          dimensions: { x: 0.25, y: 0.02, z: 4.0 },
+          color: [0.92, 0.82, 0.20],
+          position: { x: -20, y: 0.11, z: dz },
+        }));
+      });
+
+      // Av. La Arboleda Yellow Center Divider
+      [-18, -26, -34, -42].forEach((dz, i) => {
+        scene.addNode(new Node3D({
+          id: `node:marking:arboleda-center-${i + 1}`,
+          name: `La Arboleda Center Line ${i + 1}`,
+          primitive: 'box',
+          dimensions: { x: 0.25, y: 0.02, z: 4.0 },
+          color: [0.92, 0.82, 0.20],
+          position: { x: 35, y: 0.11, z: dz },
+        }));
+      });
+
+      // --- 2. Pedestrian Crosswalks ---
+      // Calle Del Porvenir Crosswalk (Zebra Stripes across North entrance)
+      [-23.0, -21.5, -20.0, -18.5, -17.0].forEach((cx, i) => {
+        scene.addNode(new Node3D({
+          id: `node:crosswalk:porvenir-${i + 1}`,
+          name: `Del Porvenir Zebra Stripe ${i + 1}`,
+          primitive: 'box',
+          dimensions: { x: 0.9, y: 0.03, z: 2.2 },
+          color: [0.95, 0.95, 0.95],
+          position: { x: cx, y: 0.08, z: -11.0 },
+        }));
+      });
+
+      // Gómez Morín Arterial Crosswalk at Del Porvenir
+      [-7.5, -5.0, -2.5, 0.0, 2.5, 5.0, 7.5].forEach((cz, i) => {
+        scene.addNode(new Node3D({
+          id: `node:crosswalk:gomez-${i + 1}`,
+          name: `Gómez Morín Zebra Stripe ${i + 1}`,
+          primitive: 'box',
+          dimensions: { x: 2.4, y: 0.03, z: 1.0 },
+          color: [0.95, 0.95, 0.95],
+          position: { x: -20.0, y: 0.07, z: cz },
+        }));
+      });
+
+      // --- 3. Sidewalks & Curbs ---
+      // Gómez Morín North Sidewalks
+      scene.addNode(new Node3D({
+        id: 'node:sidewalk:gomez-north-west',
+        name: 'Gómez Morín North Sidewalk West',
+        primitive: 'box',
+        dimensions: { x: 34, y: 0.2, z: 3.5 },
+        color: [0.72, 0.74, 0.76],
+        position: { x: -41, y: 0.15, z: -11 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:sidewalk:gomez-north-center',
+        name: 'Gómez Morín North Sidewalk Center',
+        primitive: 'box',
+        dimensions: { x: 47, y: 0.2, z: 3.5 },
+        color: [0.72, 0.74, 0.76],
+        position: { x: 7.5, y: 0.15, z: -11 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:sidewalk:gomez-north-east',
+        name: 'Gómez Morín North Sidewalk East',
+        primitive: 'box',
+        dimensions: { x: 26, y: 0.2, z: 3.5 },
+        color: [0.72, 0.74, 0.76],
+        position: { x: 52, y: 0.15, z: -11 },
+      }));
+
+      // Gómez Morín South Sidewalk
+      scene.addNode(new Node3D({
+        id: 'node:sidewalk:gomez-south',
+        name: 'Gómez Morín South Sidewalk',
+        primitive: 'box',
+        dimensions: { x: 130, y: 0.2, z: 3.5 },
+        color: [0.72, 0.74, 0.76],
+        position: { x: 0, y: 0.15, z: 11 },
+      }));
+
+      // Del Porvenir Sidewalks
+      scene.addNode(new Node3D({
+        id: 'node:sidewalk:porvenir-west',
+        name: 'Del Porvenir West Sidewalk',
+        primitive: 'box',
+        dimensions: { x: 2.5, y: 0.2, z: 34 },
+        color: [0.72, 0.74, 0.76],
+        position: { x: -24, y: 0.15, z: -28 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:sidewalk:porvenir-east',
+        name: 'Del Porvenir East Sidewalk',
+        primitive: 'box',
+        dimensions: { x: 2.5, y: 0.2, z: 34 },
+        color: [0.72, 0.74, 0.76],
+        position: { x: -16, y: 0.15, z: -28 },
+      }));
+
+      // Av. La Arboleda Sidewalks
+      scene.addNode(new Node3D({
+        id: 'node:sidewalk:arboleda-west',
+        name: 'La Arboleda West Sidewalk',
+        primitive: 'box',
+        dimensions: { x: 2.5, y: 0.2, z: 34 },
+        color: [0.72, 0.74, 0.76],
+        position: { x: 31, y: 0.15, z: -28 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:sidewalk:arboleda-east',
+        name: 'La Arboleda East Sidewalk',
+        primitive: 'box',
+        dimensions: { x: 2.5, y: 0.2, z: 34 },
+        color: [0.72, 0.74, 0.76],
+        position: { x: 39, y: 0.15, z: -28 },
+      }));
+
+      // --- 4. Dollar 2 Go Paved Parcel & Parking Area ---
+      scene.addNode(new Node3D({
+        id: 'node:parcel:dollar-2-go-lot',
+        name: 'Dollar 2 Go Parking Lot Pavement',
+        primitive: 'box',
+        dimensions: { x: 22, y: 0.12, z: 26 },
+        color: [0.28, 0.30, 0.32],
+        position: { x: -2, y: 0.06, z: -20 },
+      }));
+      // Parking Stall White Lines
+      [-10, -6, 2, 6].forEach((px, i) => {
+        scene.addNode(new Node3D({
+          id: `node:marking:dollar2go-stall-${i + 1}`,
+          name: `Dollar 2 Go Parking Stall ${i + 1}`,
+          primitive: 'box',
+          dimensions: { x: 0.15, y: 0.02, z: 4.8 },
+          color: [0.90, 0.90, 0.90],
+          position: { x: px, y: 0.14, z: -12.5 },
+        }));
+      });
+
+      // --- 5. Buildings Along Corridor ---
+
+      // Pastelerías La Tía Lupe (Commercial bakery/café - Milestone 83 Interior Boundary)
+      // Interior Floor
+      scene.addNode(new Node3D({
+        id: 'node:floor:tia-lupe-interior',
+        name: 'Pastelerías La Tía Lupe Interior Floor',
+        entityId: 'interior:tia-lupe',
+        primitive: 'plane',
+        dimensions: { x: 9.0, y: 0.05, z: 10.5 },
+        color: [0.82, 0.72, 0.65], // Warm pastry cream/tile floor
+        position: { x: -31.0, y: 0.05, z: -18.25 },
+      }));
+      // North Wall
+      scene.addNode(new Node3D({
+        id: 'node:wall:tia-lupe-north',
+        name: 'Tía Lupe North Wall',
+        primitive: 'box',
+        dimensions: { x: 9.0, y: 5.0, z: 0.4 },
+        color: [0.78, 0.55, 0.50],
+        position: { x: -31.0, y: 2.5, z: -23.5 },
+      }));
+      // West Wall
+      scene.addNode(new Node3D({
+        id: 'node:wall:tia-lupe-west',
+        name: 'Tía Lupe West Wall',
+        primitive: 'box',
+        dimensions: { x: 0.4, y: 5.0, z: 10.5 },
+        color: [0.78, 0.55, 0.50],
+        position: { x: -35.5, y: 2.5, z: -18.25 },
+      }));
+      // East Wall
+      scene.addNode(new Node3D({
+        id: 'node:wall:tia-lupe-east',
+        name: 'Tía Lupe East Wall',
+        primitive: 'box',
+        dimensions: { x: 0.4, y: 5.0, z: 10.5 },
+        color: [0.78, 0.55, 0.50],
+        position: { x: -26.5, y: 2.5, z: -18.25 },
+      }));
+      // South Wall (West segment)
+      scene.addNode(new Node3D({
+        id: 'node:wall:tia-lupe-south-west',
+        name: 'Tía Lupe South Wall (West)',
+        primitive: 'box',
+        dimensions: { x: 4.5, y: 5.0, z: 0.4 },
+        color: [0.78, 0.55, 0.50],
+        position: { x: -33.25, y: 2.5, z: -13.0 },
+      }));
+      // South Wall (East segment)
+      scene.addNode(new Node3D({
+        id: 'node:wall:tia-lupe-south-east',
+        name: 'Tía Lupe South Wall (East)',
+        primitive: 'box',
+        dimensions: { x: 2.5, y: 5.0, z: 0.4 },
+        color: [0.78, 0.55, 0.50],
+        position: { x: -27.75, y: 2.5, z: -13.0 },
+      }));
+      // South Wall Lintel
+      scene.addNode(new Node3D({
+        id: 'node:wall:tia-lupe-south-lintel',
+        name: 'Tía Lupe Entrance Lintel',
+        primitive: 'box',
+        dimensions: { x: 2.0, y: 1.5, z: 0.4 },
+        color: [0.78, 0.55, 0.50],
+        position: { x: -30.0, y: 4.25, z: -13.0 },
+      }));
+      // Entrance Threshold Plate
+      scene.addNode(new Node3D({
+        id: 'node:threshold:tia-lupe-entrance',
+        name: 'Tía Lupe Entrance Threshold Plate',
+        primitive: 'box',
+        dimensions: { x: 2.0, y: 0.05, z: 0.8 },
+        color: [0.85, 0.65, 0.20],
+        position: { x: -30.0, y: 0.12, z: -13.0 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:anchor:entrance:tia-lupe',
+        name: 'Entrada Principal La Tía Lupe',
+        entityId: 'entrance:tia-lupe-main',
+        primitive: 'box',
+        dimensions: { x: 2.4, y: 3.2, z: 0.8 },
+        color: [0.92, 0.82, 0.40],
+        position: { x: -30, y: 1.6, z: -12.4 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:facade:tia-lupe-canopy',
+        name: 'Tía Lupe Bakery Awning',
+        primitive: 'box',
+        dimensions: { x: 8.5, y: 0.3, z: 1.8 },
+        color: [0.85, 0.30, 0.25],
+        position: { x: -31, y: 3.4, z: -12.2 },
+      }));
+
+      // Wing Spot (Commercial building, west - Milestone 82 Interior Boundary)
+      // Interior Floor
+      scene.addNode(new Node3D({
+        id: 'node:floor:wing-spot-interior',
+        name: 'Wing Spot Interior Floor',
+        entityId: 'interior:wing-spot',
+        primitive: 'plane',
+        dimensions: { x: 11.0, y: 0.05, z: 10.5 },
+        color: [0.35, 0.22, 0.16], // Warm restaurant parquet/terracotta
+        position: { x: -45.0, y: 0.05, z: -18.25 },
+      }));
+      // North Wall
+      scene.addNode(new Node3D({
+        id: 'node:wall:wing-spot-north',
+        name: 'Wing Spot North Wall',
+        primitive: 'box',
+        dimensions: { x: 11.0, y: 5.0, z: 0.4 },
+        color: [0.26, 0.28, 0.32],
+        position: { x: -45.0, y: 2.5, z: -23.5 },
+      }));
+      // West Wall
+      scene.addNode(new Node3D({
+        id: 'node:wall:wing-spot-west',
+        name: 'Wing Spot West Wall',
+        primitive: 'box',
+        dimensions: { x: 0.4, y: 5.0, z: 10.5 },
+        color: [0.26, 0.28, 0.32],
+        position: { x: -50.5, y: 2.5, z: -18.25 },
+      }));
+      // East Wall
+      scene.addNode(new Node3D({
+        id: 'node:wall:wing-spot-east',
+        name: 'Wing Spot East Wall',
+        primitive: 'box',
+        dimensions: { x: 0.4, y: 5.0, z: 10.5 },
+        color: [0.26, 0.28, 0.32],
+        position: { x: -39.5, y: 2.5, z: -18.25 },
+      }));
+      // South Wall (West segment)
+      scene.addNode(new Node3D({
+        id: 'node:wall:wing-spot-south-west',
+        name: 'Wing Spot South Wall (West)',
+        primitive: 'box',
+        dimensions: { x: 4.5, y: 5.0, z: 0.4 },
+        color: [0.26, 0.28, 0.32],
+        position: { x: -48.25, y: 2.5, z: -13.0 },
+      }));
+      // South Wall (East segment)
+      scene.addNode(new Node3D({
+        id: 'node:wall:wing-spot-south-east',
+        name: 'Wing Spot South Wall (East)',
+        primitive: 'box',
+        dimensions: { x: 4.5, y: 5.0, z: 0.4 },
+        color: [0.26, 0.28, 0.32],
+        position: { x: -41.75, y: 2.5, z: -13.0 },
+      }));
+      // South Wall Lintel
+      scene.addNode(new Node3D({
+        id: 'node:wall:wing-spot-south-lintel',
+        name: 'Wing Spot Entrance Lintel',
+        primitive: 'box',
+        dimensions: { x: 2.0, y: 1.5, z: 0.4 },
+        color: [0.26, 0.28, 0.32],
+        position: { x: -45.0, y: 4.25, z: -13.0 },
+      }));
+      // Entrance Threshold Plate
+      scene.addNode(new Node3D({
+        id: 'node:threshold:wing-spot-entrance',
+        name: 'Wing Spot Entrance Threshold Plate',
+        primitive: 'box',
+        dimensions: { x: 2.0, y: 0.05, z: 0.8 },
+        color: [0.85, 0.65, 0.20],
+        position: { x: -45.0, y: 0.12, z: -13.0 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:anchor:entrance:wing-spot',
+        name: 'Entrada Principal Wing Spot',
+        entityId: 'entrance:wing-spot-main',
+        primitive: 'box',
+        dimensions: { x: 2.4, y: 3.2, z: 0.8 },
+        color: [0.95, 0.60, 0.15],
+        position: { x: -45, y: 1.6, z: -12.4 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:facade:wing-spot-sign',
+        name: 'Wing Spot Commercial Facade Sign',
+        primitive: 'box',
+        dimensions: { x: 9.0, y: 1.2, z: 0.4 },
+        color: [0.18, 0.20, 0.24],
+        position: { x: -45, y: 5.6, z: -12.3 },
+      }));
+
+      // Residencia Del Porvenir (Residential along Del Porvenir)
+      scene.addNode(new Node3D({
+        id: 'node:building:del-porvenir-residence',
+        name: 'Residencia Del Porvenir',
+        entityId: 'building:del-porvenir-residence',
+        primitive: 'box',
+        dimensions: { x: 12, y: 7.5, z: 13 },
+        color: [0.68, 0.42, 0.28], // Brick residential
+        position: { x: -32.5, y: 3.75, z: -36 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:roof:del-porvenir-residence',
+        name: 'Residencia Roof',
+        primitive: 'box',
+        dimensions: { x: 13, y: 1.4, z: 14 },
+        color: [0.34, 0.22, 0.18],
+        position: { x: -32.5, y: 7.8, z: -36 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:anchor:entrance:del-porvenir-residence',
+        name: 'Porch Stoop Residencia Del Porvenir',
+        entityId: 'entrance:del-porvenir-residence-main',
+        primitive: 'box',
+        dimensions: { x: 1.8, y: 0.35, z: 3.0 },
+        color: [0.62, 0.60, 0.58],
+        position: { x: -26.5, y: 0.18, z: -36 },
+      }));
+
+      // Dollar 2 Go Store (Small single-story store inside large paved lot)
+      scene.addNode(new Node3D({
+        id: 'node:building:dollar-2-go-store',
+        name: 'Dollar 2 Go Store',
+        entityId: 'building:dollar-2-go-building',
+        primitive: 'box',
+        dimensions: { x: 11, y: 5.5, z: 11 },
+        color: [0.85, 0.82, 0.35], // Dollar 2 Go Yellow
+        position: { x: -2, y: 2.75, z: -20 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:anchor:entrance:dollar-2-go',
+        name: 'Entrada Dollar 2 Go',
+        entityId: 'entrance:dollar-2-go-main',
+        primitive: 'box',
+        dimensions: { x: 2.5, y: 3.0, z: 0.8 },
+        color: [0.15, 0.55, 0.25], // Dollar 2 Go Green Trim
+        position: { x: -2, y: 1.5, z: -14.3 },
+      }));
+
+      // Acabados HBC (Commercial paint store east of Dollar 2 Go)
+      scene.addNode(new Node3D({
+        id: 'node:building:acabados-hbc-building',
+        name: 'Acabados HBC Building',
+        entityId: 'building:acabados-hbc-building',
+        primitive: 'box',
+        dimensions: { x: 15, y: 7.5, z: 13 },
+        color: [0.28, 0.42, 0.68], // Commercial Cobalt Blue
+        position: { x: 18, y: 3.75, z: -19 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:anchor:entrance:acabados-hbc',
+        name: 'Entrada Principal Acabados HBC',
+        primitive: 'box',
+        dimensions: { x: 2.4, y: 3.2, z: 0.8 },
+        color: [0.85, 0.88, 0.92],
+        position: { x: 18, y: 1.6, z: -12.3 },
+      }));
+
+      // CatZoo Clínica Felina (North of Acabados HBC)
+      scene.addNode(new Node3D({
+        id: 'node:building:catzoo-building',
+        name: 'CatZoo Clínica Felina',
+        entityId: 'building:catzoo-building',
+        primitive: 'box',
+        dimensions: { x: 15, y: 6.5, z: 13 },
+        color: [0.22, 0.58, 0.52], // Clinical Teal
+        position: { x: 18, y: 3.25, z: -36 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:anchor:entrance:catzoo',
+        name: 'Entrada CatZoo Clínica Felina',
+        primitive: 'box',
+        dimensions: { x: 2.4, y: 3.0, z: 0.8 },
+        color: [0.92, 0.95, 0.95],
+        position: { x: 18, y: 1.5, z: -29.3 },
+      }));
+
+      // Corporativo Arboleda (East of Av. La Arboleda)
+      scene.addNode(new Node3D({
+        id: 'node:building:corporativo-arboleda-building',
+        name: 'Corporativo Arboleda',
+        entityId: 'building:corporativo-arboleda-building',
+        primitive: 'box',
+        dimensions: { x: 17, y: 12.0, z: 21 },
+        color: [0.38, 0.45, 0.52], // Corporate Steel & Glass
+        position: { x: 50, y: 6.0, z: -25 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:anchor:entrance:corporativo-arboleda',
+        name: 'Entrada Corporativo Arboleda',
+        primitive: 'box',
+        dimensions: { x: 0.8, y: 3.5, z: 3.0 },
+        color: [0.65, 0.80, 0.92],
+        position: { x: 41.3, y: 1.75, z: -25 },
+      }));
+
+      // --- 6. Environmental Props & Parked Vehicles ---
+
+      // Customer Parked Cars in Dollar 2 Go Lot
+      scene.addNode(new Node3D({
+        id: 'node:car:customer-1',
+        name: 'Parked Sedan White',
+        primitive: 'box',
+        dimensions: { x: 2.2, y: 1.4, z: 4.4 },
+        color: [0.92, 0.92, 0.92],
+        position: { x: -8, y: 0.8, z: -14 },
+      }));
+      scene.addNode(new Node3D({
+        id: 'node:car:customer-2',
+        name: 'Parked SUV Crimson',
+        primitive: 'box',
+        dimensions: { x: 2.3, y: 1.6, z: 4.6 },
+        color: [0.65, 0.15, 0.18],
+        position: { x: 4, y: 0.9, z: -14 },
+      }));
+
+      // Street Lamps along Gómez Morín
+      [-50, -35, -5, 12, 28, 45, 60].forEach((lx, i) => {
+        scene.addNode(new Node3D({
+          id: `node:lamp:gomez-${i + 1}`,
+          name: `Gómez Morín Street Lamp ${i + 1}`,
+          primitive: 'cylinder',
+          dimensions: { x: 0.22, y: 4.8, z: 0.22 },
+          color: [0.22, 0.24, 0.26],
+          position: { x: lx, y: 2.4, z: -9.5 },
+        }));
+        scene.addNode(new Node3D({
+          id: `node:lamp:gomez-head-${i + 1}`,
+          name: `Lamp Lantern ${i + 1}`,
+          primitive: 'box',
+          dimensions: { x: 0.5, y: 0.4, z: 0.5 },
+          color: [0.98, 0.92, 0.65],
+          position: { x: lx, y: 4.8, z: -9.5 },
+        }));
+      });
+
+      // Shade Trees along Sidewalks
+      [-40, -10, 8, 24, 46].forEach((tx, i) => {
+        scene.addNode(new Node3D({
+          id: `node:tree:trunk-${i + 1}`,
+          name: `Sidewalk Tree Trunk ${i + 1}`,
+          primitive: 'cylinder',
+          dimensions: { x: 0.4, y: 2.8, z: 0.4 },
+          color: [0.42, 0.28, 0.16],
+          position: { x: tx, y: 1.4, z: -12.5 },
+        }));
+        scene.addNode(new Node3D({
+          id: `node:tree:canopy-${i + 1}`,
+          name: `Sidewalk Tree Canopy ${i + 1}`,
+          primitive: 'cylinder',
+          dimensions: { x: 2.4, y: 2.8, z: 2.4 },
+          color: [0.22, 0.52, 0.24],
+          position: { x: tx, y: 3.8, z: -12.5 },
+        }));
+      });
+
+      // --- 7. Agents (Player and Elena) ---
+      scene.addNode(new Node3D({
+        id: 'node:player',
+        name: 'Player',
+        entityId: 'agent:gomez-morin-player',
+        primitive: 'cylinder',
+        dimensions: { x: 0.8, y: 2.0, z: 0.8 },
+        color: [0.2, 0.55, 0.95], // Player Blue
+        position: playerPos,
+      }));
+
+      scene.addNode(new Node3D({
+        id: 'node:npc',
+        name: 'Elena',
+        entityId: 'agent:elena-npc',
+        primitive: 'cylinder',
+        dimensions: { x: 0.8, y: 2.0, z: 0.8 },
+        color: [0.95, 0.65, 0.2], // NPC Gold
+        position: elenaPos,
+      }));
+    }
+
+    // =========================================================================
+    // 8. HUD & Proximity Updates
+    // =========================================================================
+    const pLocEl = document.getElementById('val-player-loc');
+    const pCoordsEl = document.getElementById('val-player-coords');
+    const eLocEl = document.getElementById('val-elena-loc');
+    const eStatusEl = document.getElementById('val-elena-status');
+    const venueStatusEl = document.getElementById('val-venue-status');
+    const clockDisplayEl = document.getElementById('clock-display');
+    const promptEl = document.getElementById('interaction-prompt');
+    const promptActionTextEl = document.getElementById('prompt-action-text');
+    const cameraIndicatorEl = document.getElementById('camera-indicator');
+    const surfaceWarningEl = document.getElementById('surface-warning');
+
+    const labels = {
+      gomez: document.getElementById('label-gomez'),
+      porvenir: document.getElementById('label-porvenir'),
+      tialupe: document.getElementById('label-tialupe'),
+      wingspot: document.getElementById('label-wingspot'),
+      residence: document.getElementById('label-residence'),
+      dollar2go: document.getElementById('label-dollar2go'),
+      hbc: document.getElementById('label-hbc'),
+      catzoo: document.getElementById('label-catzoo'),
+      arboleda: document.getElementById('label-arboleda'),
+      player: document.getElementById('label-player'),
+      npc: document.getElementById('label-npc'),
+    };
+
+    const INTERIORS = [
+      {
+        id: 'interior:wing-spot',
+        associatedPlaceId: 'restaurant:wing-spot',
+        name: 'Wing Spot',
+        bounds: { minX: -50.3, maxX: -39.7, minZ: -23.3, maxZ: -13.0 },
+        exitThreshold: { x: -45.0, z: -13.0 },
+        exteriorSpawn: { x: -45.0, y: 1.0, z: -12.0 },
+        interiorSpawn: { x: -45.0, y: 1.0, z: -13.5 },
+      },
+      {
+        id: 'interior:tia-lupe',
+        associatedPlaceId: 'restaurant:pasteleria-tia-lupe',
+        name: 'Pastelerías La Tía Lupe',
+        bounds: { minX: -35.3, maxX: -26.7, minZ: -23.3, maxZ: -13.0 },
+        exitThreshold: { x: -30.0, z: -13.0 },
+        exteriorSpawn: { x: -30.0, y: 1.0, z: -12.0 },
+        interiorSpawn: { x: -30.0, y: 1.0, z: -13.5 },
+      },
+    ];
+
+    let currentProximityAction = null;
+    let currentAttendantData = null;
+
+    function updateHudAndInteractions() {
+      const activeInterior = INTERIORS.find(i => i.associatedPlaceId === playerLocationId);
+      if (activeInterior) {
+        pLocEl.textContent = `${activeInterior.associatedPlaceId} (Interior)`;
+        pCoordsEl.textContent = `x: ${playerPos.x.toFixed(2)}, z: ${playerPos.z.toFixed(2)} [INTERIOR RESTAURANT]`;
+      } else {
+        pLocEl.textContent = playerLocationId;
+        const surfaceType = getPedestrianSurfaceType(playerPos.x, playerPos.z);
+        let surfLabel = `[${surfaceType}]`;
+        if (surfaceType === 'SIDEWALK') surfLabel = '[SIDEWALK]';
+        else if (surfaceType === 'CROSSWALK') surfLabel = '[CROSSWALK]';
+        else if (surfaceType === 'PARKING_LOT') surfLabel = '[PARKING LOT]';
+        else if (surfaceType === 'PORCH_STOOP') surfLabel = '[PORCH STOOP]';
+        else if (surfaceType === 'ENTRANCE') surfLabel = '[ENTRANCE THRESHOLD]';
+        pCoordsEl.textContent = `x: ${playerPos.x.toFixed(2)}, z: ${playerPos.z.toFixed(2)} ${surfLabel}`;
+      }
+
+      eLocEl.textContent = elenaLocationId;
+      venueStatusEl.textContent = `${scene.getAllNodes().length} 3D Nodes | 7 Buildings`;
+
+      // Elena Status
+      if (activeTraversal) {
+        if (activeTraversal.isArrived) {
+          eStatusEl.textContent = 'ARRIVED (Pending M69 Commit)';
+          eStatusEl.className = 'hud-val arrived';
+        } else {
+          const pct = (activeTraversal.progress * 100).toFixed(0);
+          eStatusEl.textContent = `COMMUTING (${pct}%) via Sidewalk Graph`;
+          eStatusEl.className = 'hud-val active';
+        }
+      } else {
+        if (currentAttendantData && currentAttendantData.interactionState === 'service-accepted') {
+          eLocEl.textContent = 'restaurant:wing-spot (Interior)';
+          eStatusEl.textContent = 'ON DUTY: Attending Wing Spot (Service Accepted)';
+          eStatusEl.className = 'hud-val arrived';
+        } else if (elenaLocationId === 'restaurant:wing-spot') {
+          eLocEl.textContent = 'restaurant:wing-spot (Interior)';
+          eStatusEl.textContent = 'ON DUTY: Attending Wing Spot (Interior)';
+          eStatusEl.className = 'hud-val highlight';
+        } else {
+          eStatusEl.textContent = 'IDLE: At Residence Porch Stoop';
+          eStatusEl.className = 'hud-val';
+        }
+      }
+
+      // =========================================================================
+      // Contextual Entrance / Exit Resolution (Milestones 81, 82, 83 & 89)
+      // =========================================================================
+      const interactBtn = document.getElementById('btn-interact-action');
+      if (activeInterior) {
+        // Player is inside an interior: check proximity to threshold
+        const distToExit = Math.hypot(playerPos.x - activeInterior.exitThreshold.x, playerPos.z - activeInterior.exitThreshold.z);
+        if (distToExit <= 2.5) {
+          currentProximityAction = {
+            type: 'exit',
+            targetLocationId: 'street:blvd-gomez-morin',
+            label: `Exit ${activeInterior.name}`,
+            exitPos: activeInterior.exteriorSpawn,
+          };
+          promptActionTextEl.textContent = isCommandInFlight ? `Executing command...` : `Exit ${activeInterior.name}`;
+          promptEl.classList.toggle('visible', !isCommandInFlight);
+          if (interactBtn) {
+            interactBtn.textContent = isCommandInFlight ? `[E] Contacting World Core...` : `[E] Exit ${activeInterior.name}`;
+            interactBtn.disabled = isCommandInFlight;
+          }
+        } else if (
+          activeInterior.associatedPlaceId === 'restaurant:wing-spot' &&
+          currentAttendantData &&
+          currentAttendantData.isPresent
+        ) {
+          // Milestone 91: Inside Wing Spot away from door with attendant present
+          if (currentAttendantData.interactionState === 'service-accepted') {
+            currentProximityAction = {
+              type: 'service-active',
+              label: `Service Active (${currentAttendantData.name})`,
+            };
+            promptActionTextEl.textContent = `Service Active with ${currentAttendantData.name}`;
+            promptEl.classList.add('visible');
+            if (interactBtn) {
+              interactBtn.textContent = `[E] Service Active with ${currentAttendantData.name}`;
+              interactBtn.disabled = true;
+            }
+          } else {
+            currentProximityAction = {
+              type: 'request-service',
+              restaurantId: 'restaurant:wing-spot',
+              label: `Request Service from ${currentAttendantData.name}`,
+            };
+            promptActionTextEl.textContent = isCommandInFlight ? `Requesting service...` : `Request Service from ${currentAttendantData.name}`;
+            promptEl.classList.toggle('visible', !isCommandInFlight);
+            if (interactBtn) {
+              interactBtn.textContent = isCommandInFlight ? `[E] Contacting World Core...` : `[E] Request Service from ${currentAttendantData.name}`;
+              interactBtn.disabled = isCommandInFlight;
+            }
+          }
+        } else {
+          currentProximityAction = null;
+          promptEl.classList.remove('visible');
+          if (interactBtn) {
+            interactBtn.textContent = '[E] Walk to Door to Exit';
+            interactBtn.disabled = true;
+          }
+        }
+      } else {
+        // Player is outdoors on street/sidewalk: resolve nearby entrance
+        const resolved = resolveNearbyEntrance(playerPos, 3.5);
+        if (resolved) {
+          const targetInterior = INTERIORS.find(i => i.associatedPlaceId === resolved.targetLocationId);
+          currentProximityAction = {
+            type: 'enter',
+            entranceId: resolved.entranceId,
+            buildingId: resolved.buildingId,
+            targetLocationId: resolved.targetLocationId,
+            label: resolved.actionLabel,
+            commandName: resolved.commandName,
+            enterPos: targetInterior ? targetInterior.interiorSpawn : null,
+          };
+          promptActionTextEl.textContent = isCommandInFlight ? `Executing command...` : resolved.actionLabel;
+          promptEl.classList.toggle('visible', !isCommandInFlight);
+          if (interactBtn) {
+            interactBtn.textContent = isCommandInFlight ? `[E] Contacting World Core...` : `[E] ${resolved.actionLabel}`;
+            interactBtn.disabled = isCommandInFlight;
+          }
+        } else {
+          currentProximityAction = null;
+          promptEl.classList.remove('visible');
+          if (interactBtn) {
+            interactBtn.textContent = '[E] No Entrance Nearby';
+            interactBtn.disabled = true;
+          }
+        }
+      }
+    }
+
+    // Authoritative Building Entrances & Contextual Resolution (Milestone 81)
+    const BUILDING_ENTRANCES = [
+      {
+        entranceId: 'entrance:tia-lupe-main',
+        buildingId: 'building:tia-lupe-building',
+        name: 'Pastelerías La Tía Lupe',
+        pos: { x: -30.0, z: -12.4 },
+        targetLocationId: 'restaurant:pasteleria-tia-lupe',
+        actionLabel: 'Enter Pastelerías La Tía Lupe',
+        commandName: 'enterRestaurant',
+      },
+      {
+        entranceId: 'entrance:wing-spot-main',
+        buildingId: 'building:wing-spot-building',
+        name: 'Wing Spot Gómez Morín',
+        pos: { x: -45.0, z: -12.4 },
+        targetLocationId: 'restaurant:wing-spot',
+        actionLabel: 'Enter Wing Spot',
+        commandName: 'enterRestaurant',
+      },
+      {
+        entranceId: 'entrance:del-porvenir-residence-main',
+        buildingId: 'building:del-porvenir-residence',
+        name: 'Residencia Del Porvenir',
+        pos: { x: -26.5, z: -36.0 },
+        targetLocationId: 'building:del-porvenir-residence',
+        actionLabel: 'Enter Residencia Del Porvenir',
+        commandName: 'interactAtResidence',
+      },
+      {
+        entranceId: 'entrance:dollar-2-go-main',
+        buildingId: 'building:dollar-2-go-building',
+        name: 'Dollar 2 Go Store',
+        pos: { x: -2.0, z: -14.3 },
+        targetLocationId: 'building:dollar-2-go-building',
+        actionLabel: 'Enter Dollar 2 Go',
+        commandName: 'enterBuilding',
+      },
+      {
+        entranceId: 'entrance:acabados-hbc-main',
+        buildingId: 'building:acabados-hbc-building',
+        name: 'Acabados HBC Showroom',
+        pos: { x: 18.0, z: -12.3 },
+        targetLocationId: 'building:acabados-hbc-building',
+        actionLabel: 'Enter Acabados HBC',
+        commandName: 'enterBuilding',
+      },
+      {
+        entranceId: 'entrance:catzoo-main',
+        buildingId: 'building:catzoo-building',
+        name: 'CatZoo Clínica Felina',
+        pos: { x: 18.0, z: -29.3 },
+        targetLocationId: 'building:catzoo-building',
+        actionLabel: 'Enter CatZoo Clínica Felina',
+        commandName: 'enterBuilding',
+      },
+      {
+        entranceId: 'entrance:corporativo-arboleda-main',
+        buildingId: 'building:corporativo-arboleda-building',
+        name: 'Corporativo Arboleda',
+        pos: { x: 41.3, z: -25.0 },
+        targetLocationId: 'building:corporativo-arboleda-building',
+        actionLabel: 'Enter Corporativo Arboleda',
+        commandName: 'enterBuilding',
+      },
+    ];
+
+    function resolveNearbyEntrance(pos, maxDist = 3.5) {
+      let nearest = null;
+      let minDist = Infinity;
+      for (const ent of BUILDING_ENTRANCES) {
+        const d = Math.hypot(pos.x - ent.pos.x, pos.z - ent.pos.z);
+        if (d <= maxDist && d < minDist) {
+          minDist = d;
+          nearest = { ...ent, distance: d };
+        }
+      }
+      return nearest;
+    }
+
+    // =========================================================================
+    // 9. Camera Controls & Floating 3D Overlays
+    // =========================================================================
+    function updateCamera() {
+      if (currentCameraMode === 'overview') {
+        // High isometric corridor overview
+        renderer.cameraCenter = [-5, 0, -22];
+        renderer.cameraEye = [-5, 46, 38];
+        renderer.cameraUp = [0, 1, 0];
+        cameraIndicatorEl.textContent = 'Camera: Gómez Morín Corridor Overview';
+      } else if (currentCameraMode === 'follow-player') {
+        renderer.cameraCenter = [playerPos.x, playerPos.y + 1.6, playerPos.z];
+        renderer.cameraEye = [playerPos.x, playerPos.y + 4.8, playerPos.z + 11.0];
+        renderer.cameraUp = [0, 1, 0];
+        cameraIndicatorEl.textContent = 'Camera: Follow Player';
+      } else if (currentCameraMode === 'follow-elena') {
+        renderer.cameraCenter = [elenaPos.x, elenaPos.y + 1.5, elenaPos.z];
+        renderer.cameraEye = [elenaPos.x, elenaPos.y + 4.5, elenaPos.z + 10.0];
+        renderer.cameraUp = [0, 1, 0];
+        cameraIndicatorEl.textContent = 'Camera: Follow Elena (NPC)';
+      } else if (currentCameraMode === 'street-level') {
+        renderer.cameraCenter = [playerPos.x, playerPos.y + 1.6, playerPos.z - 10.0];
+        renderer.cameraEye = [playerPos.x, playerPos.y + 1.7, playerPos.z + 1.0];
+        renderer.cameraUp = [0, 1, 0];
+        cameraIndicatorEl.textContent = 'Camera: Street-Level Eye';
+      } else if (currentCameraMode === 'tialupe-corner') {
+        renderer.cameraCenter = [-31, 3, -18.5];
+        renderer.cameraEye = [-20, 14, -2];
+        renderer.cameraUp = [0, 1, 0];
+        cameraIndicatorEl.textContent = 'Camera: Tía Lupe / Del Porvenir Corner';
+      } else if (currentCameraMode === 'tialupe-interior') {
+        renderer.cameraCenter = [-31.0, 1.5, -18.25];
+        renderer.cameraEye = [-31.0, 9.0, -8.0];
+        renderer.cameraUp = [0, 1, 0];
+        cameraIndicatorEl.textContent = 'Camera: Tía Lupe Interior View';
+      } else if (currentCameraMode === 'wingspot-interior') {
+        renderer.cameraCenter = [-45.0, 1.5, -18.25];
+        renderer.cameraEye = [-45.0, 9.0, -8.0];
+        renderer.cameraUp = [0, 1, 0];
+        cameraIndicatorEl.textContent = 'Camera: Wing Spot Interior View';
+      }
+    }
+
+    function updateFloatingTags() {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      const vp = renderer.viewProjMatrix;
+
+      const tagAnchors = [
+        { el: labels.gomez, pos: { x: 0, y: 1.0, z: 0 } },
+        { el: labels.porvenir, pos: { x: -20, y: 1.0, z: -25 } },
+        { el: labels.tialupe, pos: { x: -31, y: 9.0, z: -18.5 } },
+        { el: labels.wingspot, pos: { x: -45, y: 9.0, z: -18.5 } },
+        { el: labels.residence, pos: { x: -32.5, y: 8.8, z: -36 } },
+        { el: labels.dollar2go, pos: { x: -2, y: 6.8, z: -20 } },
+        { el: labels.hbc, pos: { x: 18, y: 8.8, z: -19 } },
+        { el: labels.catzoo, pos: { x: 18, y: 7.8, z: -36 } },
+        { el: labels.arboleda, pos: { x: 50, y: 13.0, z: -25 } },
+        { el: labels.player, pos: { x: playerPos.x, y: playerPos.y + 2.2, z: playerPos.z } },
+        { el: labels.npc, pos: { x: elenaPos.x, y: elenaPos.y + 2.2, z: elenaPos.z } },
+      ];
+
+      for (const item of tagAnchors) {
+        if (!item.el) continue;
+        const screenPos = projectToScreen(item.pos, vp, w, h);
+        if (screenPos) {
+          item.el.style.display = 'block';
+          item.el.style.left = `${screenPos.x}px`;
+          item.el.style.top = `${screenPos.y}px`;
+        } else {
+          item.el.style.display = 'none';
+        }
+      }
+    }
+
+    // =========================================================================
+    // 10. Traversal Stepping & Multi-Waypoint Commute Logic
+    // =========================================================================
+    function stepTraversal(deltaMs) {
+      if (!activeTraversal || activeTraversal.isArrived) return;
+
+      activeTraversal.elapsedMs += deltaMs;
+      activeTraversal.progress = Math.min(1.0, activeTraversal.elapsedMs / activeTraversal.totalDurationMs);
+
+      // Multi-waypoint polyline interpolation
+      const waypoints = activeTraversal.waypoints;
+      const targetDist = activeTraversal.progress * activeTraversal.totalDistance;
+
+      let accumulated = 0;
+      let currPos = { ...waypoints[0] };
+
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        const p1 = waypoints[i];
+        const p2 = waypoints[i + 1];
+        const segDist = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+
+        if (accumulated + segDist >= targetDist || i === waypoints.length - 2) {
+          const segProgress = segDist > 0 ? (targetDist - accumulated) / segDist : 1;
+          const clamped = Math.max(0, Math.min(1, segProgress));
+          currPos.x = p1.x + (p2.x - p1.x) * clamped;
+          currPos.y = p1.y + (p2.y - p1.y) * clamped;
+          currPos.z = p1.z + (p2.z - p1.z) * clamped;
+          break;
+        }
+        accumulated += segDist;
+      }
+
+      elenaPos.x = currPos.x;
+      elenaPos.y = currPos.y;
+      elenaPos.z = currPos.z;
+
+      const npcNode = scene.getNode('node:npc');
+      if (npcNode) {
+        npcNode.transform.position.x = elenaPos.x;
+        npcNode.transform.position.y = elenaPos.y + Math.abs(Math.sin(activeTraversal.progress * 30)) * 0.08;
+        npcNode.transform.position.z = elenaPos.z;
+      }
+
+      if (activeTraversal.progress >= 1.0) {
+        activeTraversal.isArrived = true;
+        if (isAutonomousLoopRunning) {
+          commitAuthoritativeArrival();
+        }
+      }
+
+      updateHudAndInteractions();
+    }
+
+    function triggerElenaCommute() {
+      if (activeTraversal || elenaLocationId === 'restaurant:wing-spot') return;
+
+      const waypoints = ELENA_NAV_ROUTE;
+      let totalDist = 0;
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        totalDist += Math.hypot(waypoints[i + 1].x - waypoints[i].x, waypoints[i + 1].z - waypoints[i].z);
+      }
+
+      activeTraversal = {
+        requestId: `nav-req:agent:elena-npc:wing-spot:${Date.now()}`,
+        agentId: 'agent:elena-npc',
+        originPlaceId: 'building:del-porvenir-residence',
+        destinationPlaceId: 'restaurant:wing-spot',
+        waypoints,
+        totalDistance: totalDist,
+        totalDurationMs: 6500, // 6.5 seconds smooth pedestrian commute
+        elapsedMs: 0,
+        progress: 0,
+        isArrived: false,
+      };
+
+      updateHudAndInteractions();
+    }
+
+    function commitAuthoritativeArrival() {
+      if (!activeTraversal || !activeTraversal.isArrived) return;
+
+      activeTraversal = null;
+      isAutonomousLoopRunning = false;
+
+      // Authoritative State Transition committed via M69
+      elenaLocationId = 'restaurant:wing-spot';
+      elenaPos = { x: -45.0, y: 1.0, z: -15.0 };
+      const npcNode = scene.getNode('node:npc');
+      if (npcNode) {
+        npcNode.transform.position.x = elenaPos.x;
+        npcNode.transform.position.y = elenaPos.y;
+        npcNode.transform.position.z = elenaPos.z;
+      }
+      updateHudAndInteractions();
+    }
+
+    // =========================================================================
+    // 11. Player Movement & Walkable Boundary Enforcement
+    // =========================================================================
+    let warningTimeout = null;
+    function showSurfaceWarning(msg, durationMs = 2200) {
+      surfaceWarningEl.textContent = msg;
+      surfaceWarningEl.classList.add('visible');
+      clearTimeout(warningTimeout);
+      warningTimeout = setTimeout(() => {
+        surfaceWarningEl.classList.remove('visible');
+      }, durationMs);
+    }
+
+    function movePlayer(dx, dz) {
+      const targetX = playerPos.x + dx;
+      const targetZ = playerPos.z + dz;
+
+      const activeInterior = INTERIORS.find(i => i.associatedPlaceId === playerLocationId);
+      if (activeInterior) {
+        // Interior Walkable Boundary Enforcement (Milestones 82 & 83)
+        const insideX = targetX >= activeInterior.bounds.minX && targetX <= activeInterior.bounds.maxX;
+        const insideZ = targetZ >= activeInterior.bounds.minZ && targetZ <= activeInterior.bounds.maxZ;
+        if (!insideX || !insideZ) {
+          showSurfaceWarning(`NON-WALKABLE: Blocked by ${activeInterior.name} Interior Wall`);
+          pCoordsEl.className = 'hud-val blocked';
+          setTimeout(() => pCoordsEl.className = 'hud-val', 800);
+          return;
+        }
+      } else {
+        // 1. Boundary & Collision Check: Footprint collision check
+        if (isInsideBuildingFootprint(targetX, targetZ)) {
+          showSurfaceWarning('NON-WALKABLE: Blocked by Building Footprint');
+          pCoordsEl.className = 'hud-val blocked';
+          setTimeout(() => pCoordsEl.className = 'hud-val', 800);
+          return;
+        }
+
+        // 2. Pedestrian Walkable Surface Enforcement
+        if (!isPedestrianWalkable(targetX, targetZ)) {
+          showSurfaceWarning('NON-WALKABLE ROADWAY: Must cross at designated crosswalk');
+          pCoordsEl.className = 'hud-val blocked';
+          setTimeout(() => pCoordsEl.className = 'hud-val', 800);
+          return;
+        }
+      }
+
+      // Permitted movement
+      playerPos.x = targetX;
+      playerPos.z = targetZ;
+
+      const pNode = scene.getNode('node:player');
+      if (pNode) {
+        pNode.transform.position.x = playerPos.x;
+        pNode.transform.position.z = playerPos.z;
+      }
+
+      isPlayerWalking = true;
+      clearTimeout(window.__walkTimer);
+      window.__walkTimer = setTimeout(() => {
+        isPlayerWalking = false;
+        if (pNode) pNode.transform.position.y = 1.0;
+      }, 150);
+
+      updateHudAndInteractions();
+    }
+
+    // =========================================================================
+    // Milestone 89: Authoritative Client Command & Hydration Layer
+    // =========================================================================
+    async function executeAuthoritativeCommand(commandName, payload = {}) {
+      try {
+        const response = await fetch(`/api/commands/${encodeURIComponent(commandName)}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json().catch(() => null);
+        return {
+          status: response.status,
+          ok: response.ok,
+          success: Boolean(data?.success),
+          committed: Boolean(data?.committed),
+          result: data?.result,
+          error: data?.error,
+        };
+      } catch (err) {
+        return {
+          status: 0,
+          ok: false,
+          success: false,
+          committed: false,
+          error: {
+            code: 'network-error',
+            message: err instanceof Error ? err.message : 'Network connection failed',
+          },
+        };
+      }
+    }
+
+    async function hydrateAuthoritativeState() {
+      try {
+        const [statusRes, locRes] = await Promise.all([
+          fetch('/api/status').then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch('/api/location').then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+
+        if (statusRes && statusRes.success && statusRes.result) {
+          if (statusRes.result.worldTime) {
+            worldTime = new Date(statusRes.result.worldTime);
+            const hrsUTC = worldTime.getUTCHours();
+            isRestaurantOpen = hrsUTC >= 15 && hrsUTC < 23;
+            const restNode = scene.getNode('node:restaurant:wing-spot');
+            if (restNode) {
+              restNode.color = isRestaurantOpen ? [0.22, 0.62, 0.38] : [0.65, 0.25, 0.22];
+            }
+          }
+        }
+
+        // Format player-facing clock representation as Ciudad Juárez civil time (America/Ciudad_Juarez)
+        let displayCivilTime = '';
+        if (locRes && locRes.success && locRes.result && locRes.result.temporalContext && locRes.result.temporalContext.civilTime) {
+          const ct = locRes.result.temporalContext.civilTime;
+          const h24 = ct.hour;
+          const min = String(ct.minute).padStart(2, '0');
+          const sec = String(ct.second).padStart(2, '0');
+          const ampm = h24 >= 12 ? 'PM' : 'AM';
+          const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+          displayCivilTime = `${h12}:${min}:${sec} ${ampm}`;
+        } else if (statusRes && statusRes.success && statusRes.result && statusRes.result.worldTime) {
+          displayCivilTime = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Ciudad_Juarez',
+            hour: 'numeric',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+          }).format(new Date(statusRes.result.worldTime));
+        }
+
+        const clockDisplay = document.getElementById('clock-display');
+        if (clockDisplay && displayCivilTime) {
+          clockDisplay.textContent = `${displayCivilTime} [AUTH]`;
+        }
+
+        if (locRes && locRes.success && locRes.result) {
+          const authLocId = locRes.result.location?.id || locRes.result.locationId;
+          if (authLocId) {
+            playerLocationId = authLocId;
+
+            const matchedInterior = INTERIORS.find(i => i.associatedPlaceId === authLocId);
+            if (matchedInterior) {
+              // Player is authoritatively inside an interior (e.g. Wing Spot, Tía Lupe)
+              playerPos.x = matchedInterior.interiorSpawn.x;
+              playerPos.y = matchedInterior.interiorSpawn.y;
+              playerPos.z = matchedInterior.interiorSpawn.z;
+
+              const pNode = scene.getNode('node:player');
+              if (pNode) {
+                pNode.transform.position.x = playerPos.x;
+                pNode.transform.position.y = playerPos.y;
+                pNode.transform.position.z = playerPos.z;
+              }
+
+              if (authLocId === 'restaurant:wing-spot') {
+                setCameraMode('wingspot-interior');
+              } else if (authLocId === 'restaurant:pasteleria-tia-lupe') {
+                setCameraMode('tialupe-interior');
+              }
+            } else {
+              // Player is authoritatively outside on street/sidewalk
+              // If player visual coordinates are stuck inside an interior or building footprint, reconcile to sidewalk
+              const insideAnyInterior = INTERIORS.some(i =>
+                playerPos.x >= i.bounds.minX && playerPos.x <= i.bounds.maxX &&
+                playerPos.z >= i.bounds.minZ && playerPos.z <= i.bounds.maxZ
+              );
+              if (insideAnyInterior || isInsideBuildingFootprint(playerPos.x, playerPos.z)) {
+                playerPos.x = -24.0;
+                playerPos.y = 1.0;
+                playerPos.z = -11.0;
+              }
+              const pNode = scene.getNode('node:player');
+              if (pNode) {
+                pNode.transform.position.x = playerPos.x;
+                pNode.transform.position.y = playerPos.y;
+                pNode.transform.position.z = playerPos.z;
+              }
+              setCameraMode('overview');
+            }
+          }
+
+          // Milestone 90 & 91: Authoritative Attendant Reconciliation
+          const attendant = locRes.result.location?.attendant;
+          currentAttendantData = attendant || null;
+          if (attendant) {
+            elenaLocationId = attendant.locationId;
+            const npcNode = scene.getNode('node:npc');
+            if (attendant.isPresent && attendant.interiorSpaceId === 'interior:wing-spot') {
+              // Attendant authoritatively present inside Wing Spot counter
+              elenaPos.x = -45.0;
+              elenaPos.y = 1.0;
+              elenaPos.z = -15.0;
+              if (npcNode) {
+                npcNode.transform.position.x = elenaPos.x;
+                npcNode.transform.position.y = elenaPos.y;
+                npcNode.transform.position.z = elenaPos.z;
+              }
+            } else if (attendant.locationId === 'building:del-porvenir-residence') {
+              elenaPos.x = -26.5;
+              elenaPos.y = 1.0;
+              elenaPos.z = -36.0;
+              if (npcNode) {
+                npcNode.transform.position.x = elenaPos.x;
+                npcNode.transform.position.y = elenaPos.y;
+                npcNode.transform.position.z = elenaPos.z;
+              }
+            }
+          } else {
+            currentAttendantData = null;
+          }
+        }
+      } catch (err) {
+        showSurfaceWarning('HYDRATION ERROR: Could not sync with World Core', 3000);
+      } finally {
+        updateHudAndInteractions();
+      }
+    }
+
+    // =========================================================================
+    // 12. Main Render Loop
+    // =========================================================================
+    buildCorridorScene();
+    updateHudAndInteractions();
+    hydrateAuthoritativeState();
+
+    let lastTime = performance.now();
+    function renderLoop(now) {
+      const dt = Math.min(100, now - lastTime);
+      lastTime = now;
+
+      if (isPlayerWalking) {
+        walkBobTimer += dt * 0.012;
+        const bob = Math.sin(walkBobTimer) * 0.08;
+        const pNode = scene.getNode('node:player');
+        if (pNode) pNode.transform.position.y = 1.0 + Math.abs(bob);
+      }
+
+      if (isAutonomousLoopRunning && activeTraversal && !activeTraversal.isArrived) {
+        stepTraversal(dt);
+      }
+
+      updateCamera();
+      renderer.render(scene);
+      updateFloatingTags();
+
+      requestAnimationFrame(renderLoop);
+    }
+    requestAnimationFrame(renderLoop);
+
+    // =========================================================================
+    // 13. Interactive Event Handlers
+    // =========================================================================
+
+    // Keyboard (WASD + Arrows + E)
+    window.addEventListener('keydown', (e) => {
+      const speed = 0.85;
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        movePlayer(-speed, 0);
+      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        movePlayer(speed, 0);
+      } else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        movePlayer(0, -speed);
+      } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        movePlayer(0, speed);
+      } else if (e.key === 'e' || e.key === 'E' || e.key === ' ') {
+        executeProximityAction();
+      }
+    });
+
+    // D-Pad
+    document.getElementById('btn-walk-w').addEventListener('click', () => movePlayer(-1.2, 0));
+    document.getElementById('btn-walk-e').addEventListener('click', () => movePlayer(1.2, 0));
+    document.getElementById('btn-walk-n').addEventListener('click', () => movePlayer(0, -1.2));
+    document.getElementById('btn-walk-s').addEventListener('click', () => movePlayer(0, 1.2));
+
+    // Spawn / Teleport Handlers (Authoritative State Synchronization)
+    async function spawnOutdoor(pos, locId) {
+      if (isCommandInFlight) return;
+      if (playerLocationId && playerLocationId.startsWith('restaurant:')) {
+        isCommandInFlight = true;
+        try {
+          await executeAuthoritativeCommand('exitRestaurant', { restaurantId: playerLocationId });
+        } catch {
+          // Fall through to restore outdoor coordinates
+        } finally {
+          isCommandInFlight = false;
+        }
+      }
+      playerPos = { ...pos };
+      playerLocationId = locId;
+      const pNode = scene.getNode('node:player');
+      if (pNode) pNode.transform.position = { ...playerPos };
+      setCameraMode('overview');
+      updateHudAndInteractions();
+    }
+
+    async function spawnInterior(restaurantId, spawnPos, camMode, venueName) {
+      if (isCommandInFlight) return;
+      if (playerLocationId === restaurantId) {
+        playerPos = { ...spawnPos };
+        const pNode = scene.getNode('node:player');
+        if (pNode) pNode.transform.position = { ...playerPos };
+        setCameraMode(camMode);
+        updateHudAndInteractions();
+        return;
+      }
+
+      isCommandInFlight = true;
+      try {
+        if (playerLocationId && playerLocationId.startsWith('restaurant:')) {
+          await executeAuthoritativeCommand('exitRestaurant', { restaurantId: playerLocationId });
+        }
+
+        const resp = await executeAuthoritativeCommand('enterRestaurant', {
+          restaurantId,
+        });
+
+        if (resp.success && resp.result && resp.result.code === 'success') {
+          playerLocationId = resp.result.newLocationId;
+          playerPos = { ...spawnPos };
+          const pNode = scene.getNode('node:player');
+          if (pNode) pNode.transform.position = { ...playerPos };
+          setCameraMode(camMode);
+          showSurfaceWarning(`ENTERED: ${venueName} [AUTH]`, 2000);
+        } else {
+          const errCode = resp.error?.code || resp.result?.code || 'ingress-rejected';
+          const errMsg = resp.error?.message || resp.result?.message || 'Ingress rejected by World Core';
+          showSurfaceWarning(`INGRESS FAILED [${errCode}]: ${errMsg}`, 3000);
+        }
+      } catch (err) {
+        showSurfaceWarning(`SERVER ERROR: ${err instanceof Error ? err.message : 'Network error'}`, 3000);
+      } finally {
+        isCommandInFlight = false;
+        updateHudAndInteractions();
+      }
+    }
+
+    document.getElementById('btn-spawn-sidewalk').addEventListener('click', () => {
+      spawnOutdoor({ x: -24.0, y: 1.0, z: -11.0 }, 'street:blvd-gomez-morin');
+    });
+    document.getElementById('btn-spawn-residence').addEventListener('click', () => {
+      spawnOutdoor({ x: -26.5, y: 1.0, z: -36.0 }, 'street:calle-del-porvenir');
+    });
+    document.getElementById('btn-spawn-dollar2go').addEventListener('click', () => {
+      spawnOutdoor({ x: -2.0, y: 1.0, z: -14.3 }, 'street:blvd-gomez-morin');
+    });
+    document.getElementById('btn-spawn-crosswalk').addEventListener('click', () => {
+      spawnOutdoor({ x: -20.0, y: 1.0, z: -11.0 }, 'street:blvd-gomez-morin');
+    });
+    document.getElementById('btn-spawn-tialupe-interior').addEventListener('click', () => {
+      spawnInterior(
+        'restaurant:pasteleria-tia-lupe',
+        { x: -30.0, y: 1.0, z: -16.0 },
+        'tialupe-interior',
+        'Pastelerías La Tía Lupe'
+      );
+    });
+    document.getElementById('btn-spawn-wingspot-interior').addEventListener('click', () => {
+      spawnInterior(
+        'restaurant:wing-spot',
+        { x: -45.0, y: 1.0, z: -16.0 },
+        'wingspot-interior',
+        'Wing Spot Gómez Morín'
+      );
+    });
+
+    // Proximity Interaction (Milestone 89 Authoritative Vertical Slice)
+    async function executeProximityAction() {
+      if (!currentProximityAction || isCommandInFlight) return;
+
+      const action = currentProximityAction;
+      const interactBtn = document.getElementById('btn-interact-action');
+
+      if (action.type === 'enter') {
+        if (action.commandName === 'enterRestaurant') {
+          isCommandInFlight = true;
+          if (interactBtn) {
+            interactBtn.disabled = true;
+            interactBtn.textContent = `[E] Contacting World Core...`;
+          }
+          try {
+            const resp = await executeAuthoritativeCommand('enterRestaurant', {
+              restaurantId: action.targetLocationId,
+            });
+
+            if (resp.success && resp.result && resp.result.code === 'success') {
+              const newLocationId = resp.result.newLocationId;
+              const interiorId = resp.result.interiorId;
+              playerLocationId = newLocationId;
+
+              const matchedInterior = INTERIORS.find(
+                (i) => i.associatedPlaceId === newLocationId || i.id === interiorId
+              );
+              if (matchedInterior && matchedInterior.interiorSpawn) {
+                playerPos.x = matchedInterior.interiorSpawn.x;
+                playerPos.y = matchedInterior.interiorSpawn.y;
+                playerPos.z = matchedInterior.interiorSpawn.z;
+              } else if (action.enterPos) {
+                playerPos.x = action.enterPos.x;
+                playerPos.y = action.enterPos.y;
+                playerPos.z = action.enterPos.z;
+              }
+
+              const pNode = scene.getNode('node:player');
+              if (pNode) {
+                pNode.transform.position.x = playerPos.x;
+                pNode.transform.position.y = playerPos.y;
+                pNode.transform.position.z = playerPos.z;
+              }
+
+              if (newLocationId === 'restaurant:wing-spot') {
+                setCameraMode('wingspot-interior');
+              } else if (newLocationId === 'restaurant:pasteleria-tia-lupe') {
+                setCameraMode('tialupe-interior');
+              }
+              await hydrateAuthoritativeState();
+            } else {
+              const errCode = resp.error?.code || resp.result?.code || 'ingress-rejected';
+              const errMsg = resp.error?.message || resp.result?.message || 'Ingress rejected by World Core';
+              showSurfaceWarning(`INGRESS FAILED [${errCode}]: ${errMsg}`, 3000);
+            }
+          } catch (err) {
+            showSurfaceWarning(`SERVER ERROR: ${err instanceof Error ? err.message : 'Network error'}`, 3000);
+          } finally {
+            isCommandInFlight = false;
+            updateHudAndInteractions();
+          }
+          return;
+        }
+
+        // Developer blockout fallback for non-restaurant buildings
+        playerLocationId = action.targetLocationId;
+        if (action.enterPos) {
+          playerPos.x = action.enterPos.x;
+          playerPos.y = action.enterPos.y;
+          playerPos.z = action.enterPos.z;
+          const pNode = scene.getNode('node:player');
+          if (pNode) {
+            pNode.transform.position.x = playerPos.x;
+            pNode.transform.position.y = playerPos.y;
+            pNode.transform.position.z = playerPos.z;
+          }
+        }
+        updateHudAndInteractions();
+        return;
+      }
+
+      if (action.type === 'request-service') {
+        isCommandInFlight = true;
+        if (interactBtn) {
+          interactBtn.disabled = true;
+          interactBtn.textContent = `[E] Requesting Service...`;
+        }
+        try {
+          const resp = await executeAuthoritativeCommand('requestRestaurantService', {
+            restaurantId: action.restaurantId,
+          });
+
+          if (resp.success && resp.result && resp.result.code === 'success') {
+            showSurfaceWarning(`SERVICE ACCEPTED: Elena Morales is attending you [AUTH]`, 3000);
+            await hydrateAuthoritativeState();
+          } else {
+            const errCode = resp.error?.code || resp.result?.code || 'service-rejected';
+            const errMsg = resp.error?.message || resp.result?.message || 'Service request rejected by World Core';
+            showSurfaceWarning(`SERVICE REJECTED [${errCode}]: ${errMsg}`, 3000);
+          }
+        } catch (err) {
+          showSurfaceWarning(`SERVER ERROR: ${err instanceof Error ? err.message : 'Network error'}`, 3000);
+        } finally {
+          isCommandInFlight = false;
+          updateHudAndInteractions();
+        }
+        return;
+      }
+
+      if (action.type === 'exit') {
+        const activeInterior = INTERIORS.find((i) => i.associatedPlaceId === playerLocationId);
+        if (activeInterior && activeInterior.associatedPlaceId.startsWith('restaurant:')) {
+          isCommandInFlight = true;
+          if (interactBtn) {
+            interactBtn.disabled = true;
+            interactBtn.textContent = `[E] Contacting World Core...`;
+          }
+          try {
+            const resp = await executeAuthoritativeCommand('exitRestaurant', {
+              restaurantId: activeInterior.associatedPlaceId,
+            });
+
+            if (resp.success && resp.result && resp.result.code === 'success') {
+              const newLocationId = resp.result.newLocationId;
+              playerLocationId = newLocationId;
+
+              playerPos.x = action.exitPos.x;
+              playerPos.y = action.exitPos.y;
+              playerPos.z = action.exitPos.z;
+
+              const pNode = scene.getNode('node:player');
+              if (pNode) {
+                pNode.transform.position.x = playerPos.x;
+                pNode.transform.position.y = playerPos.y;
+                pNode.transform.position.z = playerPos.z;
+              }
+
+              setCameraMode('overview');
+              await hydrateAuthoritativeState();
+            } else {
+              const errCode = resp.error?.code || resp.result?.code || 'egress-rejected';
+              const errMsg = resp.error?.message || resp.result?.message || 'Egress rejected by World Core';
+
+              // Authoritative Self-Healing Reconciliation:
+              // If World Core rejects egress because the player is not actually inside the interior,
+              // reconcile with World Core authority rather than trapping the player inside the 3D room.
+              if (errCode === 'not-inside-interior' || errCode === 'not-inside-restaurant') {
+                showSurfaceWarning(`RECONCILED [${errCode}]: Not inside in World Core. Restored to street.`, 4000);
+                playerLocationId = 'street:blvd-gomez-morin';
+                if (action.exitPos) {
+                  playerPos.x = action.exitPos.x;
+                  playerPos.y = action.exitPos.y;
+                  playerPos.z = action.exitPos.z;
+                } else {
+                  playerPos.x = -24.0;
+                  playerPos.y = 1.0;
+                  playerPos.z = -11.0;
+                }
+                const pNode = scene.getNode('node:player');
+                if (pNode) {
+                  pNode.transform.position.x = playerPos.x;
+                  pNode.transform.position.y = playerPos.y;
+                  pNode.transform.position.z = playerPos.z;
+                }
+                setCameraMode('overview');
+              } else {
+                showSurfaceWarning(`EGRESS FAILED [${errCode}]: ${errMsg}`, 3000);
+              }
+            }
+          } catch (err) {
+            showSurfaceWarning(`SERVER ERROR: ${err instanceof Error ? err.message : 'Network error'}`, 3000);
+          } finally {
+            isCommandInFlight = false;
+            updateHudAndInteractions();
+          }
+          return;
+        }
+
+        // Developer blockout fallback for non-restaurant interior
+        playerLocationId = action.targetLocationId;
+        playerPos.x = action.exitPos.x;
+        playerPos.y = action.exitPos.y;
+        playerPos.z = action.exitPos.z;
+        const pNode = scene.getNode('node:player');
+        if (pNode) {
+          pNode.transform.position.x = playerPos.x;
+          pNode.transform.position.y = playerPos.y;
+          pNode.transform.position.z = playerPos.z;
+        }
+        updateHudAndInteractions();
+      }
+    }
+    document.getElementById('btn-interact-action').addEventListener('click', executeProximityAction);
+    promptEl.addEventListener('click', executeProximityAction);
+
+    // Elena Controls
+    document.getElementById('btn-run-autonomous-loop').addEventListener('click', () => {
+      if (elenaLocationId === 'restaurant:wing-spot') {
+        elenaLocationId = 'building:del-porvenir-residence';
+        elenaPos = { x: -26.5, y: 1.0, z: -36.0 };
+        const npcNode = scene.getNode('node:npc');
+        if (npcNode) npcNode.transform.position = { ...elenaPos };
+      }
+      isAutonomousLoopRunning = true;
+      triggerElenaCommute();
+    });
+    document.getElementById('btn-step-500').addEventListener('click', () => {
+      if (!activeTraversal) triggerElenaCommute();
+      stepTraversal(500);
+    });
+    document.getElementById('btn-step-arrival').addEventListener('click', () => {
+      if (!activeTraversal) triggerElenaCommute();
+      activeTraversal.progress = 1.0;
+      activeTraversal.elapsedMs = activeTraversal.totalDurationMs;
+      activeTraversal.isArrived = true;
+      const lastWp = ELENA_NAV_ROUTE[ELENA_NAV_ROUTE.length - 1];
+      elenaPos = { x: lastWp.x, y: lastWp.y, z: lastWp.z };
+      const npcNode = scene.getNode('node:npc');
+      if (npcNode) npcNode.transform.position = { ...elenaPos };
+      updateHudAndInteractions();
+    });
+    document.getElementById('btn-commit-arrival').addEventListener('click', () => {
+      if (!activeTraversal || !activeTraversal.isArrived) {
+        alert('Elena has not arrived at Wing Spot entrance threshold yet. Click "Step to Arrival" first.');
+        return;
+      }
+      commitAuthoritativeArrival();
+    });
+
+    // Camera Mode Selectors
+    const camButtons = {
+      'overview': document.getElementById('cam-overview'),
+      'follow-player': document.getElementById('cam-follow-player'),
+      'follow-elena': document.getElementById('cam-follow-elena'),
+      'tialupe-interior': document.getElementById('cam-tialupe-interior'),
+      'wingspot-interior': document.getElementById('cam-wingspot-interior'),
+      'street-level': document.getElementById('cam-street-level'),
+      'tialupe-corner': document.getElementById('cam-tialupe-corner'),
+    };
+    function setCameraMode(mode) {
+      currentCameraMode = mode;
+      for (const [m, btn] of Object.entries(camButtons)) {
+        if (m === mode) btn.classList.add('active-mode');
+        else btn.classList.remove('active-mode');
+      }
+      updateCamera();
+    }
+    for (const [m, btn] of Object.entries(camButtons)) {
+      btn.addEventListener('click', () => setCameraMode(m));
+    }
+
+    // World Time Controls
+    function advanceTime(ms) {
+      worldTime = new Date(worldTime.getTime() + ms);
+      const hrsUTC = worldTime.getUTCHours();
+      isRestaurantOpen = hrsUTC >= 15 && hrsUTC < 23;
+      const restNode = scene.getNode('node:restaurant:wing-spot');
+      if (restNode) {
+        restNode.color = isRestaurantOpen ? [0.22, 0.62, 0.38] : [0.65, 0.25, 0.22];
+      }
+      updateHudAndInteractions();
+    }
+    document.getElementById('btn-time-1m').addEventListener('click', () => advanceTime(60000));
+    document.getElementById('btn-time-10m').addEventListener('click', () => advanceTime(600000));
+    document.getElementById('btn-time-1h').addEventListener('click', () => advanceTime(3600000));
+
+    // Reset
+    document.getElementById('btn-reset-blockout').addEventListener('click', () => {
+      activeTraversal = null;
+      isAutonomousLoopRunning = false;
+      playerLocationId = 'street:blvd-gomez-morin';
+      elenaLocationId = 'building:del-porvenir-residence';
+      playerPos = { x: -24.0, y: 1.0, z: -11.0 };
+      elenaPos = { x: -26.5, y: 1.0, z: -36.0 };
+      worldTime = new Date('2026-09-14T14:35:00.000Z');
+      buildCorridorScene();
+      setCameraMode('overview');
+      updateHudAndInteractions();
+      hydrateAuthoritativeState();
+    });
+  </script>
+</body>
+</html>

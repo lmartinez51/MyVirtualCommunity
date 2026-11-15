@@ -1,0 +1,55 @@
+﻿================================================================================
+  SHAUN BOBBLEHEAD PROTOTYPE — BUILD, PROPORTION & ANIMATION VERIFICATION LOG
+================================================================================
+Timestamp: 2026-10-23T10:03:14.3338213Z
+Reused existing AnimatorController at Assets/Development/AvatarPrototype/Animations/ShaunBobblehead_AnimatorController.controller with 10 states.
+
+[Derived Mesh] 'ShaunBobblehead_Mesh_100_Ref' (headScale=1.00x, includeBeard=False):
+  Removed Triangles: Backpack=1752, ForearmBandage=96, Beard=320
+  Active Triangles:  6286 across 11 semantic submeshes
+  Rest-Pose Height:  1.393m (Head: 0.488m | Body Feet-to-Neck: 0.905m)
+  Head-to-Total-Height Ratio: 35.0% (2.85 heads tall)
+  Head Width (Ear-to-Ear): 0.570m | Shoulder/UpperArm Span: 0.767m
+
+[Derived Mesh] 'ShaunBobblehead_Mesh_130_VarA' (headScale=1.30x, includeBeard=False):
+  Removed Triangles: Backpack=1752, ForearmBandage=96, Beard=320
+  Active Triangles:  6286 across 11 semantic submeshes
+  Rest-Pose Height:  1.549m (Head: 0.645m | Body Feet-to-Neck: 0.905m)
+  Head-to-Total-Height Ratio: 41.6% (2.40 heads tall)
+  Head Width (Ear-to-Ear): 0.741m | Shoulder/UpperArm Span: 0.767m
+
+[Derived Mesh] 'ShaunBobblehead_Mesh_145_VarB' (headScale=1.45x, includeBeard=False):
+  Removed Triangles: Backpack=1752, ForearmBandage=96, Beard=320
+  Active Triangles:  6286 across 11 semantic submeshes
+  Rest-Pose Height:  1.628m (Head: 0.723m | Body Feet-to-Neck: 0.905m)
+  Head-to-Total-Height Ratio: 44.4% (2.25 heads tall)
+  Head Width (Ear-to-Ear): 0.826m | Shoulder/UpperArm Span: 0.767m
+
+[Derived Mesh] 'ShaunBobblehead_Mesh_160_VarC' (headScale=1.60x, includeBeard=False):
+  Removed Triangles: Backpack=1752, ForearmBandage=96, Beard=320
+  Active Triangles:  6286 across 11 semantic submeshes
+  Rest-Pose Height:  1.706m (Head: 0.801m | Body Feet-to-Neck: 0.905m)
+  Head-to-Total-Height Ratio: 47.0% (2.13 heads tall)
+  Head Width (Ear-to-Ear): 0.911m | Shoulder/UpperArm Span: 0.767m
+
+[Derived Mesh] 'ShaunBobblehead_Mesh_145_WithBeard' (headScale=1.45x, includeBeard=True):
+  Removed Triangles: Backpack=1752, ForearmBandage=96, Beard=0
+  Active Triangles:  6606 across 11 semantic submeshes
+  Rest-Pose Height:  1.628m (Head: 0.723m | Body Feet-to-Neck: 0.905m)
+  Head-to-Total-Height Ratio: 44.4% (2.25 heads tall)
+  Head Width (Ear-to-Ear): 0.826m | Shoulder/UpperArm Span: 0.767m
+Saved Prefab 'Assets/Development/AvatarPrototype/Prefabs/ShaunBobblehead_SourceRef_100.prefab' | Label='Source Ref (1.00x Head)' | SolesMinY=0.0001m | CrownMaxY=1.393m | TotalHeight=1.393m
+Saved Prefab 'Assets/Development/AvatarPrototype/Prefabs/ShaunBobblehead_VariantA_130.prefab' | Label='Variant A (1.30x Head)' | SolesMinY=0.0001m | CrownMaxY=1.550m | TotalHeight=1.549m
+Saved Prefab 'Assets/Development/AvatarPrototype/Prefabs/ShaunBobblehead_VariantB_145.prefab' | Label='Variant B (1.45x Head)' | SolesMinY=0.0001m | CrownMaxY=1.628m | TotalHeight=1.628m
+Saved Prefab 'Assets/Development/AvatarPrototype/Prefabs/ShaunBobblehead_VariantC_160.prefab' | Label='Variant C (1.60x Head)' | SolesMinY=0.0001m | CrownMaxY=1.706m | TotalHeight=1.706m
+Saved Prefab 'Assets/Development/AvatarPrototype/Prefabs/ShaunBobblehead_VariantB_145_Bearded.prefab' | Label='Variant B Bearded (1.45x)' | SolesMinY=0.0001m | CrownMaxY=1.628m | TotalHeight=1.628m
+Saved isolated prototype scene to Assets/Development/AvatarPrototype/Scenes/ShaunBobbleheadPrototypeScene.unity
+  [Animation Sample Verified] Clip='ShaunProto_Idle' at t=0.25s/1.00s | HeadPos=(1.212, 0.898, -0.071) | NeckToHeadDist=0.0637m
+  [Animation Sample Verified] Clip='ShaunProto_Walk' at t=0.00s/1.00s | HeadPos=(0.042, 0.952, -0.036) | NeckToHeadDist=0.0637m
+  [Animation Sample Verified] Clip='ShaunProto_Walk' at t=0.50s/1.00s | HeadPos=(-1.174, 0.970, -0.055) | NeckToHeadDist=0.0637m
+  [Animation Sample Verified] Clip='ShaunProto_Run' at t=0.11s/0.73s | HeadPos=(1.187, 0.923, 0.019) | NeckToHeadDist=0.0637m
+  [Animation Sample Verified] Clip='ShaunProto_Jump' at t=0.18s/0.37s | HeadPos=(0.015, 1.086, -0.039) | NeckToHeadDist=0.0637m
+  [Animation Sample Verified] Clip='ShaunProto_Wave' at t=0.75s/1.67s | HeadPos=(-1.072, 0.921, -0.105) | NeckToHeadDist=0.0637m
+  [Animation Sample Verified] Clip='ShaunProto_Yes' at t=0.58s/1.67s | HeadPos=(-1.149, 0.968, -0.114) | NeckToHeadDist=0.0637m
+  [Animation Sample Verified] Clip='ShaunProto_No' at t=0.58s/1.67s | HeadPos=(-1.149, 0.968, -0.114) | NeckToHeadDist=0.0637m
+  [Animation Sample Verified] Clip='ShaunProto_Duck' at t=0.83s/1.67s | HeadPos=(-1.177, 0.723, -0.010) | NeckToHeadDist=0.0637m

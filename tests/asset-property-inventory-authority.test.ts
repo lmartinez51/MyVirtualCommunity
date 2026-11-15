@@ -463,7 +463,7 @@ describe('Milestone 37: Asset, Property and Inventory Authority (AUD-03)', () =>
       const serialized = JSON.stringify(state);
       const loaded = JSON.parse(serialized) as WorldState;
       assert.ok(loaded);
-      assert.equal(loaded.version, 18);
+      assert.equal(loaded.version, 19);
 
       const restoredItem = getOwnedItem(loaded, itemId)!;
       assert.ok(restoredItem);

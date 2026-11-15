@@ -48,7 +48,7 @@ describe('Offline Simulation Reconstruction', () => {
       const persistenceB = new LocalFilePersistence(testFilePath);
       const stateB = persistenceB.load();
       assert.ok(stateB !== null);
-      assert.equal(stateB.version, 18);
+      assert.equal(stateB.version, 19);
       assert.equal(stateB.worldTime, '2026-09-14T16:00:00.000Z');
 
       // Verify exact reconstructed NPC presence and location from disk (at 10:00 local, active routine placed NPC at restaurant)
@@ -89,7 +89,7 @@ describe('Offline Simulation Reconstruction', () => {
       const persistenceC = new LocalFilePersistence(testFilePath);
       const stateC = persistenceC.load();
       assert.ok(stateC !== null);
-      assert.equal(stateC.version, 18);
+      assert.equal(stateC.version, 19);
       assert.equal(stateC.worldTime, '2026-09-15T00:00:00.000Z');
 
       const npcC = stateC.agents.find((a) => a.id === 'agent:dev-npc')!;

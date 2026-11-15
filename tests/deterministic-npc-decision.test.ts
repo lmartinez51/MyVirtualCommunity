@@ -305,7 +305,7 @@ describe('Milestone 46: Deterministic NPC Decision & Behavior', () => {
         const loaded = persistence2.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.equal(loaded.knowledge.length, 1);
         assert.equal(loaded.knowledge[0].source, 'npc-initiative');
         assert.equal(loaded.knowledge[0].agentId, player.id);

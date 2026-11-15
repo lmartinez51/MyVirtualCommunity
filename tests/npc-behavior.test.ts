@@ -386,9 +386,9 @@ describe('Milestone 61: NPC Behavioral State & Intent Foundation', () => {
   // =========================================================================
   describe('H. Schema Invariant & Zero Behavioral Persistence', () => {
     it('WorldState version remains strictly 18', () => {
-      assert.equal(CURRENT_WORLD_STATE_VERSION, 18);
+      assert.equal(CURRENT_WORLD_STATE_VERSION, 19);
       const { state } = setupWorld();
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
       assert.doesNotThrow(() => validateWorldState(state));
     });
 

@@ -33,11 +33,16 @@ import type { Agent } from './entities/agent.js';
 import type { Restaurant } from './entities/restaurant.js';
 import type { PurchaseRecord } from './world-state.js';
 import { getCanonicalAgentPair, type Acquaintance } from './entities/social.js';
+import { areAgentsCoLocated } from './co-presence.js';
 
 export const QUALIFYING_ITEM_OFFERING_IDS = [
   'offering:development-coffee',
   'offering:development-pastry',
   'offering:m39-demo-beverage',
+  'offering:boneless-wings',
+  'offering:traditional-wings',
+  'offering:seasoned-fries',
+  'offering:fountain-soda',
 ] as const;
 
 export type QualifyingItemOfferingId = (typeof QUALIFYING_ITEM_OFFERING_IDS)[number];
@@ -283,7 +288,7 @@ export function transferItemPossession(
   }
 
   // 4. Confirm sender and recipient are co-located
-  if (sender.locationId !== recipient.locationId) {
+  if (!areAgentsCoLocated(state, senderId, recipientId)) {
     return {
       success: false,
       code: 'agents-not-co-located',

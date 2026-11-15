@@ -571,7 +571,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
         const loadedState = await persistence.load();
         assert.ok(loadedState !== null);
         assert.equal(loadedState.version, CURRENT_WORLD_STATE_VERSION);
-        assert.equal(loadedState.version, 18);
+        assert.equal(loadedState.version, 19);
         assert.doesNotThrow(() => validateWorldState(loadedState));
 
         const loadedNpc = loadedState.agents.find((a) => a.id === 'agent:dev-npc')!;
@@ -601,7 +601,7 @@ describe('Milestone 22: Multi-Phase Deterministic NPC Neighborhood Routine & Con
 
         const loadedState = await persistence.load();
         assert.ok(loadedState !== null);
-        assert.equal(loadedState.version, 18);
+        assert.equal(loadedState.version, 19);
         assert.doesNotThrow(() => validateWorldState(loadedState));
 
         const loadedNpc = loadedState.agents.find((a) => a.id === 'agent:dev-npc')!;

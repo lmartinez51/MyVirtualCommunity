@@ -523,7 +523,7 @@ describe('Milestone 56: Property & Assignment Foundation', () => {
         // Reconstruct from disk in fresh session
         const restored = persistence.load();
         assert.ok(restored);
-        assert.equal(restored.version, 18);
+        assert.equal(restored.version, 19);
         assert.equal(restored.properties.length, 3);
         assert.doesNotThrow(() => validateWorldState(restored));
 

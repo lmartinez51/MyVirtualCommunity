@@ -20,7 +20,14 @@ import {
   WorldStateV17,
   validateWorldStateV17,
   migrateWorldStateV17ToV18,
+  WorldStateV18,
+  validateWorldStateV18,
+  migrateWorldStateV18ToV19,
 } from '../core/world-state.js';
+import {
+  validateWorldSpatialTopology,
+  GomezMorinSpatialTopology,
+} from '../core/real-world-street-topology.js';
 
 export const DEFAULT_PERSISTENCE_PATH = resolve(process.cwd(), 'data', 'world-state.json');
 
@@ -32,9 +39,11 @@ export const DEFAULT_PERSISTENCE_PATH = resolve(process.cwd(), 'data', 'world-st
  */
 export class LocalFilePersistence {
   private readonly filePath: string;
+  private readonly topology?: GomezMorinSpatialTopology;
 
-  constructor(filePath: string = DEFAULT_PERSISTENCE_PATH) {
+  constructor(filePath: string = DEFAULT_PERSISTENCE_PATH, topology?: GomezMorinSpatialTopology) {
     this.filePath = resolve(filePath);
+    this.topology = topology;
   }
 
   /**
@@ -98,12 +107,14 @@ export class LocalFilePersistence {
       const v17 = migrateWorldStateV16ToV17(v16);
       validateWorldStateV17(v17);
       const v18 = migrateWorldStateV17ToV18(v17);
-      validateWorldState(v18);
-      this.save(v18);
-      return v18;
+      validateWorldStateV18(v18);
+      const v19 = migrateWorldStateV18ToV19(v18);
+      validateWorldState(v19);
+      this.save(v19);
+      return v19;
     }
 
-    // Schema Version 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 Migration Path
+    // Schema Version 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 Migration Path
     if (rawVersion === 12) {
       validateWorldStateV12(parsed);
       const v13 = migrateWorldStateV12ToV13(parsed);
@@ -117,12 +128,14 @@ export class LocalFilePersistence {
       const v17 = migrateWorldStateV16ToV17(v16);
       validateWorldStateV17(v17);
       const v18 = migrateWorldStateV17ToV18(v17);
-      validateWorldState(v18);
-      this.save(v18);
-      return v18;
+      validateWorldStateV18(v18);
+      const v19 = migrateWorldStateV18ToV19(v18);
+      validateWorldState(v19);
+      this.save(v19);
+      return v19;
     }
 
-    // Schema Version 13 -> 14 -> 15 -> 16 -> 17 -> 18 Migration Path
+    // Schema Version 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 Migration Path
     if (rawVersion === 13) {
       validateWorldStateV13(parsed);
       const v14 = migrateWorldStateV13ToV14(parsed);
@@ -134,12 +147,14 @@ export class LocalFilePersistence {
       const v17 = migrateWorldStateV16ToV17(v16);
       validateWorldStateV17(v17);
       const v18 = migrateWorldStateV17ToV18(v17);
-      validateWorldState(v18);
-      this.save(v18);
-      return v18;
+      validateWorldStateV18(v18);
+      const v19 = migrateWorldStateV18ToV19(v18);
+      validateWorldState(v19);
+      this.save(v19);
+      return v19;
     }
 
-    // Schema Version 14 -> 15 -> 16 -> 17 -> 18 Migration Path
+    // Schema Version 14 -> 15 -> 16 -> 17 -> 18 -> 19 Migration Path
     if (rawVersion === 14) {
       validateWorldStateV14(parsed);
       const v15 = migrateWorldStateV14ToV15(parsed);
@@ -149,12 +164,14 @@ export class LocalFilePersistence {
       const v17 = migrateWorldStateV16ToV17(v16);
       validateWorldStateV17(v17);
       const v18 = migrateWorldStateV17ToV18(v17);
-      validateWorldState(v18);
-      this.save(v18);
-      return v18;
+      validateWorldStateV18(v18);
+      const v19 = migrateWorldStateV18ToV19(v18);
+      validateWorldState(v19);
+      this.save(v19);
+      return v19;
     }
 
-    // Schema Version 15 -> 16 -> 17 -> 18 Migration Path
+    // Schema Version 15 -> 16 -> 17 -> 18 -> 19 Migration Path
     if (rawVersion === 15) {
       validateWorldStateV15(parsed);
       const v16 = migrateWorldStateV15ToV16(parsed as WorldStateV15);
@@ -162,33 +179,50 @@ export class LocalFilePersistence {
       const v17 = migrateWorldStateV16ToV17(v16);
       validateWorldStateV17(v17);
       const v18 = migrateWorldStateV17ToV18(v17);
-      validateWorldState(v18);
-      this.save(v18);
-      return v18;
+      validateWorldStateV18(v18);
+      const v19 = migrateWorldStateV18ToV19(v18);
+      validateWorldState(v19);
+      this.save(v19);
+      return v19;
     }
 
-    // Schema Version 16 -> 17 -> 18 Migration Path
+    // Schema Version 16 -> 17 -> 18 -> 19 Migration Path
     if (rawVersion === 16) {
       validateWorldStateV16(parsed);
       const v17 = migrateWorldStateV16ToV17(parsed as WorldStateV16);
       validateWorldStateV17(v17);
       const v18 = migrateWorldStateV17ToV18(v17);
-      validateWorldState(v18);
-      this.save(v18);
-      return v18;
+      validateWorldStateV18(v18);
+      const v19 = migrateWorldStateV18ToV19(v18);
+      validateWorldState(v19);
+      this.save(v19);
+      return v19;
     }
 
-    // Schema Version 17 -> 18 Migration Path
+    // Schema Version 17 -> 18 -> 19 Migration Path
     if (rawVersion === 17) {
       validateWorldStateV17(parsed);
       const v18 = migrateWorldStateV17ToV18(parsed as WorldStateV17);
-      validateWorldState(v18);
-      this.save(v18);
-      return v18;
+      validateWorldStateV18(v18);
+      const v19 = migrateWorldStateV18ToV19(v18);
+      validateWorldState(v19);
+      this.save(v19);
+      return v19;
     }
 
-    // Schema Version 18 Direct Validation Path
+    // Schema Version 18 -> 19 Migration Path
+    if (rawVersion === 18) {
+      validateWorldStateV18(parsed);
+      const v19 = migrateWorldStateV18ToV19(parsed as WorldStateV18);
+      validateWorldState(v19);
+      validateWorldSpatialTopology(v19, this.topology);
+      this.save(v19);
+      return v19;
+    }
+
+    // Schema Version 19 Direct Validation Path
     validateWorldState(parsed);
+    validateWorldSpatialTopology(parsed, this.topology);
 
     return parsed;
   }
@@ -201,6 +235,7 @@ export class LocalFilePersistence {
    */
   public save(state: WorldState): void {
     validateWorldState(state);
+    validateWorldSpatialTopology(state, this.topology);
 
     const dir = dirname(this.filePath);
     mkdirSync(dir, { recursive: true });

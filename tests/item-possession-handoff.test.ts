@@ -520,7 +520,7 @@ describe('Milestone 50: Peer-to-Peer Physical Possession Handoff', () => {
       const reloadedState = persistence.load();
       assert.ok(reloadedState);
       assert.strictEqual(reloadedState!.version, CURRENT_WORLD_STATE_VERSION);
-      assert.strictEqual(reloadedState!.version, 18);
+      assert.strictEqual(reloadedState!.version, 19);
 
       // Validate reloaded state
       assert.doesNotThrow(() => validateWorldState(reloadedState!));

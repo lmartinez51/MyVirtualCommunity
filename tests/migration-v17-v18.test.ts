@@ -9,6 +9,7 @@ import {
   validateWorldState,
   validateWorldStateV16,
   validateWorldStateV17,
+  validateWorldStateV18,
   WorldStateV16,
   WorldStateV17,
   migrateWorldStateV16ToV17,
@@ -104,7 +105,7 @@ describe('Milestone 57: Migration v17 -> v18 & Site Agent Association Foundation
       const v17 = createSampleV17DevelopmentState();
       assert.throws(
         () => validateWorldState(v17 as any),
-        /Unsupported WorldState version: 17\. Expected version 18/
+        /Unsupported WorldState version: 17\. Expected version 19/
       );
     });
   });
@@ -137,7 +138,7 @@ describe('Milestone 57: Migration v17 -> v18 & Site Agent Association Foundation
       assert.equal(getSiteAttendant(v18, 'restaurant:development-restaurant'), undefined);
 
       // Verify full v18 validation succeeds on migrated world with siteAgentAssociations: []
-      assert.doesNotThrow(() => validateWorldState(v18));
+      assert.doesNotThrow(() => validateWorldStateV18(v18));
     });
 
     it('migrates real-world v17 state to v18 without inventing associations (siteAgentAssociations: [])', () => {
@@ -152,7 +153,7 @@ describe('Milestone 57: Migration v17 -> v18 & Site Agent Association Foundation
       assert.equal(getSiteAttendant(v18, 'restaurant:kentucky-club'), undefined);
 
       // Verify full v18 validation succeeds on migrated world with siteAgentAssociations: []
-      assert.doesNotThrow(() => validateWorldState(v18));
+      assert.doesNotThrow(() => validateWorldStateV18(v18));
     });
 
     it('migration does NOT invent relationships from entity existence alone', () => {
@@ -191,7 +192,7 @@ describe('Milestone 57: Migration v17 -> v18 & Site Agent Association Foundation
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.equal(loaded.siteAgentAssociations.length, 0);
         assert.doesNotThrow(() => validateWorldState(loaded));
 
@@ -199,7 +200,7 @@ describe('Milestone 57: Migration v17 -> v18 & Site Agent Association Foundation
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 18);
+        assert.equal(reloaded.version, 19);
         assert.equal(reloaded.siteAgentAssociations.length, 0);
         assert.doesNotThrow(() => validateWorldState(reloaded));
       } finally {
@@ -235,7 +236,7 @@ describe('Milestone 57: Migration v17 -> v18 & Site Agent Association Foundation
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.equal(loaded.properties.length, 3);
         assert.equal(loaded.siteAgentAssociations.length, 0);
         assert.doesNotThrow(() => validateWorldState(loaded));
@@ -257,7 +258,7 @@ describe('Milestone 57: Migration v17 -> v18 & Site Agent Association Foundation
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.doesNotThrow(() => validateWorldState(loaded));
         assert.deepEqual(loaded, v18);
       } finally {

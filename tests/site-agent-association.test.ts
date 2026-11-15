@@ -284,7 +284,7 @@ describe('Milestone 57: Site Agent Association Foundation', () => {
       const state = createInitialWorldState(clock);
 
       assert.equal(state.version, CURRENT_WORLD_STATE_VERSION);
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
       assert.equal(state.siteAgentAssociations.length, 2);
 
       const residenceAssoc = getSiteResident(state, 'building:development-residence');
@@ -401,7 +401,7 @@ describe('Milestone 57: Site Agent Association Foundation', () => {
 
         const loaded = persistence.load();
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.equal(loaded.siteAgentAssociations.length, 2);
 
         assert.deepEqual(loaded.siteAgentAssociations, state.siteAgentAssociations);

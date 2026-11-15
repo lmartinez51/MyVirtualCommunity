@@ -104,7 +104,7 @@ describe('Milestone 46: Migration v15 -> v16 & Knowledge Source Expansion', () =
       const v15 = createSampleV15State();
       assert.throws(
         () => validateWorldState(v15 as any),
-        /Unsupported WorldState version: 15. Expected version 18/
+        /Unsupported WorldState version: 15. Expected version 19/
       );
     });
   });
@@ -161,7 +161,7 @@ describe('Milestone 46: Migration v15 -> v16 & Knowledge Source Expansion', () =
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.equal(loaded.knowledge.length, 1);
         assert.equal(loaded.knowledge[0].source, 'social-inquiry');
         assert.doesNotThrow(() => validateWorldState(loaded));
@@ -170,7 +170,7 @@ describe('Milestone 46: Migration v15 -> v16 & Knowledge Source Expansion', () =
         const persistence2 = new LocalFilePersistence(testFile);
         const reloaded = persistence2.load();
         assert.ok(reloaded);
-        assert.equal(reloaded.version, 18);
+        assert.equal(reloaded.version, 19);
         assert.equal(reloaded.knowledge.length, 1);
         assert.doesNotThrow(() => validateWorldState(reloaded));
       } finally {
@@ -205,7 +205,7 @@ describe('Milestone 46: Migration v15 -> v16 & Knowledge Source Expansion', () =
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.deepEqual(loaded.orders, []);
         assert.doesNotThrow(() => validateWorldState(loaded));
       } finally {
@@ -226,7 +226,7 @@ describe('Milestone 46: Migration v15 -> v16 & Knowledge Source Expansion', () =
         const loaded = persistence.load();
 
         assert.ok(loaded);
-        assert.equal(loaded.version, 18);
+        assert.equal(loaded.version, 19);
         assert.doesNotThrow(() => validateWorldState(loaded));
         assert.deepEqual(loaded, v18);
       } finally {
@@ -249,7 +249,7 @@ describe('Milestone 46: Migration v15 -> v16 & Knowledge Source Expansion', () =
         const persistence = new LocalFilePersistence(testFile);
         assert.throws(
           () => persistence.load(),
-          /Unsupported WorldState version: 99\. Expected version 18/
+          /Unsupported WorldState version: 99\. Expected version 19/
         );
       } finally {
         if (existsSync(testFile)) {

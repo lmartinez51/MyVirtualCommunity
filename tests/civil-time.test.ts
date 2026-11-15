@@ -584,8 +584,8 @@ describe('Phase C: Civil Time Infrastructure Invariants', () => {
     test('WorldState schema version remains exactly 17 with no persisted civil time fields', () => {
       const state = createTestWorldState();
 
-      assert.strictEqual(CURRENT_WORLD_STATE_VERSION, 18);
-      assert.strictEqual(state.version, 18);
+      assert.strictEqual(CURRENT_WORLD_STATE_VERSION, 19);
+      assert.strictEqual(state.version, 19);
 
       // Verify no civil time fields on WorldState
       assert.strictEqual('civilTime' in state, false);

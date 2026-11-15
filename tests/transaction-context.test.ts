@@ -236,7 +236,7 @@ describe('Phase B: Transaction Temporal Context Invariants', () => {
       const persistedState: WorldState = JSON.parse(persistedRaw);
 
       assert.strictEqual(persistedState.version, CURRENT_WORLD_STATE_VERSION);
-      assert.strictEqual(persistedState.version, 18);
+      assert.strictEqual(persistedState.version, 19);
       assert.strictEqual(persistedState.purchases.length, initialPurchasesCount);
 
       // Confirm no transaction metadata leaked into persisted WorldState object

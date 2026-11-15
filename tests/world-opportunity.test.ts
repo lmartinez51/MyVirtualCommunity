@@ -448,7 +448,7 @@ describe('Milestone 23: First World Opportunity (Pan Dulce Available)', () => {
         const restoredState = await persistence.load();
         assert.ok(restoredState);
         validateWorldState(restoredState);
-        assert.equal(restoredState.version, 18);
+        assert.equal(restoredState.version, 19);
         assert.equal((restoredState as any).opportunities, undefined);
       } finally {
         if (existsSync(testPath)) {

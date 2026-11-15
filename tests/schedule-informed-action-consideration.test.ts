@@ -496,7 +496,7 @@ describe('Milestone 48: Schedule-Informed Action Consideration', () => {
       // Verify no considerations collection exists on WorldState
       assert.equal((parsed as any).considerations, undefined);
       assert.equal((parsed as any).actionConsiderations, undefined);
-      assert.equal(parsed.version, 18);
+      assert.equal(parsed.version, 19);
       assert.doesNotThrow(() => validateWorldState(parsed));
     });
 

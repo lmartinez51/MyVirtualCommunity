@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 const tempFilePath = join(tmpdir(), `browser-verification-${Date.now()}.json`);
 const controller = new WorldSessionController({
   persistencePath: tempFilePath,
+  worldSeed: 'gomez-morin',
+  initialWorldTime: '2026-09-14T16:00:00.000Z',
   silent: false,
 });
 
@@ -22,10 +24,7 @@ await controller.stepSimulation(advanceDurationMs);
 
 // Move player to Development Street for the visual slice starting point
 try {
-  await controller.executeCommand({
-    commandName: 'leaveBuilding',
-    payload: {},
-  });
+  await controller.dispatchCommand('leaveBuilding', {});
 } catch {
   // If already outside, proceed
 }

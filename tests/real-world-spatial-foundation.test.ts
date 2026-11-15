@@ -98,7 +98,7 @@ describe('Milestone 38: Real-World Spatial Foundation', () => {
 
     test('createRealWorldJuarezWorldState passes comprehensive validateWorldState', () => {
       const { state } = setupWorld();
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
       assert.doesNotThrow(() => validateWorldState(state));
     });
   });
@@ -298,7 +298,7 @@ describe('Milestone 38: Real-World Spatial Foundation', () => {
         // Restore in clean runtime
         const restored = persistence.load();
         assert.ok(restored !== null);
-        assert.equal(restored.version, 18);
+        assert.equal(restored.version, 19);
         assert.doesNotThrow(() => validateWorldState(restored));
 
         const restoredPlayer = restored.agents.find((a) => a.id === 'agent:real-world-player')!;

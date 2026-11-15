@@ -446,12 +446,12 @@ describe('Milestone 64: Deterministic NPC Routine Generalization', () => {
   describe('8. World State Schema & Context Projection Invariants', () => {
     it('WorldState remains strictly valid schema version 18 before and after multi-NPC simulation', () => {
       const { state, sim } = setupMultiNpcWorld(TIME_08_00);
-      assert.equal(CURRENT_WORLD_STATE_VERSION, 18);
-      assert.equal(state.version, 18);
+      assert.equal(CURRENT_WORLD_STATE_VERSION, 19);
+      assert.equal(state.version, 19);
       assert.doesNotThrow(() => validateWorldState(state));
 
       sim.tick();
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
       assert.doesNotThrow(() => validateWorldState(state));
 
       // inspectNpcContext() projects correctly for both NPCs without mutating state

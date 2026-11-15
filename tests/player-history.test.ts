@@ -161,6 +161,7 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
         activityState: 'active',
         activitySince: OPEN_TIME,
         locationId: 'building:development-building',
+        interiorSpaceId: null,
         balanceMinor: 1000,
         currency: 'USD',
         playerActivity: null,
@@ -374,7 +375,7 @@ describe('Milestone 17-A: Authoritative Personal Historical Perception (inspectP
         const stateB = persistenceB.load();
         assert.ok(stateB !== null);
         assert.doesNotThrow(() => validateWorldState(stateB));
-        assert.equal(stateB.version, 18);
+        assert.equal(stateB.version, 19);
 
         // Inspect Session B
         const resultB = inspectPlayerHistory(stateB, 'agent:dev-player');

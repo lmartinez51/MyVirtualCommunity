@@ -285,7 +285,7 @@ describe('Milestone 24: First Opportunity-Driven Player Decision', () => {
         assert.ok(restoredState);
 
         // Scenario 19: Verify schema remains v18
-        assert.equal(restoredState.version, 18);
+        assert.equal(restoredState.version, 19);
         assert.doesNotThrow(() => validateWorldState(restoredState));
 
         // Scenario 17: Verify persistence preserves purchase records and balances

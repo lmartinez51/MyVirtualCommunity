@@ -218,19 +218,19 @@ describe('Milestone 33: Schema Version 11 -> 12 Migration & Persistence Safety',
       // Load via persistence
       const loaded = persistence.load();
       assert.notEqual(loaded, null);
-      assert.equal(loaded?.version, 18);
+      assert.equal(loaded?.version, 19);
       assert.equal(loaded?.items.length, 1);
       assert.equal(loaded?.items[0].id, 'item:1');
 
       // Verify file on disk is now upgraded to version 18
       const onDiskRaw = readFileSync(testFilePath, 'utf-8');
       const onDisk = JSON.parse(onDiskRaw);
-      assert.equal(onDisk.version, 18);
+      assert.equal(onDisk.version, 19);
       assert.equal(onDisk.items.length, 1);
 
       // Repeat load is idempotent and directly loads v18 without re-migration
       const repeatLoaded = persistence.load();
-      assert.equal(repeatLoaded?.version, 18);
+      assert.equal(repeatLoaded?.version, 19);
       assert.deepEqual(repeatLoaded, loaded);
     });
 

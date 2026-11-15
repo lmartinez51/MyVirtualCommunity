@@ -560,7 +560,7 @@ describe('Milestone 49: Opportunity-Informed Commercial Action Consideration', (
 
         // Validate schema is strictly v18 before saving
         validateWorldState(state);
-        assert.equal(state.version, 18);
+        assert.equal(state.version, 19);
         assert.equal((state as any).considerations, undefined);
 
         // Save to disk
@@ -570,7 +570,7 @@ describe('Milestone 49: Opportunity-Informed Commercial Action Consideration', (
         // Load fresh from disk
         const reloadedState = persistence.load();
         validateWorldState(reloadedState);
-        assert.equal(reloadedState.version, 18);
+        assert.equal(reloadedState.version, 19);
         assert.equal((reloadedState as any).considerations, undefined);
 
         // Consideration re-derived dynamically from reloaded state

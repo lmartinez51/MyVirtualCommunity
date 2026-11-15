@@ -283,7 +283,7 @@ describe('Milestone 25: First Persistent Social Consequence (Minimal Dyadic Acqu
     test('18. validateWorldState accepts valid v11 state with acquaintances', () => {
       const { state } = setupWorldAt();
       assert.equal(state.version, CURRENT_WORLD_STATE_VERSION);
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
 
       state.acquaintances.push({
         id: 'acquaintance:agent:dev-npc:agent:dev-player',
@@ -646,7 +646,7 @@ describe('Milestone 25: First Persistent Social Consequence (Minimal Dyadic Acqu
         assert.ok(restoredState);
 
         // Validate schema version 18
-        assert.equal(restoredState.version, 18);
+        assert.equal(restoredState.version, 19);
         assert.doesNotThrow(() => validateWorldState(restoredState));
 
         // Validate acquaintance record

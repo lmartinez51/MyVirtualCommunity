@@ -696,29 +696,29 @@ describe('Milestone 13: First Persistent Historical Event (Coffee Purchase)', ()
     test('validateWorldState accepts valid version 18 state and rejects version 13, 12, 11 and 10', () => {
       const { state } = setupOpenWorld();
 
-      assert.equal(state.version, 18);
+      assert.equal(state.version, 19);
       assert.doesNotThrow(() => validateWorldState(state));
 
       // Downgrade version to 10
       const v10Candidate = { ...state, version: 10 };
       assert.throws(
         () => validateWorldState(v10Candidate),
-        /Unsupported WorldState version: 10\. Expected version 18/
+        /Unsupported WorldState version: 10\. Expected version 19/
       );
       const v11Candidate = { ...state, version: 11 };
       assert.throws(
         () => validateWorldState(v11Candidate),
-        /Unsupported WorldState version: 11\. Expected version 18/
+        /Unsupported WorldState version: 11\. Expected version 19/
       );
       const v12Candidate = { ...state, version: 12 };
       assert.throws(
         () => validateWorldState(v12Candidate),
-        /Unsupported WorldState version: 12\. Expected version 18/
+        /Unsupported WorldState version: 12\. Expected version 19/
       );
       const v13Candidate = { ...state, version: 13 };
       assert.throws(
         () => validateWorldState(v13Candidate),
-        /Unsupported WorldState version: 13\. Expected version 18/
+        /Unsupported WorldState version: 13\. Expected version 19/
       );
     });
 

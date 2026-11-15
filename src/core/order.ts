@@ -26,6 +26,7 @@ import type { Offering } from './entities/offering.js';
 import type { PurchaseRecord } from './world-state.js';
 import type { OwnedItem } from './item.js';
 import { isRestaurantOpen } from './business.js';
+import { areAgentsCoLocated } from './co-presence.js';
 
 export const ORDER_PREPARATION_DURATION_MINUTES = 5;
 export const ORDER_PREPARATION_DURATION_MS = 5 * 60 * 1000; // 5 minutes
@@ -182,7 +183,7 @@ export function inquireRestaurantService(
     };
   }
 
-  if (customer.locationId !== staff.locationId) {
+  if (!areAgentsCoLocated(state, customerId, staffNpcId)) {
     return {
       success: false,
       code: 'agents-not-co-located',
