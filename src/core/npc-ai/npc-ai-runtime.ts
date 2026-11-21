@@ -102,6 +102,8 @@ export class NpcAiRuntime {
   private cycleCounter: number = 0;
   private lastCycleByAgent = new Map<string, NpcAiCycleResult>();
   private lastLocationByAgent = new Map<string, string>();
+  private activeTraversalStartedWallMs = new Map<string, number>();
+  private static readonly MAX_STALE_TRAVERSAL_WALL_MS = 120_000;
 
   constructor(options: NpcAiRuntimeOptions) {
     this.controller = options.controller;
@@ -175,25 +177,33 @@ export class NpcAiRuntime {
     }
 
     // Milestone 94: never stack traversals — if Camila is mid-traversal, wait.
+    // Guard against stale traversals (e.g. client disconnected mid-walk > 2 min).
     if (
       agentId === CAMILA_AGENT_ID &&
       this.coordinator?.hasActiveTraversal(agentId)
     ) {
-      const waiting: NpcAiCycleResult = {
-        cycleId,
-        agentId,
-        worldTime,
-        status: 'noop',
-        perception,
-        proposal: {
-          actionType: 'observe',
-          requestedAt: worldTime,
-          reasoningContext: 'Traversal already in progress; waiting for arrival.',
-        },
-        durationMs: Date.now() - startTime,
-      };
-      this.lastCycleByAgent.set(agentId, waiting);
-      return waiting;
+      const startedWallMs = this.activeTraversalStartedWallMs.get(agentId) ?? 0;
+      const elapsedWallMs = startedWallMs > 0 ? Date.now() - startedWallMs : 0;
+      if (startedWallMs > 0 && elapsedWallMs > NpcAiRuntime.MAX_STALE_TRAVERSAL_WALL_MS) {
+        this.coordinator.cancelTraversal(agentId, 'Stale traversal timeout exceeded without arrival report');
+        this.activeTraversalStartedWallMs.delete(agentId);
+      } else {
+        const waiting: NpcAiCycleResult = {
+          cycleId,
+          agentId,
+          worldTime,
+          status: 'noop',
+          perception,
+          proposal: {
+            actionType: 'observe',
+            requestedAt: worldTime,
+            reasoningContext: 'Traversal already in progress; waiting for arrival.',
+          },
+          durationMs: Date.now() - startTime,
+        };
+        this.lastCycleByAgent.set(agentId, waiting);
+        return waiting;
+      }
     }
 
     const context: NpcCognitionContext = {
@@ -329,6 +339,7 @@ export class NpcAiRuntime {
       });
       const success = dispatchResult.success;
       if (success) {
+        this.activeTraversalStartedWallMs.set(agentId, Date.now());
         this.memoryStore.addMemory({
           type: 'discovery',
           summary: `Started moving toward "${destination}". ${proposal.reasoningContext ?? ''}`,
@@ -530,6 +541,46 @@ export class NpcAiRuntime {
     };
     this.lastCycleByAgent.set(agentId, fallbackResult);
     return fallbackResult;
+  }
+
+  /**
+   * Milestone 94: called by WorldSessionController after an active traversal
+   * authoritatively completes (arrived or interrupted). Records a place_visited
+   * memory and updates Camila's notebook when arrival committed.
+   */
+  public recordTraversalArrival(
+    agentId: string,
+    arrivedPlaceId: string | undefined,
+    worldTime: string,
+    committed: boolean
+  ): void {
+    this.activeTraversalStartedWallMs.delete(agentId);
+    if (!committed || !arrivedPlaceId) return;
+
+    this.memoryStore.addMemory({
+      type: 'place_visited',
+      summary: `Arrived at "${arrivedPlaceId}".`,
+      timestamp: worldTime,
+      placeId: arrivedPlaceId,
+    });
+
+    if (agentId === CAMILA_AGENT_ID) {
+      this.lastLocationByAgent.set(agentId, arrivedPlaceId);
+      if (this.notebook) {
+        try {
+          const objectIds = findProbeObjectsByPlace(arrivedPlaceId).map((o) => o.id);
+          this.notebook.recordVisit(arrivedPlaceId, worldTime, objectIds);
+          this.notebook.addDiaryEntry(
+            `Llegué a ${arrivedPlaceId}.`,
+            worldTime,
+            arrivedPlaceId
+          );
+          this.notebook.save();
+        } catch {
+          // Notebook failures never fail a traversal completion.
+        }
+      }
+    }
   }
 
   /** Milestone 94: record a notebook visit when Camila's observed location changed. */

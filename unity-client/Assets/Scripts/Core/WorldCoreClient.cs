@@ -333,16 +333,19 @@ namespace MyVirtualCommunity.Core
 
         /// <summary>
         /// Triggers an authoritative AI cognition cycle for an NPC.
+        /// Always invokes onComplete (with null on failure) so callers never deadlock.
         /// </summary>
         public IEnumerator TriggerNpcAiCycle(string agentId, Action<NpcAiCycleData> onComplete)
         {
             string url = $"{serverBaseUrl}/api/npc/{agentId}/cycle";
+            NpcAiCycleData cycleResult = null;
+
             using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
             {
                 req.uploadHandler = new UploadHandlerRaw(new byte[0]);
                 req.downloadHandler = new DownloadHandlerBuffer();
                 req.SetRequestHeader("Content-Type", "application/json");
-                req.timeout = 10;
+                req.timeout = 15;
 
                 yield return req.SendWebRequest();
 
@@ -353,9 +356,13 @@ namespace MyVirtualCommunity.Core
                         var res = JsonUtility.FromJson<NpcAiCycleResponse>(req.downloadHandler.text);
                         if (res != null && res.success && res.result != null)
                         {
-                            OnAiCycleExecuted?.Invoke(res.result);
-                            onComplete?.Invoke(res.result);
+                            cycleResult = res.result;
+                            OnAiCycleExecuted?.Invoke(cycleResult);
                             StartCoroutine(FetchLocationView());
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"[WorldCoreClient] AI cycle for {agentId} returned unsuccessful payload: {req.downloadHandler.text}");
                         }
                     }
                     catch (Exception ex)
@@ -363,7 +370,55 @@ namespace MyVirtualCommunity.Core
                         Debug.LogWarning($"[WorldCoreClient] Error parsing AI cycle: {ex.Message}");
                     }
                 }
+                else
+                {
+                    Debug.LogWarning($"[WorldCoreClient] AI cycle HTTP failure for {agentId} ({req.responseCode}): {req.error} {req.downloadHandler?.text}");
+                }
             }
+
+            onComplete?.Invoke(cycleResult);
+        }
+
+        /// <summary>
+        /// Milestone 94: Reports physical arrival (or interruption) of an active NPC traversal
+        /// to World Core (POST /api/npc/:agentId/arrival) so M69/M73 commits Agent.locationId.
+        /// </summary>
+        public IEnumerator ReportNpcArrival(
+            string agentId,
+            string destinationPlaceId,
+            string status = "arrived",
+            string message = null,
+            Action<bool> onComplete = null)
+        {
+            string url = $"{serverBaseUrl}/api/npc/{agentId}/arrival";
+            string safeDest = (destinationPlaceId ?? "").Replace("\"", "");
+            string safeStatus = (status ?? "arrived").Replace("\"", "");
+            string safeMsg = (message ?? "").Replace("\"", "'");
+            string payload = $"{{\"destinationPlaceId\":\"{safeDest}\",\"status\":\"{safeStatus}\",\"message\":\"{safeMsg}\"}}";
+
+            bool succeeded = false;
+            using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
+            {
+                byte[] bodyRaw = Encoding.UTF8.GetBytes(payload);
+                req.uploadHandler = new UploadHandlerRaw(bodyRaw);
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/json");
+                req.timeout = 10;
+
+                yield return req.SendWebRequest();
+
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    succeeded = true;
+                    StartCoroutine(FetchNpcDiagnostics(agentId));
+                }
+                else
+                {
+                    Debug.LogWarning($"[WorldCoreClient] ReportNpcArrival failed for {agentId} ({req.responseCode}): {req.error}");
+                }
+            }
+
+            onComplete?.Invoke(succeeded);
         }
 
         /// <summary>

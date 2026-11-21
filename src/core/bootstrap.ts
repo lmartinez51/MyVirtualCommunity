@@ -1,5 +1,6 @@
 import { WorldClock } from './clock.js';
 import { createInitialWorldState, createGomezMorinWorldState, WorldState } from './world-state.js';
+import { createGomezMorinSeedWorld } from './seed.js';
 import { LocalFilePersistence, DEFAULT_PERSISTENCE_PATH } from '../persistence/local-storage.js';
 
 export type WorldSeedType = 'development' | 'gomez-morin';
@@ -97,6 +98,25 @@ export function bootstrapWorld(options: BootstrapOptions = {}): BootstrapResult 
   } else {
     // Existing state -> initialize authoritative WorldClock from persisted state
     clock = WorldClock.create(state.worldTime);
+
+    // Milestone 94 migration: ensure autonomous explorer Camila exists in already-persisted
+    // Gómez Morín world states created before Milestone 94, without resetting player progress.
+    if (
+      targetWorldSeed === 'gomez-morin' &&
+      state.places.some((p) => p.id === 'street:blvd-gomez-morin') &&
+      !state.agents.some((a) => a.id === 'agent:camila-npc')
+    ) {
+      const seedCamila = createGomezMorinSeedWorld(state.worldTime).agents.find(
+        (a) => a.id === 'agent:camila-npc'
+      );
+      if (seedCamila) {
+        state.agents.push(seedCamila);
+        persistence.save(state);
+        if (!silent) {
+          console.log('[BOOTSTRAP] Seeded missing agent:camila-npc into persisted Gómez Morín world state.');
+        }
+      }
+    }
   }
 
   if (!silent) {

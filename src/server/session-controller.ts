@@ -50,7 +50,11 @@ import {
   type NpcAiCycleResult,
   type NpcAiDiagnostics,
 } from '../core/npc-ai/index.js';
-import { RuntimeTraversalCoordinator } from '../core/traversal-coordinator.js';
+import {
+  RuntimeTraversalCoordinator,
+  type CompleteTraversalResult,
+} from '../core/traversal-coordinator.js';
+import type { NavigationStatus } from '../core/navigation-contract.js';
 import {
   CAMILA_AGENT_ID,
   CAMILA_GOAL,
@@ -425,6 +429,90 @@ export class WorldSessionController {
    */
   public runNpcAiCycle(agentId: string): Promise<NpcAiCycleResult> {
     return this.getNpcAiRuntime().runCycle(agentId);
+  }
+
+  /**
+   * Milestone 94: authoritatively completes an active NPC traversal when the
+   * presentation client reports physical arrival (or interruption, e.g. blocked
+   * by a closed business door). Serialized through the command queue so
+   * persistence never races with temporal reconciliation or player commands.
+   */
+  public completeNpcTraversal(
+    agentId: string,
+    destinationPlaceId?: string,
+    status: NavigationStatus = 'arrived',
+    message?: string
+  ): Promise<CompleteTraversalResult> {
+    if (this.isShuttingDown || this.isStopped) {
+      return Promise.resolve({
+        success: false,
+        code: 'traversal-interrupted',
+        message: 'Server is shutting down or stopped',
+        agentId,
+        changed: false,
+      });
+    }
+
+    const task = async (): Promise<CompleteTraversalResult> => {
+      const active = this.traversalCoordinator.getActiveTraversal(agentId);
+      if (!active) {
+        return {
+          success: false,
+          code: 'no-active-traversal',
+          message: `No active traversal found for agent "${agentId}"`,
+          agentId,
+          changed: false,
+        };
+      }
+
+      const worldTime = this.clock.getTime();
+      const targetPlaceId =
+        destinationPlaceId && destinationPlaceId.trim() !== ''
+          ? destinationPlaceId.trim()
+          : active.request.destinationPlaceId;
+
+      const candidate = structuredClone(this.state);
+      candidate.worldTime = worldTime;
+
+      const navResult = {
+        requestId: active.request.requestId,
+        agentId,
+        destinationPlaceId: targetPlaceId,
+        status,
+        completedAt: worldTime,
+        message: message ?? (status === 'arrived' ? 'Arrived at destination.' : `Traversal ${status}.`),
+      };
+
+      const completion = this.traversalCoordinator.completeTraversal(candidate, navResult);
+
+      if (completion.success && completion.changed) {
+        try {
+          this.persistence.save(candidate);
+          this.state = candidate;
+        } catch (persistError) {
+          return {
+            success: false,
+            code: 'transition-failed',
+            message: `Failed to persist arrival state: ${(persistError as Error).message}`,
+            agentId,
+            changed: false,
+          };
+        }
+      }
+
+      this.aiRuntime?.recordTraversalArrival(
+        agentId,
+        completion.success ? completion.currentLocationId : undefined,
+        worldTime,
+        completion.success
+      );
+
+      return completion;
+    };
+
+    const nextPromise = this.commandQueue.then(task, task);
+    this.commandQueue = nextPromise.then(() => {}, () => {});
+    return nextPromise;
   }
 
   /**

@@ -3135,6 +3135,34 @@ Milestone 92 establishes the first true AI cognition layer and production-engine
 
 ---
 
+## Milestone 94: Camila Autonomous Explorer, Tangible World Props & 3D Recessed Pothole
+
+Extends the Gómez Morín 3D vertical slice on `feat/camila-explorer` with end-to-end autonomous exploration for Camila, realistic urban prop grounding, player-only physical prop interaction, and a recessed 3D street pothole:
+
+### 1. Camila Explorer Runtime, Grounding & Autonomous Doors
+- **Legacy Save Auto-Seeding (`src/core/bootstrap.ts`)**: Automatically seeds `agent:camila-npc` into legacy persisted `gomez-morin` world states without wiping player progress.
+- **Authoritative Traversal Arrival Loop (`src/server/http-server.ts`, `src/server/session-controller.ts`, `src/core/npc-ai/npc-ai-runtime.ts`)**:
+  - Adds `POST /api/npc/:agentId/arrival` and `SessionController.completeNpcTraversal()` backed by the M69/M73 traversal coordinator.
+  - Records `place_visited` memories and updates `CamilaNotebook` via `NpcAiRuntime.recordTraversalArrival()`, guarded by a 120-second stale-traversal timeout.
+- **Unity Client Presentation & Door Interaction (`WorldCoreClient.cs`, `CamilaNpcController.cs`, `InteractiveDoor.cs`, `GameManager.cs`, `GomezMorinSlice.unity`)**:
+  - Fixes `TriggerNpcAiCycle` callback handling to prevent `cycleInFlight` deadlocks and reports physical arrivals via `ReportNpcArrival()`.
+  - Fixes Camila's spawn and walking elevation (`Y = 0.24` with continuous `SnapToGround()`) and drives sidewalk/doorway waypoint locomotion with `BobbleheadAnimator`.
+  - Adds coherent autonomous `InteractiveDoor` opening, clearance, and anti-pinch support respecting business hours and staff-only rooms (`Almacén`).
+- **Verification**: `tests/camila-explorer.test.ts` (19/19 passing).
+
+### 2. Urban Prop Fidelity & 3D Recessed Pothole (`GomezMorinSceneBuilder.cs`, `src/core/camila-probe-objects.ts`)
+- **Grounded & Detailed Urban Props**: Redesigned `Probe_Bench` as a fixed-to-ground terracotta tubular steel & metal-mesh sidewalk bench, moved `Probe_TrashBin` onto Av. La Arboleda's east sidewalk with a US-style wheeled bin silhouette, grounded `Probe_Bucket` and `Probe_WateringCan` on Residencia Del Porvenir's sidewalk, and grounded `Probe_Ball`, `Probe_Book`, `Probe_Cup`, and folded `Probe_Umbrella` with synchronized coordinates.
+- **Recessed 3D Street Pothole (`Probe_Puddle` on Calle Del Porvenir)**: Split `Porvenir_Asphalt` into 4 solid slabs framing a real 9.5 cm deep cavity (`Y = -0.095 m`) with a solid compacted-gravel crater floor, fractured asphalt rim walls, and recessed standing rainwater (`Y = -0.042 m`).
+
+### 3. Tangible & Interactive World Props (Player-Only)
+- **`InteractiveWorldProp` (`unity-client/Assets/Scripts/Environment/InteractiveWorldProp.cs`)**: Reusable solid-collider + continuous `Rigidbody` physics component applied to street, sidewalk, and lot props (`Probe_Ball`, `Probe_Bucket`, `Probe_WateringCan`, `Probe_TrashBin`, `Probe_Umbrella`, `Probe_Book`, `Probe_Cup`, `Probe_TrashBag`, `Probe_Broom`, `Probe_ConeWest/East`, `Probe_Chalk`), plus fixed colliders on `Probe_Bench` and `Probe_SmallGoal`.
+- **Player Controls (`PlayerController.cs`)**:
+  - Walking contact physically pushes/dribbles movable props (`OnControllerColliderHit`).
+  - **`[E]`**: Pick up / place portable props, or grab and roll the upright US-style trash bin (`Probe_TrashBin`) across sidewalks.
+  - **`[F]`**: Kick the soccer ball (`Probe_Ball`) or throw a carried prop.
+
+---
+
 ## Intentional Exclusions (Current Scope)
 
 To preserve strict architectural clarity and avoid premature abstraction, the following systems are **intentionally NOT implemented** at the current milestone level:

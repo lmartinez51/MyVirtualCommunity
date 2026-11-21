@@ -169,14 +169,14 @@ namespace MyVirtualCommunity
 
             // 4b. Camila NPC (Milestone 94): autonomous explorer. Unlike Elena
             // she is NOT anchored to a station — she starts inside Wing Spot
-            // and wanders from authoritative AI cycles.
+            // grounded on the dining floor (Y = 0.24m) and wanders from authoritative AI cycles.
             if (camilaNpc == null)
             {
                 camilaNpc = FindFirstObjectByType<CamilaNpcController>();
                 if (camilaNpc == null)
                 {
                     var camilaObj = new GameObject("NPC_Camila");
-                    camilaObj.transform.position = new Vector3(-8f, 0.44f, 8f);
+                    camilaObj.transform.position = new Vector3(-8f, 0.24f, 8f);
                     camilaObj.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
                     camilaNpc = camilaObj.AddComponent<CamilaNpcController>();
                 }
@@ -184,7 +184,7 @@ namespace MyVirtualCommunity
 
             if (camilaNpc != null)
             {
-                camilaNpc.transform.position = new Vector3(-8f, 0.44f, 8f);
+                camilaNpc.transform.position = new Vector3(-8f, 0.24f, 8f);
                 camilaNpc.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
                 camilaNpc.BuildExplorerAvatar();
             }

@@ -548,4 +548,102 @@ describe('Milestone 94: Camila explorer NPC', () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  // =========================================================================
+  // 9. Persisted world migration & HTTP arrival completion (fixes Camila stall)
+  // =========================================================================
+  it('bootstrapWorld seeds missing agent:camila-npc into legacy persisted Gómez Morín world-state', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-migrate-'));
+    try {
+      const statePath = join(tempDir, 'world-state.json');
+      const preM94State = setupGomezMorinState();
+      // Remove Camila to simulate a pre-M94 persisted world-state.json
+      preM94State.agents = preM94State.agents.filter((a) => a.id !== CAMILA_AGENT_ID);
+      writeFileSync(statePath, JSON.stringify(preM94State, null, 2), 'utf-8');
+
+      const controller = new WorldSessionController({
+        persistencePath: statePath,
+        worldSeed: 'gomez-morin',
+        silent: true,
+        camilaNotebookPath: join(tempDir, 'camila-notebook.json'),
+      });
+
+      const perception = controller.getNpcPerception(CAMILA_AGENT_ID);
+      assert.equal(perception.agentId, CAMILA_AGENT_ID);
+      assert.equal(perception.locationId, 'restaurant:wing-spot');
+
+      const saved = JSON.parse(readFileSync(statePath, 'utf-8')) as WorldState;
+      assert.ok(saved.agents.some((a) => a.id === CAMILA_AGENT_ID));
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('POST /api/npc/agent:camila-npc/arrival commits location, updates notebook, and unblocks next cycle', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-arrival-'));
+    const controller = makeController(tempDir);
+    const server = createWorldServer({ controller, silent: true });
+    const info = await server.start(0, '127.0.0.1');
+    try {
+      // Cycle 1: Camila proposes move_to_place -> street:blvd-gomez-morin
+      const cycle1Res = await fetch(`${info.url}/api/npc/agent:camila-npc/cycle`, { method: 'POST' });
+      assert.equal(cycle1Res.status, 200);
+      const cycle1 = (await cycle1Res.json()) as {
+        success: boolean;
+        result: { status: string; proposal: { actionType: string; destinationPlaceId: string } };
+      };
+      assert.equal(cycle1.success, true);
+      assert.equal(cycle1.result.status, 'executed');
+      assert.equal(cycle1.result.proposal.actionType, 'move_to_place');
+      const firstDest = cycle1.result.proposal.destinationPlaceId;
+
+      // Report physical arrival from Unity
+      const arrivalRes = await fetch(`${info.url}/api/npc/agent:camila-npc/arrival`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destinationPlaceId: firstDest, status: 'arrived' }),
+      });
+      assert.equal(arrivalRes.status, 200);
+      const arrivalBody = (await arrivalRes.json()) as {
+        success: boolean;
+        result: { currentLocationId: string; changed: boolean };
+      };
+      assert.equal(arrivalBody.success, true);
+      assert.equal(arrivalBody.result.currentLocationId, firstDest);
+      assert.equal(arrivalBody.result.changed, true);
+
+      // Verify perception updated & notebook recorded the visit
+      const perception = controller.getNpcPerception(CAMILA_AGENT_ID);
+      assert.equal(perception.locationId, firstDest);
+      assert.ok(perception.visitedPlaceIds?.includes(firstDest));
+      assert.ok(!perception.unvisitedPlaceIds?.includes(firstDest));
+
+      // Cycle 2: Camila immediately chooses a NEW destination instead of staying stuck waiting!
+      const cycle2Res = await fetch(`${info.url}/api/npc/agent:camila-npc/cycle`, { method: 'POST' });
+      assert.equal(cycle2Res.status, 200);
+      const cycle2 = (await cycle2Res.json()) as {
+        success: boolean;
+        result: { status: string; proposal: { actionType: string; destinationPlaceId: string } };
+      };
+      assert.equal(cycle2.result.status, 'executed');
+      assert.equal(cycle2.result.proposal.actionType, 'move_to_place');
+      assert.notEqual(cycle2.result.proposal.destinationPlaceId, firstDest);
+
+      // Interrupt Cycle 2 (e.g. closed door): clears traversal with ZERO location mutation
+      const interruptRes = await fetch(`${info.url}/api/npc/agent:camila-npc/arrival`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          destinationPlaceId: cycle2.result.proposal.destinationPlaceId,
+          status: 'traversal-interrupted',
+          message: 'Closed business door',
+        }),
+      });
+      assert.equal(interruptRes.status, 200);
+      assert.equal(controller.getNpcPerception(CAMILA_AGENT_ID).locationId, firstDest);
+    } finally {
+      await server.stop();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
