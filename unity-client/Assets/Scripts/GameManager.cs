@@ -203,6 +203,14 @@ namespace MyVirtualCommunity
                 var qtObj = new GameObject("QuickTravelController");
                 qtObj.AddComponent<QuickTravelController>();
             }
+
+            // 8. Dual Aerial Inspection Controller (3D Drone [V] & Satellite View [G])
+            var aerialController = FindFirstObjectByType<AerialInspectionController>();
+            if (aerialController == null)
+            {
+                var aerialObj = new GameObject("AerialInspectionController");
+                aerialObj.AddComponent<AerialInspectionController>();
+            }
         }
 
         // =========================================================================

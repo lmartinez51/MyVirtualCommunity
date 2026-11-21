@@ -231,10 +231,11 @@ namespace MyVirtualCommunity.Player
                 TeleportTo(isInsideWingSpot ? entranceInteriorPosition : entranceExteriorPosition, isInsideWingSpot ? Quaternion.identity : Quaternion.Euler(0f, 180f, 0f));
             }
 
-            // If any modal (menu, pause, or avatar customization) is open, or input is locked, pause movement and world interaction
+            // If any modal (menu, pause, or avatar customization) is open, or aerial mode (Drone/Satellite) is active, or input is locked, pause movement and world interaction
             bool isTeleporting = QuickTravelController.Instance != null && QuickTravelController.Instance.IsTeleporting;
             bool isUiModalActive = ProductHudController.Instance != null && ProductHudController.Instance.IsModalActive;
-            if (IsInputLocked || isTeleporting || isUiModalActive)
+            bool isAerialActive = AerialInspectionController.IsAerialModeActive;
+            if (IsInputLocked || isTeleporting || isUiModalActive || isAerialActive)
             {
                 bobbleheadAnimator?.UpdateLocomotionState(0f, true);
                 return;
