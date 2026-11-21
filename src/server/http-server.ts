@@ -603,6 +603,38 @@ export class WorldHttpServer {
             return;
           }
 
+          // Milestone 94: GET /api/npc/agent:camila-npc/notebook
+          // Camila's own memory (diary / mental map / hypotheses). Only Camila
+          // has a notebook; other agents get 404.
+          if (method === 'GET' && action === 'notebook') {
+            if (agentId !== 'agent:camila-npc') {
+              this.sendJson(res, 404, {
+                success: false,
+                error: {
+                  code: 'notebook-not-found',
+                  message: `Agent "${agentId}" has no notebook; only agent:camila-npc does.`,
+                },
+              });
+              return;
+            }
+            try {
+              const notebook = this.controller.getCamilaNotebook();
+              this.sendJson(res, 200, {
+                success: true,
+                result: notebook,
+              });
+            } catch (err) {
+              this.sendJson(res, 500, {
+                success: false,
+                error: {
+                  code: 'notebook-read-error',
+                  message: (err as Error).message,
+                },
+              });
+            }
+            return;
+          }
+
           // POST /api/npc/:agentId/cycle
           if (method === 'POST' && action === 'cycle') {
             try {

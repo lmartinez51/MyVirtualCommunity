@@ -16,6 +16,7 @@ export interface AddMemoryParams {
   timestamp: string;
   targetAgentId?: string;
   establishmentId?: string;
+  placeId?: string;
 }
 
 export class NpcMemoryStore {
@@ -40,6 +41,7 @@ export class NpcMemoryStore {
       summary: params.summary,
       targetAgentId: params.targetAgentId,
       establishmentId: params.establishmentId,
+      placeId: params.placeId,
     };
 
     this.memories.push(memory);

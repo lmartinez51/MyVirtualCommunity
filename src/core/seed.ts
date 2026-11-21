@@ -445,6 +445,25 @@ export function createGomezMorinSeedWorld(
       currency: 'USD',
       playerActivity: null,
     },
+    {
+      // Camila (Milestone 94): autonomous explorer NPC. Synthetic, not a real
+      // person. She starts inside Wing Spot and has NO deterministic routine
+      // schedule (findNpcSchedule('agent:camila-npc') returns null), so the
+      // Simulation tick never moves her by schedule — only her own AI cycles
+      // (NpcAiRuntime, move_to_place / look_at) move her, and only while she
+      // is exploring. Do NOT give her a schedule entry.
+      id: 'agent:camila-npc',
+      type: 'agent',
+      name: 'Camila',
+      agentType: 'npc',
+      activityState: 'idle',
+      activitySince: initialTime,
+      locationId: 'restaurant:wing-spot',
+      interiorSpaceId: null,
+      balanceMinor: 0,
+      currency: 'USD',
+      playerActivity: null,
+    },
   ];
 
   const offerings: Offering[] = [

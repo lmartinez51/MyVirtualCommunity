@@ -161,6 +161,40 @@ namespace MyVirtualCommunity.Character
             };
         }
 
+        public static BobbleheadConfig CreateCamilaConfig()
+        {
+            // Milestone 94: Camila, the autonomous explorer. Streetwear (not the
+            // Wing Spot uniform): teal jacket, high ponytail, CAMILA badge.
+            return new BobbleheadConfig
+            {
+                archetypeId = ArchetypeIdentifier,
+                characterName = "Camila",
+                totalHeight = 1.65f,
+                headScale = 0.98f,
+                faceShape = BobbleheadFaceShape.Oval,
+                facialHair = BobbleheadFacialHair.None,
+                bodyPresentation = BobbleheadBodyPresentation.Original,
+                skinColor = new Color(0.90f, 0.75f, 0.65f),
+                eyeColor = new Color(0.12f, 0.25f, 0.18f),
+                pupilColor = new Color(0.04f, 0.04f, 0.05f),
+                hairColor = new Color(0.16f, 0.09f, 0.05f),
+                eyebrowColor = new Color(0.16f, 0.09f, 0.05f),
+                lipColor = new Color(0.80f, 0.45f, 0.42f),
+                hairStyle = BobbleheadHairType.HighPonytail,
+                headwear = BobbleheadHeadwearType.None,
+                headwearColor = new Color(0.10f, 0.45f, 0.42f),
+                headwearAccentColor = Color.white,
+                outfitType = BobbleheadOutfitType.StreetwearJacket,
+                outerwearColor = new Color(0.10f, 0.45f, 0.42f),     // Teal explorer jacket
+                innerwearColor = new Color(0.95f, 0.85f, 0.45f),     // Warm yellow tee
+                pantsColor = new Color(0.20f, 0.22f, 0.28f),
+                shoeBaseColor = new Color(0.95f, 0.95f, 0.96f),
+                shoeAccentColor = new Color(0.10f, 0.45f, 0.42f),
+                hasNameBadge = true,
+                badgeText = "CAMILA"
+            };
+        }
+
         /// <summary>
         /// Creates a deep copy of this BobbleheadConfig instance.
         /// </summary>

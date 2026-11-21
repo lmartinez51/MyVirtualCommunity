@@ -50,6 +50,27 @@ import {
   type NpcAiCycleResult,
   type NpcAiDiagnostics,
 } from '../core/npc-ai/index.js';
+import { RuntimeTraversalCoordinator } from '../core/traversal-coordinator.js';
+import {
+  CAMILA_AGENT_ID,
+  CAMILA_GOAL,
+} from '../core/npc-ai/camila-config.js';
+import { CamilaCognitionProvider } from '../core/npc-ai/providers/camila-cognition-provider.js';
+import {
+  CamilaNotebook,
+  type CamilaNotebookData,
+} from '../persistence/camila-notebook.js';
+import { buildCamilaWorldState } from '../core/camila-world-state.js';
+
+export interface SessionControllerOptions extends BootstrapOptions {
+  playerId?: string;
+  timeSource?: RealTimeSource;
+  aiProvider?: NpcCognitionProvider;
+  /** Override Camila's cognition provider (tests). Defaults to env-driven Muse Spark / mock. */
+  camilaProvider?: NpcCognitionProvider;
+  /** Override Camila's notebook path (tests). Defaults to data/camila-notebook.json. */
+  camilaNotebookPath?: string;
+}
 import {
   findBusinessSchedule,
   evaluateBusinessScheduleStatus,
@@ -199,6 +220,8 @@ export class WorldSessionController {
   private isShuttingDown: boolean = false;
   private isStopped: boolean = false;
   private aiRuntime?: NpcAiRuntime;
+  private readonly traversalCoordinator = new RuntimeTraversalCoordinator();
+  private camilaNotebook?: CamilaNotebook;
 
   constructor(options: SessionControllerOptions = {}) {
     const bootstrapResult = bootstrapWorld({
@@ -215,9 +238,32 @@ export class WorldSessionController {
     const playerAgent = this.state.agents.find((a) => a.agentType === 'player');
     this.activePlayerId = options.playerId ?? playerAgent?.id ?? DEFAULT_DEVELOPMENT_PLAYER_ID;
     this.timeSource = options.timeSource;
-    this.aiRuntime = new NpcAiRuntime({
+    this.aiRuntime = this.createAiRuntime(options);
+  }
+
+  /**
+   * Milestone 94: builds the AI runtime with Camila wired in — her own
+   * goal, her Muse Spark provider (live when MODEL_API_KEY is set, mock
+   * otherwise), the traversal coordinator for move_to_place, and her
+   * notebook. Elena's default provider/goal are untouched.
+   */
+  private createAiRuntime(options: SessionControllerOptions): NpcAiRuntime {
+    const notebook = new CamilaNotebook(options.camilaNotebookPath);
+    this.camilaNotebook = notebook;
+    const worldSummary = JSON.stringify(buildCamilaWorldState(), null, 2);
+    const camilaProvider =
+      options.camilaProvider ??
+      new CamilaCognitionProvider({
+        worldStateSummary: worldSummary,
+        notebookExcerpt: () => notebook.toExcerpt(),
+      });
+    return new NpcAiRuntime({
       controller: this,
       provider: options.aiProvider,
+      coordinator: this.traversalCoordinator,
+      notebook,
+      agentProviders: { [CAMILA_AGENT_ID]: camilaProvider },
+      agentGoals: { [CAMILA_AGENT_ID]: CAMILA_GOAL },
     });
   }
 
@@ -355,7 +401,7 @@ export class WorldSessionController {
    */
   public getNpcAiRuntime(): NpcAiRuntime {
     if (!this.aiRuntime) {
-      this.aiRuntime = new NpcAiRuntime({ controller: this });
+      this.aiRuntime = this.createAiRuntime({});
     }
     return this.aiRuntime;
   }
@@ -386,6 +432,18 @@ export class WorldSessionController {
    */
   public getNpcAiDiagnostics(agentId: string): NpcAiDiagnostics {
     return this.getNpcAiRuntime().getDiagnostics(agentId);
+  }
+
+  /**
+   * Milestone 94: returns Camila's notebook data (read-only snapshot).
+   * The notebook lives outside WorldState; this is the only server-side
+   * read path for it (also exposed as GET /api/npc/agent:camila-npc/notebook).
+   */
+  public getCamilaNotebook(): CamilaNotebookData {
+    if (!this.camilaNotebook) {
+      this.camilaNotebook = new CamilaNotebook();
+    }
+    return this.camilaNotebook.getData();
   }
 
   /**

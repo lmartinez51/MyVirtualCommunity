@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -33,6 +34,10 @@ namespace MyVirtualCommunity.Core
         public WorldStatusData CurrentStatus { get; private set; }
         public LocationViewData CurrentLocationView { get; private set; }
         public NpcAiDiagnosticsData ElenaDiagnostics { get; private set; }
+        // Milestone 94: Camila diagnostics (Elena property kept for back-compat).
+        public NpcAiDiagnosticsData CamilaDiagnostics { get; private set; }
+        public Dictionary<string, NpcAiDiagnosticsData> NpcDiagnosticsByAgent { get; } =
+            new Dictionary<string, NpcAiDiagnosticsData>();
 
         // Events
         public event Action<bool, string> OnConnectionStatusChanged;
@@ -153,7 +158,8 @@ namespace MyVirtualCommunity.Core
                 if (isConnected)
                 {
                     yield return FetchLocationView();
-                    yield return FetchElenaDiagnostics();
+                    yield return FetchNpcDiagnostics("agent:elena-npc");
+                    yield return FetchNpcDiagnostics("agent:camila-npc");
                 }
 
                 yield return new WaitForSeconds(pollIntervalSeconds);
@@ -231,9 +237,13 @@ namespace MyVirtualCommunity.Core
             }
         }
 
-        public IEnumerator FetchElenaDiagnostics()
+        /// <summary>
+        /// Milestone 94: generic NPC diagnostics fetch. FetchElenaDiagnostics
+        /// is kept as a back-compat wrapper around it.
+        /// </summary>
+        public IEnumerator FetchNpcDiagnostics(string agentId)
         {
-            string url = $"{serverBaseUrl}/api/npc/agent:elena-npc/diagnostics";
+            string url = $"{serverBaseUrl}/api/npc/{agentId}/diagnostics";
             using (UnityWebRequest req = UnityWebRequest.Get(url))
             {
                 req.timeout = 3;
@@ -246,12 +256,19 @@ namespace MyVirtualCommunity.Core
                         var res = JsonUtility.FromJson<NpcAiDiagnosticsResponse>(req.downloadHandler.text);
                         if (res != null && res.success)
                         {
-                            ElenaDiagnostics = res.result;
+                            NpcDiagnosticsByAgent[agentId] = res.result;
+                            if (agentId == "agent:elena-npc") ElenaDiagnostics = res.result;
+                            if (agentId == "agent:camila-npc") CamilaDiagnostics = res.result;
                         }
                     }
                     catch (Exception) { /* Non-critical diagnostic */ }
                 }
             }
+        }
+
+        public IEnumerator FetchElenaDiagnostics()
+        {
+            yield return FetchNpcDiagnostics("agent:elena-npc");
         }
 
         /// <summary>

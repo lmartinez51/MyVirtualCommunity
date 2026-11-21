@@ -93,7 +93,49 @@ namespace MyVirtualCommunity.Environment
             CreateAvenidaLaArboleda();
             CreateCorporativoArboleda();
             CreateOverheadPowerGrid();
+            CreateCamilaProbeObjects();
             SetupLighting();
+        }
+
+        /// <summary>
+        /// Milestone 94: Camila probe objects. Positions mirror the TS registry
+        /// (src/core/camila-probe-objects.ts, CAMILA_PROBE_OBJECTS) — same
+        /// Unity coordinates, same clusters. Props only: no instructions, no
+        /// colliders that block walking (addCollider=false), no behaviour.
+        /// If the TS registry moves an object, move it here too.
+        /// </summary>
+        private void CreateCamilaProbeObjects()
+        {
+            GameObject root = new GameObject("Camila_ProbeObjects");
+            root.transform.SetParent(transform, false);
+
+            // Cluster: fútbol — ball (Dollar 2 Go parking) + goal + cones (empty lot north)
+            CreateSphere(root.transform, "Probe_Ball", new Vector3(45f, 0.5f, 14f), new Vector3(0.45f, 0.45f, 0.45f), Color.white);
+            CreateBox(root.transform, "Probe_SmallGoal_PostWest", new Vector3(43.5f, 0.6f, 32f), new Vector3(0.12f, 1.2f, 0.12f), Color.white, false);
+            CreateBox(root.transform, "Probe_SmallGoal_PostEast", new Vector3(46.5f, 0.6f, 32f), new Vector3(0.12f, 1.2f, 0.12f), Color.white, false);
+            CreateBox(root.transform, "Probe_SmallGoal_Crossbar", new Vector3(45f, 1.2f, 32f), new Vector3(3.1f, 0.12f, 0.12f), Color.white, false);
+            CreateCylinder(root.transform, "Probe_ConeWest", new Vector3(42f, 0.4f, 28f), new Vector3(0.4f, 0.7f, 0.4f), new Color(0.95f, 0.45f, 0.10f), false);
+            CreateCylinder(root.transform, "Probe_ConeEast", new Vector3(48f, 0.4f, 28f), new Vector3(0.4f, 0.7f, 0.4f), new Color(0.95f, 0.45f, 0.10f), false);
+
+            // Cluster: basura — bag (Wing Spot sidewalk) + distant bin (Arboleda) + broom (Tía Lupe)
+            CreateSphere(root.transform, "Probe_TrashBag", new Vector3(-4f, 0.35f, 3.5f), new Vector3(0.5f, 0.35f, 0.5f), new Color(0.12f, 0.12f, 0.14f), false);
+            CreateCylinder(root.transform, "Probe_TrashBin", new Vector3(103f, 0.6f, 30f), new Vector3(0.6f, 1.0f, 0.6f), new Color(0.15f, 0.35f, 0.25f), false);
+            CreateBox(root.transform, "Probe_Broom", new Vector3(-18f, 0.4f, 6f), new Vector3(0.08f, 1.1f, 0.08f), new Color(0.55f, 0.40f, 0.20f), false);
+
+            // Cluster: agua — puddle (Del Porvenir) + bucket + watering can (residence) + umbrella (bench)
+            CreateCylinder(root.transform, "Probe_Puddle", new Vector3(13.5f, 0.28f, 25f), new Vector3(1.4f, 0.06f, 1.0f), new Color(0.30f, 0.55f, 0.75f), false);
+            CreateCylinder(root.transform, "Probe_Bucket", new Vector3(9f, 0.35f, 32f), new Vector3(0.35f, 0.4f, 0.35f), new Color(0.75f, 0.20f, 0.20f), false);
+            CreateCylinder(root.transform, "Probe_WateringCan", new Vector3(10f, 0.35f, 32.5f), new Vector3(0.3f, 0.35f, 0.3f), new Color(0.20f, 0.55f, 0.30f), false);
+            CreateBox(root.transform, "Probe_Umbrella", new Vector3(60f, 0.85f, 2.4f), new Vector3(0.9f, 0.06f, 0.9f), new Color(0.85f, 0.20f, 0.35f), false);
+
+            // Cluster: descanso — bench + book/newspaper + empty cup (boulevard north sidewalk)
+            CreateBox(root.transform, "Probe_Bench", new Vector3(60f, 0.45f, 2.4f), new Vector3(1.8f, 0.12f, 0.5f), new Color(0.45f, 0.30f, 0.18f), false);
+            CreateBox(root.transform, "Probe_Book", new Vector3(60f, 0.6f, 2.4f), new Vector3(0.3f, 0.06f, 0.22f), new Color(0.95f, 0.90f, 0.75f), false);
+            CreateCylinder(root.transform, "Probe_Cup", new Vector3(60.6f, 0.65f, 2.4f), new Vector3(0.12f, 0.15f, 0.12f), Color.white, false);
+
+            // Cluster: arte — chalk (Wing Spot sidewalk) + blank wall (Wing Spot east wall)
+            CreateBox(root.transform, "Probe_Chalk", new Vector3(-8f, 0.28f, 2.4f), new Vector3(0.25f, 0.05f, 0.08f), new Color(0.95f, 0.30f, 0.55f), false);
+            CreateBox(root.transform, "Probe_BlankWall", new Vector3(-2.5f, 1.2f, 8f), new Vector3(0.15f, 2.0f, 3.0f), new Color(0.92f, 0.90f, 0.85f), false);
         }
 
         [ContextMenu("Clear Environment")]

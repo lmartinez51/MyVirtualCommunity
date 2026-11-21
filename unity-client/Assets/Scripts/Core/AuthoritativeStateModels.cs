@@ -198,6 +198,9 @@ namespace MyVirtualCommunity.Core
         public string actionType;
         public string targetAgentId;
         public string establishmentId;
+        // Milestone 94 (Camila): move_to_place destination / look_at target.
+        public string destinationPlaceId;
+        public string targetObjectId;
         public string requestedAt;
         public string reasoningContext;
     }
