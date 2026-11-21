@@ -350,6 +350,52 @@ namespace MyVirtualCommunity.Player
         }
 
         private InteractiveDoor currentTargetDoor = null;
+        private InteractiveWorldProp currentTargetProp = null;
+        private InteractiveWorldProp heldProp = null;
+
+        private void OnControllerColliderHit(ControllerColliderHit hit)
+        {
+            if (hit == null || hit.collider == null) return;
+            var prop = hit.collider.GetComponentInParent<InteractiveWorldProp>();
+            if (prop != null && !prop.IsHeld)
+            {
+                float speed = Input.GetKey(KeyCode.LeftShift) ? runSpeed : walkSpeed;
+                prop.ApplyBodyPush(hit.moveDirection, speed);
+            }
+        }
+
+        private InteractiveWorldProp FindBestInteractiveProp()
+        {
+            InteractiveWorldProp bestProp = null;
+            float bestScore = float.MaxValue;
+
+            Vector3 playerPos = transform.position;
+            Vector3 playerForward = transform.forward;
+
+            for (int i = 0; i < InteractiveWorldProp.ActiveProps.Count; i++)
+            {
+                var prop = InteractiveWorldProp.ActiveProps[i];
+                if (prop == null || !prop.isActiveAndEnabled || prop.IsHeld) continue;
+
+                Vector3 propPos = prop.transform.position;
+                Vector3 diff = propPos - playerPos;
+                diff.y *= 0.5f;
+                float dist = diff.magnitude;
+
+                if (dist <= prop.InteractionRange)
+                {
+                    Vector3 toPropFlat = new Vector3(propPos.x - playerPos.x, 0f, propPos.z - playerPos.z).normalized;
+                    float facingDot = Vector3.Dot(playerForward, toPropFlat);
+                    float score = dist - (facingDot * 0.55f);
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        bestProp = prop;
+                    }
+                }
+            }
+            return bestProp;
+        }
 
         private InteractiveDoor FindBestInteractiveDoor()
         {
@@ -393,16 +439,32 @@ namespace MyVirtualCommunity.Player
             }
 
             currentTargetDoor = FindBestInteractiveDoor();
+            currentTargetProp = heldProp == null ? FindBestInteractiveProp() : null;
 
             float distToCounter = Vector3.Distance(transform.position, serviceCounterPosition);
 
-            if (isInsideWingSpot && distToCounter <= counterInteractionRadius)
+            if (heldProp != null)
+            {
+                if (currentTargetDoor != null)
+                {
+                    OnPromptAvailable?.Invoke($"{heldProp.GetInteractionPrompt()}  |  (Puerta: {currentTargetDoor.DoorName})");
+                }
+                else
+                {
+                    OnPromptAvailable?.Invoke(heldProp.GetInteractionPrompt());
+                }
+            }
+            else if (isInsideWingSpot && distToCounter <= counterInteractionRadius)
             {
                 OnPromptAvailable?.Invoke("[E] Solicitar Servicio (Hablar con Elena)  |  [M] Ver Menú");
             }
             else if (currentTargetDoor != null)
             {
                 OnPromptAvailable?.Invoke(currentTargetDoor.GetInteractionPrompt());
+            }
+            else if (currentTargetProp != null)
+            {
+                OnPromptAvailable?.Invoke(currentTargetProp.GetInteractionPrompt());
             }
             else
             {
@@ -423,8 +485,32 @@ namespace MyVirtualCommunity.Player
 
             // [C] key is strictly isolated for Avatar Customization modal and never mutates door state
 
+            // [F] key kicks a nearby kickable prop (e.g. soccer ball) or throws a currently held prop
+            if (Input.GetKeyDown(KeyCode.F))
+            {
+                if (heldProp != null && heldProp.CanThrow && !heldProp.CanWheelMove)
+                {
+                    heldProp.Throw(transform);
+                    heldProp = null;
+                    return;
+                }
+                else if (heldProp == null && currentTargetProp != null && currentTargetProp.CanKick)
+                {
+                    currentTargetProp.Kick(transform);
+                    return;
+                }
+            }
+
             if (Input.GetKeyDown(KeyCode.E))
             {
+                // If carrying/wheeling an object, [E] drops or parks it cleanly
+                if (heldProp != null)
+                {
+                    heldProp.Drop(transform);
+                    heldProp = null;
+                    return;
+                }
+
                 float distToCounter = Vector3.Distance(transform.position, serviceCounterPosition);
 
                 if (isInsideWingSpot && distToCounter <= counterInteractionRadius)
@@ -450,6 +536,13 @@ namespace MyVirtualCommunity.Player
                     else
                     {
                         currentTargetDoor.Interact(gameObject);
+                    }
+                }
+                else if (currentTargetProp != null && (currentTargetProp.CanCarry || currentTargetProp.CanWheelMove))
+                {
+                    if (currentTargetProp.PickUp(transform))
+                    {
+                        heldProp = currentTargetProp;
                     }
                 }
             }

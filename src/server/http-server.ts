@@ -603,6 +603,38 @@ export class WorldHttpServer {
             return;
           }
 
+          // Milestone 94: GET /api/npc/agent:camila-npc/notebook
+          // Camila's own memory (diary / mental map / hypotheses). Only Camila
+          // has a notebook; other agents get 404.
+          if (method === 'GET' && action === 'notebook') {
+            if (agentId !== 'agent:camila-npc') {
+              this.sendJson(res, 404, {
+                success: false,
+                error: {
+                  code: 'notebook-not-found',
+                  message: `Agent "${agentId}" has no notebook; only agent:camila-npc does.`,
+                },
+              });
+              return;
+            }
+            try {
+              const notebook = this.controller.getCamilaNotebook();
+              this.sendJson(res, 200, {
+                success: true,
+                result: notebook,
+              });
+            } catch (err) {
+              this.sendJson(res, 500, {
+                success: false,
+                error: {
+                  code: 'notebook-read-error',
+                  message: (err as Error).message,
+                },
+              });
+            }
+            return;
+          }
+
           // POST /api/npc/:agentId/cycle
           if (method === 'POST' && action === 'cycle') {
             try {
@@ -618,6 +650,43 @@ export class WorldHttpServer {
                 success: false,
                 error: {
                   code: 'cycle-execution-error',
+                  message: (err as Error).message,
+                },
+              });
+            }
+            return;
+          }
+
+          // Milestone 94: POST /api/npc/:agentId/arrival
+          // Reports physical arrival (or interruption) of an active NPC traversal
+          // so World Core validates via M69/M73 and commits Agent.locationId.
+          if (method === 'POST' && action === 'arrival') {
+            try {
+              const body = (await this.readJsonBody(req)) ?? {};
+              const destinationPlaceId =
+                typeof body.destinationPlaceId === 'string' ? body.destinationPlaceId : undefined;
+              const rawStatus = typeof body.status === 'string' ? body.status : 'arrived';
+              const validStatuses = ['arrived', 'route-unavailable', 'traversal-interrupted', 'traversal-failed'];
+              const status = validStatuses.includes(rawStatus)
+                ? (rawStatus as 'arrived' | 'route-unavailable' | 'traversal-interrupted' | 'traversal-failed')
+                : 'arrived';
+              const message = typeof body.message === 'string' ? body.message : undefined;
+
+              const completion = await this.controller.completeNpcTraversal(
+                agentId,
+                destinationPlaceId,
+                status,
+                message
+              );
+              this.sendJson(res, 200, {
+                success: completion.success,
+                result: completion,
+              });
+            } catch (err) {
+              this.sendJson(res, 500, {
+                success: false,
+                error: {
+                  code: 'arrival-completion-error',
                   message: (err as Error).message,
                 },
               });

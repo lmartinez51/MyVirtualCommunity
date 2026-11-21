@@ -51,6 +51,31 @@ import {
   type NpcAiDiagnostics,
 } from '../core/npc-ai/index.js';
 import {
+  RuntimeTraversalCoordinator,
+  type CompleteTraversalResult,
+} from '../core/traversal-coordinator.js';
+import type { NavigationStatus } from '../core/navigation-contract.js';
+import {
+  CAMILA_AGENT_ID,
+  CAMILA_GOAL,
+} from '../core/npc-ai/camila-config.js';
+import { CamilaCognitionProvider } from '../core/npc-ai/providers/camila-cognition-provider.js';
+import {
+  CamilaNotebook,
+  type CamilaNotebookData,
+} from '../persistence/camila-notebook.js';
+import { buildCamilaWorldState } from '../core/camila-world-state.js';
+
+export interface SessionControllerOptions extends BootstrapOptions {
+  playerId?: string;
+  timeSource?: RealTimeSource;
+  aiProvider?: NpcCognitionProvider;
+  /** Override Camila's cognition provider (tests). Defaults to env-driven Muse Spark / mock. */
+  camilaProvider?: NpcCognitionProvider;
+  /** Override Camila's notebook path (tests). Defaults to data/camila-notebook.json. */
+  camilaNotebookPath?: string;
+}
+import {
   findBusinessSchedule,
   evaluateBusinessScheduleStatus,
   evaluateBusinessAdmission,
@@ -199,6 +224,8 @@ export class WorldSessionController {
   private isShuttingDown: boolean = false;
   private isStopped: boolean = false;
   private aiRuntime?: NpcAiRuntime;
+  private readonly traversalCoordinator = new RuntimeTraversalCoordinator();
+  private camilaNotebook?: CamilaNotebook;
 
   constructor(options: SessionControllerOptions = {}) {
     const bootstrapResult = bootstrapWorld({
@@ -215,9 +242,32 @@ export class WorldSessionController {
     const playerAgent = this.state.agents.find((a) => a.agentType === 'player');
     this.activePlayerId = options.playerId ?? playerAgent?.id ?? DEFAULT_DEVELOPMENT_PLAYER_ID;
     this.timeSource = options.timeSource;
-    this.aiRuntime = new NpcAiRuntime({
+    this.aiRuntime = this.createAiRuntime(options);
+  }
+
+  /**
+   * Milestone 94: builds the AI runtime with Camila wired in — her own
+   * goal, her Muse Spark provider (live when MODEL_API_KEY is set, mock
+   * otherwise), the traversal coordinator for move_to_place, and her
+   * notebook. Elena's default provider/goal are untouched.
+   */
+  private createAiRuntime(options: SessionControllerOptions): NpcAiRuntime {
+    const notebook = new CamilaNotebook(options.camilaNotebookPath);
+    this.camilaNotebook = notebook;
+    const worldSummary = JSON.stringify(buildCamilaWorldState(), null, 2);
+    const camilaProvider =
+      options.camilaProvider ??
+      new CamilaCognitionProvider({
+        worldStateSummary: worldSummary,
+        notebookExcerpt: () => notebook.toExcerpt(),
+      });
+    return new NpcAiRuntime({
       controller: this,
       provider: options.aiProvider,
+      coordinator: this.traversalCoordinator,
+      notebook,
+      agentProviders: { [CAMILA_AGENT_ID]: camilaProvider },
+      agentGoals: { [CAMILA_AGENT_ID]: CAMILA_GOAL },
     });
   }
 
@@ -355,7 +405,7 @@ export class WorldSessionController {
    */
   public getNpcAiRuntime(): NpcAiRuntime {
     if (!this.aiRuntime) {
-      this.aiRuntime = new NpcAiRuntime({ controller: this });
+      this.aiRuntime = this.createAiRuntime({});
     }
     return this.aiRuntime;
   }
@@ -382,10 +432,106 @@ export class WorldSessionController {
   }
 
   /**
+   * Milestone 94: authoritatively completes an active NPC traversal when the
+   * presentation client reports physical arrival (or interruption, e.g. blocked
+   * by a closed business door). Serialized through the command queue so
+   * persistence never races with temporal reconciliation or player commands.
+   */
+  public completeNpcTraversal(
+    agentId: string,
+    destinationPlaceId?: string,
+    status: NavigationStatus = 'arrived',
+    message?: string
+  ): Promise<CompleteTraversalResult> {
+    if (this.isShuttingDown || this.isStopped) {
+      return Promise.resolve({
+        success: false,
+        code: 'traversal-interrupted',
+        message: 'Server is shutting down or stopped',
+        agentId,
+        changed: false,
+      });
+    }
+
+    const task = async (): Promise<CompleteTraversalResult> => {
+      const active = this.traversalCoordinator.getActiveTraversal(agentId);
+      if (!active) {
+        return {
+          success: false,
+          code: 'no-active-traversal',
+          message: `No active traversal found for agent "${agentId}"`,
+          agentId,
+          changed: false,
+        };
+      }
+
+      const worldTime = this.clock.getTime();
+      const targetPlaceId =
+        destinationPlaceId && destinationPlaceId.trim() !== ''
+          ? destinationPlaceId.trim()
+          : active.request.destinationPlaceId;
+
+      const candidate = structuredClone(this.state);
+      candidate.worldTime = worldTime;
+
+      const navResult = {
+        requestId: active.request.requestId,
+        agentId,
+        destinationPlaceId: targetPlaceId,
+        status,
+        completedAt: worldTime,
+        message: message ?? (status === 'arrived' ? 'Arrived at destination.' : `Traversal ${status}.`),
+      };
+
+      const completion = this.traversalCoordinator.completeTraversal(candidate, navResult);
+
+      if (completion.success && completion.changed) {
+        try {
+          this.persistence.save(candidate);
+          this.state = candidate;
+        } catch (persistError) {
+          return {
+            success: false,
+            code: 'transition-failed',
+            message: `Failed to persist arrival state: ${(persistError as Error).message}`,
+            agentId,
+            changed: false,
+          };
+        }
+      }
+
+      this.aiRuntime?.recordTraversalArrival(
+        agentId,
+        completion.success ? completion.currentLocationId : undefined,
+        worldTime,
+        completion.success
+      );
+
+      return completion;
+    };
+
+    const nextPromise = this.commandQueue.then(task, task);
+    this.commandQueue = nextPromise.then(() => {}, () => {});
+    return nextPromise;
+  }
+
+  /**
    * Returns AI diagnostics for the target NPC.
    */
   public getNpcAiDiagnostics(agentId: string): NpcAiDiagnostics {
     return this.getNpcAiRuntime().getDiagnostics(agentId);
+  }
+
+  /**
+   * Milestone 94: returns Camila's notebook data (read-only snapshot).
+   * The notebook lives outside WorldState; this is the only server-side
+   * read path for it (also exposed as GET /api/npc/agent:camila-npc/notebook).
+   */
+  public getCamilaNotebook(): CamilaNotebookData {
+    if (!this.camilaNotebook) {
+      this.camilaNotebook = new CamilaNotebook();
+    }
+    return this.camilaNotebook.getData();
   }
 
   /**

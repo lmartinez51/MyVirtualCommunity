@@ -94,7 +94,336 @@ namespace MyVirtualCommunity.Environment
             CreateCorporativoArboleda();
             CreateRinconesBlockTerrain();
             CreateOverheadPowerGrid();
+            CreateCamilaProbeObjects();
             SetupLighting();
+        }
+
+        /// <summary>
+        /// Milestone 94: Camila probe objects. Positions mirror the TS registry
+        /// (src/core/camila-probe-objects.ts, CAMILA_PROBE_OBJECTS) — same
+        /// Unity coordinates, same clusters. Props only: no instructions, no
+        /// colliders that block walking (addCollider=false), no behaviour.
+        /// All props are strictly grounded flush on their supporting surface.
+        /// </summary>
+        private void CreateCamilaProbeObjects()
+        {
+            GameObject root = new GameObject("Camila_ProbeObjects");
+            root.transform.SetParent(transform, false);
+
+            // Cluster: fútbol — tangible kickable & carriable soccer ball (Dollar 2 Go parking, asphalt top Y = 0.12m)
+            // Ball diameter = 0.45m (radius = 0.225m) -> center Y = 0.12 + 0.225 = 0.345m (flush on asphalt)
+            GameObject ballRoot = new GameObject("Probe_Ball");
+            ballRoot.transform.SetParent(root.transform, false);
+            ballRoot.transform.localPosition = new Vector3(45f, 0.345f, 14f);
+            CreateSphere(ballRoot.transform, "Ball_Body", Vector3.zero, new Vector3(0.45f, 0.45f, 0.45f), new Color(0.96f, 0.96f, 0.96f), false, 0.45f);
+            CreateSphere(ballRoot.transform, "Ball_Panel_Top", new Vector3(0f, 0.17f, 0f), new Vector3(0.18f, 0.12f, 0.18f), new Color(0.12f, 0.12f, 0.14f), false, 0.3f);
+            CreateSphere(ballRoot.transform, "Ball_Panel_Front", new Vector3(0f, 0.02f, 0.17f), new Vector3(0.18f, 0.18f, 0.11f), new Color(0.12f, 0.12f, 0.14f), false, 0.3f);
+            CreateSphere(ballRoot.transform, "Ball_Panel_Back", new Vector3(0f, 0.02f, -0.17f), new Vector3(0.18f, 0.18f, 0.11f), new Color(0.12f, 0.12f, 0.14f), false, 0.3f);
+            CreateSphere(ballRoot.transform, "Ball_Panel_Left", new Vector3(-0.17f, -0.02f, 0f), new Vector3(0.11f, 0.18f, 0.18f), new Color(0.12f, 0.12f, 0.14f), false, 0.3f);
+            CreateSphere(ballRoot.transform, "Ball_Panel_Right", new Vector3(0.17f, -0.02f, 0f), new Vector3(0.11f, 0.18f, 0.18f), new Color(0.12f, 0.12f, 0.14f), false, 0.3f);
+            var ballCol = ballRoot.AddComponent<SphereCollider>();
+            ballCol.radius = 0.225f;
+            var ballProp = ballRoot.AddComponent<InteractiveWorldProp>();
+            ballProp.Configure("Pelota", carry: true, wheelMove: false, kick: true, throwable: true,
+                mass: 0.45f, drag: 0.35f, angularDrag: 0.5f,
+                holdOffset: new Vector3(0.28f, 0.96f, 0.58f), groundOffset: 0.225f, bounciness: 0.65f, range: 2.2f, pushPower: 4.2f);
+
+            // Solid soccer goal posts so the ball physically collides with the frame
+            CreateBox(root.transform, "Probe_SmallGoal_PostWest", new Vector3(43.5f, 0.55f, 32f), new Vector3(0.12f, 1.3f, 0.12f), Color.white, true);
+            CreateBox(root.transform, "Probe_SmallGoal_PostEast", new Vector3(46.5f, 0.55f, 32f), new Vector3(0.12f, 1.3f, 0.12f), Color.white, true);
+            CreateBox(root.transform, "Probe_SmallGoal_Crossbar", new Vector3(45f, 1.2f, 32f), new Vector3(3.1f, 0.12f, 0.12f), Color.white, true);
+
+            // Tangible movable traffic cones grounded on rear asphalt edge (Y = 0.12m, total height 0.56m)
+            GameObject coneWest = CreateCylinder(root.transform, "Probe_ConeWest", new Vector3(42f, 0.40f, 27.6f), new Vector3(0.32f, 0.28f, 0.32f), new Color(0.95f, 0.45f, 0.10f), true);
+            coneWest.AddComponent<InteractiveWorldProp>().Configure("Cono Naranja", true, false, false, true, 1.1f, 1.2f, 1.8f, new Vector3(0.30f, 0.88f, 0.62f), 0.28f, 0.05f, 2.2f, 2.2f, freezeTilt: true);
+            GameObject coneEast = CreateCylinder(root.transform, "Probe_ConeEast", new Vector3(48f, 0.40f, 27.6f), new Vector3(0.32f, 0.28f, 0.32f), new Color(0.95f, 0.45f, 0.10f), true);
+            coneEast.AddComponent<InteractiveWorldProp>().Configure("Cono Naranja", true, false, false, true, 1.1f, 1.2f, 1.8f, new Vector3(0.30f, 0.88f, 0.62f), 0.28f, 0.05f, 2.2f, 2.2f, freezeTilt: true);
+
+            // Cluster: basura — tangible trash bag, US-style wheeled trash bin (Arboleda sidewalk), broom
+            GameObject trashBag = CreateSphere(root.transform, "Probe_TrashBag", new Vector3(-4f, 0.40f, 3.5f), new Vector3(0.46f, 0.32f, 0.46f), new Color(0.12f, 0.12f, 0.14f), true, 0.45f);
+            trashBag.AddComponent<InteractiveWorldProp>().Configure("Bolsa de Basura", true, false, false, true, 2.2f, 2.5f, 3.0f, new Vector3(0.28f, 0.78f, 0.60f), 0.16f, 0.02f, 2.2f, 1.6f, freezeTilt: true);
+
+            GameObject trashBin = CreateUsWheeledTrashBin(root.transform, "Probe_TrashBin", new Vector3(107.55f, 0.24f, 30f), new Color(0.30f, 0.32f, 0.35f), new Color(0.20f, 0.22f, 0.25f));
+            var binCol = trashBin.AddComponent<BoxCollider>();
+            binCol.center = new Vector3(0f, 0.51f, 0f);
+            binCol.size = new Vector3(0.62f, 1.02f, 0.66f);
+            trashBin.AddComponent<InteractiveWorldProp>().Configure("Bote de Basura", carry: false, wheelMove: true, kick: false, throwable: false,
+                mass: 12.0f, drag: 3.0f, angularDrag: 4.0f,
+                holdOffset: new Vector3(0f, 0f, 1.05f), groundOffset: 0.0f, bounciness: 0.0f, range: 2.4f, pushPower: 2.0f, freezeTilt: true);
+
+            GameObject broom = CreateBox(root.transform, "Probe_Broom", new Vector3(-18f, 0.79f, 6f), new Vector3(0.06f, 1.1f, 0.06f), new Color(0.55f, 0.40f, 0.20f), true);
+            broom.AddComponent<InteractiveWorldProp>().Configure("Escoba", true, false, false, true, 0.8f, 1.5f, 2.0f, new Vector3(0.34f, 0.90f, 0.52f), 0.55f, 0.05f, 2.2f, 1.8f);
+
+            // Cluster: agua — true 9.5cm recessed 3D street pothole with pooled rainwater in Calle Del Porvenir (X=13.5, Z=25)
+            CreateRecessedStreetPothole(root.transform, "Probe_Puddle", new Vector3(13.5f, 0f, 25f));
+
+            // Tangible, carriable Bucket & Watering Can on Residencia Del Porvenir raised sidewalk (Y = 0.24m)
+            GameObject bucket = CreateDetailedBucket(root.transform, "Probe_Bucket", new Vector3(7.15f, 0.24f, 33.10f));
+            var bucketCol = bucket.AddComponent<BoxCollider>();
+            bucketCol.center = new Vector3(0f, 0.18f, 0f);
+            bucketCol.size = new Vector3(0.36f, 0.36f, 0.36f);
+            bucket.AddComponent<InteractiveWorldProp>().Configure("Cubeta", true, false, false, true, 1.4f, 2.0f, 2.5f, new Vector3(0.32f, 0.82f, 0.58f), 0.0f, 0.05f, 2.2f, 2.0f, freezeTilt: true);
+
+            GameObject wateringCan = CreateDetailedWateringCan(root.transform, "Probe_WateringCan", new Vector3(7.20f, 0.24f, 33.75f));
+            var canCol = wateringCan.AddComponent<BoxCollider>();
+            canCol.center = new Vector3(0.06f, 0.16f, 0f);
+            canCol.size = new Vector3(0.46f, 0.32f, 0.28f);
+            wateringCan.AddComponent<InteractiveWorldProp>().Configure("Regadera", true, false, false, true, 1.5f, 2.0f, 2.5f, new Vector3(0.34f, 0.84f, 0.60f), 0.0f, 0.05f, 2.2f, 2.0f, freezeTilt: true);
+
+            // Cluster: descanso — solid fixed-to-ground tubular steel & mesh sidewalk bench (sidewalk top Y = 0.24m)
+            // Seat top rests at world Y = 0.685m; placed at Z = 2.15m to leave a wide walkway behind it
+            CreateFixedMetalSidewalkBench(root.transform, "Probe_Bench", new Vector3(60f, 0.24f, 2.15f));
+
+            // Tangible, carriable resting items grounded flush on top of the bench seat (seat top = 0.685m)
+            GameObject book = CreateBox(root.transform, "Probe_Book", new Vector3(60.0f, 0.710f, 2.15f), new Vector3(0.28f, 0.045f, 0.21f), new Color(0.95f, 0.90f, 0.75f), true, 0.15f);
+            book.AddComponent<InteractiveWorldProp>().Configure("Libro", true, false, false, true, 0.4f, 2.0f, 2.5f, new Vector3(0.26f, 0.95f, 0.52f), 0.025f, 0.02f, 2.2f, 1.2f);
+
+            GameObject cup = CreateCylinder(root.transform, "Probe_Cup", new Vector3(60.48f, 0.750f, 2.15f), new Vector3(0.09f, 0.062f, 0.09f), Color.white, true, 0.55f);
+            cup.AddComponent<InteractiveWorldProp>().Configure("Taza", true, false, false, true, 0.3f, 2.0f, 2.5f, new Vector3(0.26f, 0.96f, 0.50f), 0.062f, 0.05f, 2.2f, 1.2f, freezeTilt: true);
+
+            GameObject umbrella = CreateFoldedUmbrellaOnBench(root.transform, "Probe_Umbrella", new Vector3(59.46f, 0.720f, 2.17f));
+            var umbCol = umbrella.AddComponent<BoxCollider>();
+            umbCol.center = new Vector3(0.03f, 0f, 0f);
+            umbCol.size = new Vector3(0.84f, 0.08f, 0.10f);
+            umbrella.AddComponent<InteractiveWorldProp>().Configure("Paraguas", true, false, false, true, 0.6f, 1.8f, 2.2f, new Vector3(0.32f, 0.92f, 0.56f), 0.045f, 0.05f, 2.2f, 1.6f);
+
+            // Cluster: arte — carriable chalk flush on Wing Spot sidewalk (Y = 0.24m) + blank wall
+            GameObject chalk = CreateBox(root.transform, "Probe_Chalk", new Vector3(-8f, 0.265f, 2.4f), new Vector3(0.25f, 0.05f, 0.08f), new Color(0.95f, 0.30f, 0.55f), true);
+            chalk.AddComponent<InteractiveWorldProp>().Configure("Gis de Colores", true, false, false, true, 0.25f, 2.5f, 3.0f, new Vector3(0.24f, 0.94f, 0.48f), 0.025f, 0.02f, 2.2f, 1.0f);
+
+            CreateBox(root.transform, "Probe_BlankWall", new Vector3(-2.5f, 1.24f, 8f), new Vector3(0.15f, 2.0f, 3.0f), new Color(0.92f, 0.90f, 0.85f), false);
+        }
+
+        /// <summary>
+        /// Builds a physically recessed 9.5cm-deep street pothole inside the split opening of
+        /// Calle Del Porvenir (X: 12.75..14.25, Z: 24.40..25.60).
+        /// Features compacted gravel sub-base at Y = -0.095m (solid collider so player steps down),
+        /// broken jagged asphalt cavity walls, and recessed rainwater pooled at Y = -0.042m.
+        /// </summary>
+        private void CreateRecessedStreetPothole(Transform parent, string name, Vector3 centerPos)
+        {
+            GameObject pothole = new GameObject(name);
+            pothole.transform.SetParent(parent, false);
+            pothole.transform.localPosition = centerPos;
+
+            Color wetGravelBase = new Color(0.14f, 0.13f, 0.12f);
+            Color brokenAsphaltRim = new Color(0.17f, 0.17f, 0.19f);
+            Color crackedLip = new Color(0.24f, 0.23f, 0.22f);
+            Color puddleWater = new Color(0.18f, 0.36f, 0.50f);
+
+            // 1. Recessed compacted gravel & mud crater floor at Y = -0.095m (solid collider)
+            CreateBox(pothole.transform, "Pothole_Crater_Bottom", new Vector3(0f, -0.105f, 0f), new Vector3(1.56f, 0.02f, 1.26f), wetGravelBase, true, 0.15f);
+
+            // 2. Stepped broken asphalt inner cavity walls (from Y = -0.095m up to street Y = 0.00m)
+            CreateBox(pothole.transform, "Pothole_Wall_South", new Vector3(0f, -0.048f, -0.58f), new Vector3(1.50f, 0.096f, 0.06f), brokenAsphaltRim, false, 0.12f);
+            CreateBox(pothole.transform, "Pothole_Wall_North", new Vector3(0f, -0.048f, 0.58f), new Vector3(1.50f, 0.096f, 0.06f), brokenAsphaltRim, false, 0.12f);
+            CreateBox(pothole.transform, "Pothole_Wall_West", new Vector3(-0.73f, -0.048f, 0f), new Vector3(0.06f, 0.096f, 1.18f), brokenAsphaltRim, false, 0.12f);
+            CreateBox(pothole.transform, "Pothole_Wall_East", new Vector3(0.73f, -0.048f, 0f), new Vector3(0.06f, 0.096f, 1.18f), brokenAsphaltRim, false, 0.12f);
+
+            // 3. Irregular broken asphalt shoulder shelves & crumbled aggregate chunks along corners (organic pothole silhouette)
+            CreateBox(pothole.transform, "Pothole_Corner_SW", new Vector3(-0.56f, -0.032f, -0.44f), new Vector3(0.36f, 0.064f, 0.28f), crackedLip, false, 0.10f);
+            CreateBox(pothole.transform, "Pothole_Corner_NE", new Vector3(0.55f, -0.035f, 0.43f), new Vector3(0.38f, 0.070f, 0.30f), crackedLip, false, 0.10f);
+            CreateBox(pothole.transform, "Pothole_Corner_NW", new Vector3(-0.58f, -0.042f, 0.45f), new Vector3(0.30f, 0.055f, 0.24f), brokenAsphaltRim, false, 0.10f);
+            CreateBox(pothole.transform, "Pothole_Corner_SE", new Vector3(0.58f, -0.040f, -0.46f), new Vector3(0.32f, 0.058f, 0.24f), brokenAsphaltRim, false, 0.10f);
+
+            // Small stepped inner gravel ledges so stepping in/out looks rough and natural
+            CreateBox(pothole.transform, "Pothole_Aggregate_1", new Vector3(-0.32f, -0.082f, -0.18f), new Vector3(0.28f, 0.025f, 0.22f), crackedLip, false, 0.10f);
+            CreateBox(pothole.transform, "Pothole_Aggregate_2", new Vector3(0.28f, -0.084f, 0.16f), new Vector3(0.24f, 0.022f, 0.26f), crackedLip, false, 0.10f);
+
+            // 4. Glossy standing rainwater pooled INSIDE the pothole at Y = -0.042m (4.2cm below asphalt level, no collider)
+            CreateBox(pothole.transform, "Pothole_Water_Surface", new Vector3(0f, -0.042f, 0f), new Vector3(1.42f, 0.008f, 1.12f), puddleWater, false, 0.94f);
+        }
+
+        /// <summary>
+        /// Builds a realistic fixed-to-ground municipal tubular-steel & wire-mesh sidewalk bench
+        /// modeled after the real Blvd. Manuel Gómez Morín street bench (inverted-U tubular arches
+        /// bolted into concrete + wire-mesh seat deck and curved front skirt).
+        /// Base sits flush at local Y = 0.00m (world Y = 0.24m sidewalk top); seat top is local Y = 0.445m.
+        /// </summary>
+        private void CreateFixedMetalSidewalkBench(Transform parent, string name, Vector3 basePosition)
+        {
+            GameObject bench = new GameObject(name);
+            bench.transform.SetParent(parent, false);
+            bench.transform.localPosition = basePosition;
+
+            Color frameRustRed = new Color(0.66f, 0.27f, 0.18f);      // Terracotta / oxide-red painted tubular steel
+            Color meshSteel = new Color(0.46f, 0.24f, 0.18f);         // Weathered metal wire mesh
+            Color anchorPlate = new Color(0.32f, 0.20f, 0.16f);       // Concrete-bolted base flanges
+
+            float halfLen = 0.80f;   // 1.60m total width
+            float halfDepth = 0.25f; // 0.50m frame depth
+            float seatY = 0.43f;     // Seat top at local Y = 0.445m (world 0.685m)
+            float tubeDiam = 0.052f;
+
+            // 1. Two Inverted-U Arched Tubular End Frames (Left & Right) anchored into concrete
+            float[] endXs = new float[] { -halfLen, halfLen };
+            for (int e = 0; e < endXs.Length; e++)
+            {
+                float ex = endXs[e];
+                string side = e == 0 ? "L" : "R";
+
+                // Concrete anchor flanges at sidewalk level (Y = 0.006m)
+                CreateCylinder(bench.transform, $"Anchor_Front_{side}", new Vector3(ex, 0.006f, -halfDepth), new Vector3(0.10f, 0.006f, 0.10f), anchorPlate, false, 0.25f);
+                CreateCylinder(bench.transform, $"Anchor_Rear_{side}", new Vector3(ex, 0.006f, halfDepth), new Vector3(0.10f, 0.006f, 0.10f), anchorPlate, false, 0.25f);
+
+                // Vertical front & rear legs (Y: 0.00m to 0.54m)
+                CreateCylinder(bench.transform, $"Leg_Front_{side}", new Vector3(ex, 0.27f, -halfDepth), new Vector3(tubeDiam, 0.27f, tubeDiam), frameRustRed, false, 0.40f);
+                CreateCylinder(bench.transform, $"Leg_Rear_{side}", new Vector3(ex, 0.27f, halfDepth), new Vector3(tubeDiam, 0.27f, tubeDiam), frameRustRed, false, 0.40f);
+
+                // Curved arch top loop connecting front & rear legs (rising to Y = 0.68m like reference photo)
+                GameObject frontBend = CreateCylinder(bench.transform, $"Arch_FrontBend_{side}", new Vector3(ex, 0.60f, -0.18f), new Vector3(tubeDiam, 0.095f, tubeDiam), frameRustRed, false, 0.40f);
+                frontBend.transform.localEulerAngles = new Vector3(42f, 0f, 0f);
+
+                GameObject rearBend = CreateCylinder(bench.transform, $"Arch_RearBend_{side}", new Vector3(ex, 0.60f, 0.18f), new Vector3(tubeDiam, 0.095f, tubeDiam), frameRustRed, false, 0.40f);
+                rearBend.transform.localEulerAngles = new Vector3(-42f, 0f, 0f);
+
+                GameObject topBar = CreateCylinder(bench.transform, $"Arch_Top_{side}", new Vector3(ex, 0.66f, 0f), new Vector3(tubeDiam, 0.145f, tubeDiam), frameRustRed, false, 0.40f);
+                topBar.transform.localEulerAngles = new Vector3(90f, 0f, 0f);
+
+                // Side lower tie rail under the seat
+                CreateBox(bench.transform, $"Side_Tie_{side}", new Vector3(ex, seatY - 0.02f, 0f), new Vector3(0.035f, 0.035f, halfDepth * 2f), frameRustRed, false, 0.35f);
+            }
+
+            // 2. Horizontal Tubular Longitudinal Rails (front & rear edges of seat)
+            GameObject frontRail = CreateCylinder(bench.transform, "Seat_Rail_Front", new Vector3(0f, seatY, -halfDepth), new Vector3(0.042f, halfLen, 0.042f), frameRustRed, false, 0.40f);
+            frontRail.transform.localEulerAngles = new Vector3(0f, 0f, 90f);
+
+            GameObject rearRail = CreateCylinder(bench.transform, "Seat_Rail_Rear", new Vector3(0f, seatY, halfDepth), new Vector3(0.042f, halfLen, 0.042f), frameRustRed, false, 0.40f);
+            rearRail.transform.localEulerAngles = new Vector3(0f, 0f, 90f);
+
+            // Lower front skirt rail (matches curved mesh apron in Street View photo)
+            GameObject lowerSkirtRail = CreateCylinder(bench.transform, "Skirt_Rail_Lower", new Vector3(0f, 0.22f, -halfDepth), new Vector3(0.036f, halfLen, 0.036f), frameRustRed, false, 0.40f);
+            lowerSkirtRail.transform.localEulerAngles = new Vector3(0f, 0f, 90f);
+
+            // 3. Expanded Metal Mesh Seat Deck (slender flat grid slats so it reads as open metal mesh)
+            CreateBox(bench.transform, "Seat_Mesh_Base", new Vector3(0f, seatY + 0.008f, 0f), new Vector3(halfLen * 2f - 0.06f, 0.014f, halfDepth * 2f - 0.04f), meshSteel, true, 0.32f);
+            for (float mx = -0.68f; mx <= 0.68f; mx += 0.136f)
+            {
+                CreateBox(bench.transform, $"Seat_Rib_X_{mx:F2}", new Vector3(mx, seatY + 0.016f, 0f), new Vector3(0.018f, 0.006f, halfDepth * 2f - 0.04f), frameRustRed, false, 0.35f);
+            }
+            for (float mz = -0.18f; mz <= 0.18f; mz += 0.09f)
+            {
+                CreateBox(bench.transform, $"Seat_Rib_Z_{mz:F2}", new Vector3(0f, seatY + 0.016f, mz), new Vector3(halfLen * 2f - 0.06f, 0.006f, 0.016f), frameRustRed, false, 0.35f);
+            }
+
+            // 4. Front Vertical Metal Mesh Apron (between seat front edge and lower front rail)
+            CreateBox(bench.transform, "Front_Mesh_Apron", new Vector3(0f, 0.325f, -halfDepth + 0.008f), new Vector3(halfLen * 2f - 0.06f, 0.21f, 0.014f), meshSteel, false, 0.30f);
+            for (float mx = -0.68f; mx <= 0.68f; mx += 0.17f)
+            {
+                CreateBox(bench.transform, $"Apron_Rib_{mx:F2}", new Vector3(mx, 0.325f, -halfDepth - 0.002f), new Vector3(0.016f, 0.21f, 0.008f), frameRustRed, false, 0.35f);
+            }
+
+            // Solid bench body collider so players cannot walk through the metal frame
+            var benchCol = bench.AddComponent<BoxCollider>();
+            benchCol.center = new Vector3(0f, 0.22f, 0f);
+            benchCol.size = new Vector3(halfLen * 2f + 0.06f, 0.44f, halfDepth * 2f + 0.06f);
+        }
+
+        /// <summary>
+        /// Builds a compact folded umbrella resting horizontally on the bench seat (zero floating).
+        /// </summary>
+        private GameObject CreateFoldedUmbrellaOnBench(Transform parent, string name, Vector3 pos)
+        {
+            GameObject umb = new GameObject(name);
+            umb.transform.SetParent(parent, false);
+            umb.transform.localPosition = pos;
+            umb.transform.localEulerAngles = new Vector3(0f, 18f, 0f);
+
+            Color canopyRed = new Color(0.82f, 0.18f, 0.30f);
+            Color darkHandle = new Color(0.14f, 0.14f, 0.16f);
+
+            GameObject canopy = CreateCylinder(umb.transform, "Umbrella_FoldedCanopy", Vector3.zero, new Vector3(0.065f, 0.32f, 0.065f), canopyRed, false, 0.30f);
+            canopy.transform.localEulerAngles = new Vector3(0f, 0f, 90f);
+            GameObject tip = CreateCylinder(umb.transform, "Umbrella_Tip", new Vector3(-0.36f, 0f, 0f), new Vector3(0.018f, 0.05f, 0.018f), darkHandle, false, 0.5f);
+            tip.transform.localEulerAngles = new Vector3(0f, 0f, 90f);
+            GameObject shaft = CreateCylinder(umb.transform, "Umbrella_HandleStem", new Vector3(0.37f, 0f, 0f), new Vector3(0.022f, 0.07f, 0.022f), darkHandle, false, 0.4f);
+            shaft.transform.localEulerAngles = new Vector3(0f, 0f, 90f);
+            CreateBox(umb.transform, "Umbrella_Hook", new Vector3(0.43f, 0f, -0.03f), new Vector3(0.03f, 0.025f, 0.08f), darkHandle, false, 0.4f);
+            return umb;
+        }
+
+        /// <summary>
+        /// Builds a recognizable residential bucket grounded flush at basePosition.y.
+        /// </summary>
+        private GameObject CreateDetailedBucket(Transform parent, string name, Vector3 basePosition)
+        {
+            GameObject bucket = new GameObject(name);
+            bucket.transform.SetParent(parent, false);
+            bucket.transform.localPosition = basePosition;
+
+            Color redPlastic = new Color(0.78f, 0.18f, 0.16f);
+            Color rimColor = new Color(0.86f, 0.24f, 0.22f);
+            Color darkInterior = new Color(0.24f, 0.08f, 0.08f);
+            Color wireMetal = new Color(0.75f, 0.77f, 0.80f);
+
+            // Bucket body (height = 0.34m -> scale.y = 0.17f, center Y = 0.17m)
+            CreateCylinder(bucket.transform, "Bucket_Body", new Vector3(0f, 0.17f, 0f), new Vector3(0.32f, 0.17f, 0.32f), redPlastic, false, 0.45f);
+            // Molded top rim lip
+            CreateCylinder(bucket.transform, "Bucket_Rim", new Vector3(0f, 0.335f, 0f), new Vector3(0.35f, 0.015f, 0.35f), rimColor, false, 0.50f);
+            // Dark recessed interior top disc
+            CreateCylinder(bucket.transform, "Bucket_Interior", new Vector3(0f, 0.348f, 0f), new Vector3(0.29f, 0.004f, 0.29f), darkInterior, false, 0.20f);
+            // Metal bail handle resting over the rim
+            CreateBox(bucket.transform, "Bucket_Handle_L", new Vector3(-0.165f, 0.40f, 0f), new Vector3(0.014f, 0.13f, 0.014f), wireMetal, false, 0.70f);
+            CreateBox(bucket.transform, "Bucket_Handle_R", new Vector3(0.165f, 0.40f, 0f), new Vector3(0.014f, 0.13f, 0.014f), wireMetal, false, 0.70f);
+            CreateBox(bucket.transform, "Bucket_Handle_Grip", new Vector3(0f, 0.465f, 0f), new Vector3(0.34f, 0.020f, 0.022f), wireMetal, false, 0.65f);
+            return bucket;
+        }
+
+        /// <summary>
+        /// Builds a recognizable garden watering can grounded flush at basePosition.y.
+        /// </summary>
+        private GameObject CreateDetailedWateringCan(Transform parent, string name, Vector3 basePosition)
+        {
+            GameObject can = new GameObject(name);
+            can.transform.SetParent(parent, false);
+            can.transform.localPosition = basePosition;
+            can.transform.localEulerAngles = new Vector3(0f, 35f, 0f);
+
+            Color greenPlastic = new Color(0.16f, 0.56f, 0.30f);
+            Color accentGreen = new Color(0.12f, 0.42f, 0.22f);
+
+            // Main tank (height = 0.28m -> scale.y = 0.14f, center Y = 0.14m)
+            CreateCylinder(can.transform, "Can_Tank", new Vector3(0f, 0.14f, 0f), new Vector3(0.24f, 0.14f, 0.24f), greenPlastic, false, 0.45f);
+            // Top fill neck
+            CreateCylinder(can.transform, "Can_TopNeck", new Vector3(0f, 0.285f, 0f), new Vector3(0.13f, 0.015f, 0.13f), accentGreen, false, 0.40f);
+            // Long angled pouring spout + sprinkler rose head
+            GameObject spout = CreateCylinder(can.transform, "Can_Spout", new Vector3(0.20f, 0.20f, 0f), new Vector3(0.04f, 0.15f, 0.04f), greenPlastic, false, 0.45f);
+            spout.transform.localEulerAngles = new Vector3(0f, 0f, -52f);
+            GameObject rose = CreateCylinder(can.transform, "Can_SprinklerRose", new Vector3(0.32f, 0.29f, 0f), new Vector3(0.09f, 0.025f, 0.09f), accentGreen, false, 0.40f);
+            rose.transform.localEulerAngles = new Vector3(0f, 0f, -52f);
+            // Rear & top carrying handle
+            CreateBox(can.transform, "Can_Handle_Back", new Vector3(-0.155f, 0.18f, 0f), new Vector3(0.025f, 0.20f, 0.03f), greenPlastic, false, 0.45f);
+            CreateBox(can.transform, "Can_Handle_Top", new Vector3(-0.07f, 0.31f, 0f), new Vector3(0.18f, 0.025f, 0.03f), greenPlastic, false, 0.45f);
+            return can;
+        }
+
+        /// <summary>
+        /// Builds a US-style wheeled residential trash bin (tapered body, hinged lid, handle, rear wheels)
+        /// grounded flush at basePosition.y.
+        /// </summary>
+        private GameObject CreateUsWheeledTrashBin(Transform parent, string name, Vector3 basePosition, Color bodyColor, Color lidColor)
+        {
+            GameObject bin = new GameObject(name);
+            bin.transform.SetParent(parent, false);
+            bin.transform.localPosition = basePosition;
+
+            Color wheelBlack = new Color(0.10f, 0.10f, 0.12f);
+
+            // Lower & upper rectangular body (slight US roll-cart taper, bottom at local Y = 0.04m above ground)
+            CreateBox(bin.transform, "Bin_LowerBody", new Vector3(0f, 0.28f, 0f), new Vector3(0.50f, 0.48f, 0.54f), bodyColor, false, 0.35f);
+            CreateBox(bin.transform, "Bin_UpperBody", new Vector3(0f, 0.72f, 0f), new Vector3(0.56f, 0.44f, 0.60f), bodyColor, false, 0.35f);
+            // Reinforced rim collar
+            CreateBox(bin.transform, "Bin_Rim", new Vector3(0f, 0.94f, 0f), new Vector3(0.60f, 0.05f, 0.64f), bodyColor, false, 0.40f);
+            // Hinged domed lid
+            CreateBox(bin.transform, "Bin_Lid", new Vector3(0f, 0.99f, 0f), new Vector3(0.61f, 0.06f, 0.65f), lidColor, false, 0.42f);
+            // Rear push handle bar
+            CreateBox(bin.transform, "Bin_Handle", new Vector3(0f, 0.94f, -0.36f), new Vector3(0.46f, 0.035f, 0.04f), lidColor, false, 0.35f);
+            // Two rubber wheels resting flush on Y = 0.00m (wheel radius = 0.10m -> center Y = 0.10m)
+            GameObject wheelL = CreateCylinder(bin.transform, "Bin_Wheel_L", new Vector3(-0.29f, 0.10f, -0.22f), new Vector3(0.20f, 0.035f, 0.20f), wheelBlack, false, 0.20f);
+            wheelL.transform.localEulerAngles = new Vector3(0f, 0f, 90f);
+            GameObject wheelR = CreateCylinder(bin.transform, "Bin_Wheel_R", new Vector3(0.29f, 0.10f, -0.22f), new Vector3(0.20f, 0.035f, 0.20f), wheelBlack, false, 0.20f);
+            wheelR.transform.localEulerAngles = new Vector3(0f, 0f, 90f);
+            return bin;
         }
 
         [ContextMenu("Clear Environment")]
@@ -345,9 +674,18 @@ namespace MyVirtualCommunity.Environment
             root.transform.SetParent(transform);
 
             // Asphalt Roadway (X: 8.5 to 18.5, Z: 0 to 45)
-            float roadWidth = 10f;
-            float roadLength = 45f;
-            CreateBox(root.transform, "Porvenir_Asphalt", new Vector3(13.5f, -0.1f, 22.5f), new Vector3(roadWidth, 0.2f, roadLength), new Color(0.20f, 0.20f, 0.22f));
+            // Split cleanly into 4 slabs framing the real 9.5cm-deep pothole opening at X: 12.75..14.25, Z: 24.40..25.60
+            Color roadAsphaltCol = new Color(0.20f, 0.20f, 0.22f);
+            GameObject asphaltGroup = new GameObject("Porvenir_Asphalt");
+            asphaltGroup.transform.SetParent(root.transform, false);
+            // South slab (Z: 0.00 to 24.40)
+            CreateBox(asphaltGroup.transform, "Porvenir_Asphalt_South", new Vector3(13.5f, -0.1f, 12.20f), new Vector3(10f, 0.2f, 24.40f), roadAsphaltCol);
+            // North slab (Z: 25.60 to 45.00)
+            CreateBox(asphaltGroup.transform, "Porvenir_Asphalt_North", new Vector3(13.5f, -0.1f, 35.30f), new Vector3(10f, 0.2f, 19.40f), roadAsphaltCol);
+            // West flank beside pothole (X: 8.50 to 12.75, Z: 24.40 to 25.60)
+            CreateBox(asphaltGroup.transform, "Porvenir_Asphalt_WestFlank", new Vector3(10.625f, -0.1f, 25.0f), new Vector3(4.25f, 0.2f, 1.20f), roadAsphaltCol);
+            // East flank beside pothole (X: 14.25 to 18.50, Z: 24.40 to 25.60)
+            CreateBox(asphaltGroup.transform, "Porvenir_Asphalt_EastFlank", new Vector3(16.375f, -0.1f, 25.0f), new Vector3(4.25f, 0.2f, 1.20f), roadAsphaltCol);
 
             // Sin linea divisoria central: las calles del fraccionamiento
             // no llevan raya amarilla al centro (asi es en la realidad).

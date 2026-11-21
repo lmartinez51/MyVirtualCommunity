@@ -21,6 +21,7 @@ namespace MyVirtualCommunity
         [SerializeField] private GomezMorinSceneBuilder sceneBuilder;
         [SerializeField] private PlayerController player;
         [SerializeField] private ElenaNpcController elenaNpc;
+        [SerializeField] private CamilaNpcController camilaNpc; // Milestone 94
         [SerializeField] private ThirdPersonCamera thirdPersonCamera;
         [SerializeField] private ProductHudController hud;
 
@@ -164,6 +165,28 @@ namespace MyVirtualCommunity
                 elenaNpc.transform.position = new Vector3(-10.90f, 0.44f, 12.85f);
                 elenaNpc.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
                 elenaNpc.BuildAttendantAvatar();
+            }
+
+            // 4b. Camila NPC (Milestone 94): autonomous explorer. Unlike Elena
+            // she is NOT anchored to a station — she starts inside Wing Spot
+            // grounded on the dining floor (Y = 0.24m) and wanders from authoritative AI cycles.
+            if (camilaNpc == null)
+            {
+                camilaNpc = FindFirstObjectByType<CamilaNpcController>();
+                if (camilaNpc == null)
+                {
+                    var camilaObj = new GameObject("NPC_Camila");
+                    camilaObj.transform.position = new Vector3(-8f, 0.24f, 8f);
+                    camilaObj.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+                    camilaNpc = camilaObj.AddComponent<CamilaNpcController>();
+                }
+            }
+
+            if (camilaNpc != null)
+            {
+                camilaNpc.transform.position = new Vector3(-8f, 0.24f, 8f);
+                camilaNpc.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+                camilaNpc.BuildExplorerAvatar();
             }
 
             // 5. Third-Person Camera

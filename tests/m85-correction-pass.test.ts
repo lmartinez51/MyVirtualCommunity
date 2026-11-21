@@ -324,9 +324,14 @@ describe('Milestone 85 Correction Pass: Architectural Regression Suite', () => {
     player.interiorSpaceId = 'interior:wing-spot';
 
     const transitions = executeRestaurantClosureEgress(state, restaurant.id);
-    assert.equal(transitions.length, 1);
+    // Milestone 94: Camila also starts inside Wing Spot, so closure egress
+    // moves TWO agents (player + Camila), both atomically to the building.
+    assert.equal(transitions.length, 2);
     assert.equal(player.locationId, restaurant.buildingId);
     assert.equal(player.interiorSpaceId, null);
+    const camila = state.agents.find((a) => a.id === 'agent:camila-npc')!;
+    assert.equal(camila.locationId, restaurant.buildingId);
+    assert.equal(camila.interiorSpaceId, null);
   });
 
   // =========================================================================

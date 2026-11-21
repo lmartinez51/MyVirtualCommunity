@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -33,6 +34,10 @@ namespace MyVirtualCommunity.Core
         public WorldStatusData CurrentStatus { get; private set; }
         public LocationViewData CurrentLocationView { get; private set; }
         public NpcAiDiagnosticsData ElenaDiagnostics { get; private set; }
+        // Milestone 94: Camila diagnostics (Elena property kept for back-compat).
+        public NpcAiDiagnosticsData CamilaDiagnostics { get; private set; }
+        public Dictionary<string, NpcAiDiagnosticsData> NpcDiagnosticsByAgent { get; } =
+            new Dictionary<string, NpcAiDiagnosticsData>();
 
         // Events
         public event Action<bool, string> OnConnectionStatusChanged;
@@ -153,7 +158,8 @@ namespace MyVirtualCommunity.Core
                 if (isConnected)
                 {
                     yield return FetchLocationView();
-                    yield return FetchElenaDiagnostics();
+                    yield return FetchNpcDiagnostics("agent:elena-npc");
+                    yield return FetchNpcDiagnostics("agent:camila-npc");
                 }
 
                 yield return new WaitForSeconds(pollIntervalSeconds);
@@ -231,9 +237,13 @@ namespace MyVirtualCommunity.Core
             }
         }
 
-        public IEnumerator FetchElenaDiagnostics()
+        /// <summary>
+        /// Milestone 94: generic NPC diagnostics fetch. FetchElenaDiagnostics
+        /// is kept as a back-compat wrapper around it.
+        /// </summary>
+        public IEnumerator FetchNpcDiagnostics(string agentId)
         {
-            string url = $"{serverBaseUrl}/api/npc/agent:elena-npc/diagnostics";
+            string url = $"{serverBaseUrl}/api/npc/{agentId}/diagnostics";
             using (UnityWebRequest req = UnityWebRequest.Get(url))
             {
                 req.timeout = 3;
@@ -246,12 +256,19 @@ namespace MyVirtualCommunity.Core
                         var res = JsonUtility.FromJson<NpcAiDiagnosticsResponse>(req.downloadHandler.text);
                         if (res != null && res.success)
                         {
-                            ElenaDiagnostics = res.result;
+                            NpcDiagnosticsByAgent[agentId] = res.result;
+                            if (agentId == "agent:elena-npc") ElenaDiagnostics = res.result;
+                            if (agentId == "agent:camila-npc") CamilaDiagnostics = res.result;
                         }
                     }
                     catch (Exception) { /* Non-critical diagnostic */ }
                 }
             }
+        }
+
+        public IEnumerator FetchElenaDiagnostics()
+        {
+            yield return FetchNpcDiagnostics("agent:elena-npc");
         }
 
         /// <summary>
@@ -316,16 +333,19 @@ namespace MyVirtualCommunity.Core
 
         /// <summary>
         /// Triggers an authoritative AI cognition cycle for an NPC.
+        /// Always invokes onComplete (with null on failure) so callers never deadlock.
         /// </summary>
         public IEnumerator TriggerNpcAiCycle(string agentId, Action<NpcAiCycleData> onComplete)
         {
             string url = $"{serverBaseUrl}/api/npc/{agentId}/cycle";
+            NpcAiCycleData cycleResult = null;
+
             using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
             {
                 req.uploadHandler = new UploadHandlerRaw(new byte[0]);
                 req.downloadHandler = new DownloadHandlerBuffer();
                 req.SetRequestHeader("Content-Type", "application/json");
-                req.timeout = 10;
+                req.timeout = 15;
 
                 yield return req.SendWebRequest();
 
@@ -336,9 +356,13 @@ namespace MyVirtualCommunity.Core
                         var res = JsonUtility.FromJson<NpcAiCycleResponse>(req.downloadHandler.text);
                         if (res != null && res.success && res.result != null)
                         {
-                            OnAiCycleExecuted?.Invoke(res.result);
-                            onComplete?.Invoke(res.result);
+                            cycleResult = res.result;
+                            OnAiCycleExecuted?.Invoke(cycleResult);
                             StartCoroutine(FetchLocationView());
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"[WorldCoreClient] AI cycle for {agentId} returned unsuccessful payload: {req.downloadHandler.text}");
                         }
                     }
                     catch (Exception ex)
@@ -346,7 +370,55 @@ namespace MyVirtualCommunity.Core
                         Debug.LogWarning($"[WorldCoreClient] Error parsing AI cycle: {ex.Message}");
                     }
                 }
+                else
+                {
+                    Debug.LogWarning($"[WorldCoreClient] AI cycle HTTP failure for {agentId} ({req.responseCode}): {req.error} {req.downloadHandler?.text}");
+                }
             }
+
+            onComplete?.Invoke(cycleResult);
+        }
+
+        /// <summary>
+        /// Milestone 94: Reports physical arrival (or interruption) of an active NPC traversal
+        /// to World Core (POST /api/npc/:agentId/arrival) so M69/M73 commits Agent.locationId.
+        /// </summary>
+        public IEnumerator ReportNpcArrival(
+            string agentId,
+            string destinationPlaceId,
+            string status = "arrived",
+            string message = null,
+            Action<bool> onComplete = null)
+        {
+            string url = $"{serverBaseUrl}/api/npc/{agentId}/arrival";
+            string safeDest = (destinationPlaceId ?? "").Replace("\"", "");
+            string safeStatus = (status ?? "arrived").Replace("\"", "");
+            string safeMsg = (message ?? "").Replace("\"", "'");
+            string payload = $"{{\"destinationPlaceId\":\"{safeDest}\",\"status\":\"{safeStatus}\",\"message\":\"{safeMsg}\"}}";
+
+            bool succeeded = false;
+            using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
+            {
+                byte[] bodyRaw = Encoding.UTF8.GetBytes(payload);
+                req.uploadHandler = new UploadHandlerRaw(bodyRaw);
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/json");
+                req.timeout = 10;
+
+                yield return req.SendWebRequest();
+
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    succeeded = true;
+                    StartCoroutine(FetchNpcDiagnostics(agentId));
+                }
+                else
+                {
+                    Debug.LogWarning($"[WorldCoreClient] ReportNpcArrival failed for {agentId} ({req.responseCode}): {req.error}");
+                }
+            }
+
+            onComplete?.Invoke(succeeded);
         }
 
         /// <summary>

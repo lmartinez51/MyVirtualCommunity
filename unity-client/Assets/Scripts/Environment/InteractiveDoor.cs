@@ -256,13 +256,20 @@ namespace MyVirtualCommunity.Environment
             // If this door is linked to an authoritative business schedule:
             if (!string.IsNullOrEmpty(businessId))
             {
-                // Check if actor is an exiting customer (already inside the business)
+                // Check if actor is an exiting customer or NPC (already inside the business)
                 if (actor != null)
                 {
                     var player = actor.GetComponent<Player.PlayerController>();
-                    if (player != null && player.IsInsideWingSpot)
+                    if (player != null && player.IsInsideWingSpot && businessId == "restaurant:wing-spot")
                     {
                         // Exiting customer can open the door freely
+                        return true;
+                    }
+
+                    var camila = actor.GetComponent<Npc.CamilaNpcController>();
+                    if (camila != null && camila.IsInsideBusiness(businessId))
+                    {
+                        // Exiting NPC explorer can always leave an interior freely
                         return true;
                     }
                 }
@@ -532,10 +539,12 @@ namespace MyVirtualCommunity.Environment
                 if (doorLeaf != null && hit.transform.IsChildOf(doorLeaf)) continue;
 
                 if (hit.GetComponent<CharacterController>() != null ||
+                    hit.GetComponent<Npc.CamilaNpcController>() != null ||
                     hit.CompareTag("Player") ||
                     hit.name.Contains("Player") ||
                     hit.name.Contains("NPC") ||
-                    hit.name.Contains("Elena"))
+                    hit.name.Contains("Elena") ||
+                    hit.name.Contains("Camila"))
                 {
                     return false;
                 }
@@ -580,10 +589,12 @@ namespace MyVirtualCommunity.Environment
 
                     // Obstruction must be a CharacterController or actor
                     if (hit.GetComponent<CharacterController>() != null ||
+                        hit.GetComponent<Npc.CamilaNpcController>() != null ||
                         hit.CompareTag("Player") ||
                         hit.name.Contains("Player") ||
                         hit.name.Contains("NPC") ||
-                        hit.name.Contains("Elena"))
+                        hit.name.Contains("Elena") ||
+                        hit.name.Contains("Camila"))
                     {
                         hitCollider = hit;
                         return true;
@@ -643,10 +654,12 @@ namespace MyVirtualCommunity.Environment
                     if (doorLeaf != null && hit.transform.IsChildOf(doorLeaf)) continue;
 
                     if (hit.GetComponent<CharacterController>() != null ||
+                        hit.GetComponent<Npc.CamilaNpcController>() != null ||
                         hit.CompareTag("Player") ||
                         hit.name.Contains("Player") ||
                         hit.name.Contains("NPC") ||
-                        hit.name.Contains("Elena"))
+                        hit.name.Contains("Elena") ||
+                        hit.name.Contains("Camila"))
                     {
                         hitCollider = hit;
                         return true;

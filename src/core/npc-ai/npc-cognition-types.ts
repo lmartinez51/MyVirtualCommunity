@@ -17,23 +17,42 @@ import type { ActivityState } from '../entities/agent.js';
 import type { RestaurantOperationalState } from '../entities/restaurant.js';
 
 /**
- * Valid action types Elena can propose.
+ * Valid action types an NPC can propose.
  * Intentionally bounded to actions that can be evaluated and mapped to World Core commands.
+ *
+ * Milestone 94 (Camila): 'move_to_place' and 'look_at' are the Phase 1
+ * explore-only actions. 'push_object' / 'pick_up_object' / 'carry_object' /
+ * 'drop_object' are Phase 2 interact actions, gated off by default behind
+ * CAMILA_ACTIONS_ENABLED (see camila-config.ts isCamilaActionEnabled) and
+ * rejected by the runtime while the gate is off.
  */
 export type NpcActionType =
   | 'observe'
   | 'offer_service'
   | 'approach_player'
-  | 'acknowledge_player';
+  | 'acknowledge_player'
+  | 'move_to_place'
+  | 'look_at'
+  | 'push_object'
+  | 'pick_up_object'
+  | 'carry_object'
+  | 'drop_object';
 
 /**
  * Memory types an NPC can retain across runtime cycles.
+ *
+ * Milestone 94 (Camila): 'place_visited' / 'object_noticed' / 'discovery'
+ * are Camila's exploration memories, recorded by the runtime when she
+ * moves or looks at something new. Elena's types are unchanged.
  */
 export type NpcMemoryType =
   | 'service_accepted'
   | 'service_offered'
   | 'player_observed'
-  | 'greeting_exchanged';
+  | 'greeting_exchanged'
+  | 'place_visited'
+  | 'object_noticed'
+  | 'discovery';
 
 /**
  * Structured, bounded memory entry.
@@ -46,6 +65,8 @@ export interface NpcMemory {
   readonly summary: string;
   readonly targetAgentId?: string;
   readonly establishmentId?: string;
+  /** Milestone 94: place id for 'place_visited' memories. */
+  readonly placeId?: string;
 }
 
 /**
@@ -81,8 +102,33 @@ export interface PerceivedEstablishmentSummary {
 }
 
 /**
+ * Read-only perception projection of a probe object (Milestone 94).
+ * Properties / affordances only — never instructions.
+ */
+export interface PerceivedProbeObjectSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly placeId: string;
+  readonly cluster: string;
+  readonly affordances: readonly string[];
+}
+
+/**
+ * Read-only perception projection of a place Camila can navigate to.
+ */
+export interface PerceivedPlaceSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly type: string;
+}
+
+/**
  * Complete bounded perception for an NPC.
  * Contains only what the NPC is legitimately allowed to perceive.
+ *
+ * Milestone 94: the optional Camila fields (nearbyPlaces, nearbyObjects,
+ * visitedPlaceIds, unvisitedPlaceIds) are populated for the explorer; they
+ * are left undefined for other NPCs.
  */
 export interface NpcPerception {
   readonly agentId: string;
@@ -107,6 +153,10 @@ export interface NpcPerception {
     readonly worldTime: string;
   } | null;
   readonly recentMemories: readonly NpcMemory[];
+  readonly nearbyPlaces?: readonly PerceivedPlaceSummary[];
+  readonly nearbyObjects?: readonly PerceivedProbeObjectSummary[];
+  readonly visitedPlaceIds?: readonly string[];
+  readonly unvisitedPlaceIds?: readonly string[];
 }
 
 /**
@@ -117,6 +167,10 @@ export interface NpcActionProposal {
   readonly actionType: NpcActionType;
   readonly targetAgentId?: string;
   readonly establishmentId?: string;
+  /** Milestone 94: logical destination place for 'move_to_place'. */
+  readonly destinationPlaceId?: string;
+  /** Milestone 94: probe object id for 'look_at' / Phase 2 interact actions. */
+  readonly targetObjectId?: string;
   readonly parameters?: Record<string, unknown>;
   readonly reasoningContext?: string;
   readonly requestedAt: string;
