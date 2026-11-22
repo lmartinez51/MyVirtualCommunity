@@ -3160,6 +3160,30 @@ Extends the Gómez Morín 3D vertical slice on `feat/camila-explorer` with end-t
   - Walking contact physically pushes/dribbles movable props (`OnControllerColliderHit`).
   - **`[E]`**: Pick up / place portable props, or grab and roll the upright US-style trash bin (`Probe_TrashBin`) across sidewalks.
   - **`[F]`**: Kick the soccer ball (`Probe_Ball`) or throw a carried prop.
+  - **`[R]`**: Contextual use of carried tools/containers (scoop/pour water, scoop sand/earth & patch the recessed pothole, draw with chalk, dispose trash in bin), synced live to World Core (`POST /api/world/props/sync`).
+  - **`[X]`**: Sit on nearby benches (`Probe_Bench`) or directly on sidewalks/ground (walking with WASD stands up automatically).
+
+### 4. Phase 2b/2c ("Manos Libres + Mundo Vivo") & Emergent Substance Physics (`camila-prompt-v5`)
+- **Zero-Instruction Free-Will Action Surface (`src/core/npc-ai/camila-config.ts`, `npc-ai-runtime.ts`, `camila-cognition-provider.ts`)**:
+  - Unlocks `pick_up_object`, `drop_object`, `pushTowardsObjectId`, `scoop`, `pour_or_apply`, `sit`, and `stand_up` behind `CAMILA_ACTIONS_ENABLED=true` with Muse Spark `reasoningEffort: 'medium'`, `temperature: 0.85`, and `frequency_penalty: 0.4`.
+  - **Local Living-World Perception (`npc-perception.ts`)**: Replaces full-catalog X-ray spoilers with `visibleObjectsHere`, `rememberedObjectsElsewhere`, `heldObject` (with `carriedCycles` & `pickedUpAtPlaceId`), `physicalState`, `recentWorldChanges`, `nearbyAgents`, `isSitting`, `operationalState` (covering both Wing Spot and Pastelerías La Tía Lupe), closed-business filtering from `unvisitedPlaceIds`, and `hasUnseenObjects` cues for newly enriched places.
+  - **Notebook Resilience (`src/persistence/camila-notebook.ts`)**: Deduplicates identical/near-identical open hypotheses, auto-resolves confirmed/refuted hypotheses, and feeds rejected physical actions back into `recentWorldChanges` so Camila never stalls in silent rejection loops.
+- **Dynamic World Substances & New Probes (`WorldSubstanceController.cs`, `camila-probe-objects.ts`, `camila-probe-object-state.ts`)**:
+  - Adds 5 neutral probes across the corridor (`probe:orange-sculpture`, `probe:tile-sample`, `probe:cat-bowl`, `probe:sand-pile`, `probe:shovel` — 21 total).
+  - Supports scooping water from `Probe_Puddle` into containers (`Probe_Bucket`, `Probe_WateringCan`, `Probe_Cup`, `Probe_CatBowl`), pouring water onto containers/ground, scooping loose earth/sand from `Probe_SandPile` with `Probe_Shovel` or `Probe_Bucket` to progressively patch the recessed pothole flush with street asphalt, marking `Probe_BlankWall` / `Probe_Bench` / sidewalks with `Probe_Chalk`, and disposing `Probe_TrashBag` into `Probe_TrashBin`.
+- **Verification**: `tests/camila-explorer.test.ts` + `tests/business-schedule-and-access-policy.test.ts` + `tests/load-env.test.ts` (`47/47` passing, `tsc --noEmit` clean).
+
+### 5. Real-World Business Schedules, Scene Fidelity & Articulated Character Poses
+- **Wing Spot Weekly & Overnight Schedule (`src/core/business-schedule.ts`, `BusinessSchedule.cs`)**: Supports per-day multi-shift and overnight spillover windows (Sun–Tue `3 PM–12 AM`, Wed `12–1 AM & 12 PM–1 AM`, Thu–Sat `12 PM–3 AM`).
+- **Scene & Prop Polish (`GomezMorinSceneBuilder.cs`, `CamilaNpcController.cs`)**:
+  - Relocated soccer cluster (`Probe_Ball`, `Probe_SmallGoal` with rear frame/net, cones) to the open east Dollar 2 Go lot; fixed Acabados HRC Z-fighting; redesigned Corporativo Arboleda's 5-module terracotta-orange steel sculpture and `Probe_TrashBag` (tied neck with red string at Del Porvenir corner); realigned all 4 corner wheelchair ramps flush with sidewalks (`Y = 0.240 m`) and asphalt (`Y = 0.000 m`); added comic-book floating thought bubbles, solid rear-fence obstacle blocking, anti-stacking prop drops, and ground-snap bench exclusion.
+- **Hand-Anchored Carrying & Sitting Poses (`BobbleheadCharacter.cs`, `BobbleheadAnimator.cs`, `InteractiveWorldProp.cs`)**:
+  - Exposes `LeftHand`/`RightHand` and animates 5 coherent shoulder/elbow `HoldPoseStyle` presets (`OneHandDrink`, `OneHandCarryDown`, `OneHandFront`, `TwoHandsFront`, `TwoHandsPushWheel`) plus bench/ground sitting and scoop/pour dip animations for both Player and Camila.
+
+### 6. Mobile GPU Thermal & Performance Optimization
+- **Static Batching & Shadow Culling (`GomezMorinSceneBuilder.cs`)**: Runs `StaticBatchingUtility.Combine` per architectural group (excluding moving doors, status signs, and movable props) and disables shadow casting on small/decorative geometry.
+- **Distance Light Culling (`DistanceLightCuller.cs`)**: Disables local point/spot shadows and keeps at most 4 nearest local lights within `26 m` active (evaluated every `0.35 s`).
+- **Thermal-Safe Laptop Profile (`GameManager.cs`, `QualitySettings.asset`, `PlayerController.cs`, `CamilaNpcController.cs`)**: Automatically caps mobile/≤ 2.5 GB VRAM GPUs (e.g. GeForce MX150) to `40 FPS` active / `15 FPS` unfocused with lightweight shadows, eliminates per-frame `GameObject.Find` lookups, and uses `CollisionDetectionMode.Discrete` for idle props.
 
 ---
 

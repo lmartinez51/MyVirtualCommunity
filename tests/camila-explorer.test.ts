@@ -189,7 +189,8 @@ describe('Milestone 94: Camila explorer NPC', () => {
   // =========================================================================
   it('simulation tick does not move Camila (no schedule)', () => {
     const state = setupGomezMorinState();
-    const clock = new WorldClock(ON_DUTY_WORLD_TIME);
+    // Thursday 15:00 local (21:00 UTC) — Wing Spot is open (12 PM - 3 AM), so only a routine schedule could move Camila
+    const clock = new WorldClock('2026-10-08T21:00:00.000Z');
     const sim = new Simulation(clock, state, { silent: true });
     sim.tick();
     const camila = state.agents.find((a) => a.id === CAMILA_AGENT_ID);
@@ -208,7 +209,7 @@ describe('Milestone 94: Camila explorer NPC', () => {
     assert.equal(json.agents.length, 3);
     assert.ok(json.agents.some((a) => a.id === CAMILA_AGENT_ID));
     assert.equal(json.roads.length, 3);
-    assert.equal(json.probeObjects.length, 16);
+    assert.equal(json.probeObjects.length, 21);
     assert.equal(json.probeObjects.length, CAMILA_PROBE_OBJECTS.length);
 
     // Unity anchors come from the SceneBuilder layout, not the TS topology.
@@ -239,7 +240,7 @@ describe('Milestone 94: Camila explorer NPC', () => {
       assert.ok(existsSync(outPath));
       const parsed = JSON.parse(readFileSync(outPath, 'utf-8'));
       assert.equal(parsed.version, 'camila-world-state-v1');
-      assert.equal(parsed.probeObjects.length, 16);
+      assert.equal(parsed.probeObjects.length, 21);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
@@ -293,7 +294,7 @@ describe('Milestone 94: Camila explorer NPC', () => {
   // 5. Fixed prompt + decision parsing + explore-only gate
   // =========================================================================
   it('fixed system prompt names Camila and sets curiosity / boredom rules', () => {
-    assert.equal(CAMILA_PROMPT_VERSION, 'camila-prompt-v3');
+    assert.equal(CAMILA_PROMPT_VERSION, 'camila-prompt-v5');
     assert.match(CAMILA_SYSTEM_PROMPT, /Eres Camila/);
     assert.match(CAMILA_SYSTEM_PROMPT, /curiosa/);
     assert.match(CAMILA_SYSTEM_PROMPT, /aburres fácilmente/);
@@ -357,7 +358,7 @@ describe('Milestone 94: Camila explorer NPC', () => {
   });
 
   it('probe objects carry affordances only, in complementary clusters', () => {
-    assert.equal(CAMILA_PROBE_OBJECTS.length, 16);
+    assert.equal(CAMILA_PROBE_OBJECTS.length, 21);
     const ball = findProbeObjectById('probe:ball');
     assert.ok(ball);
     assert.ok(ball.affordances.includes('kickable'));
@@ -413,7 +414,7 @@ describe('Milestone 94: Camila explorer NPC', () => {
     const perception = deriveNpcPerception(state, CAMILA_AGENT_ID);
     assert.equal(perception.role, 'explorer');
     assert.ok(perception.nearbyPlaces && perception.nearbyPlaces.length >= 10);
-    assert.ok(perception.nearbyObjects && perception.nearbyObjects.length === 16);
+    assert.ok(perception.nearbyObjects && perception.nearbyObjects.length === 21);
     assert.ok(perception.unvisitedPlaceIds?.includes('street:calle-del-porvenir'));
 
     const provider = new CamilaCognitionProvider({
@@ -704,32 +705,34 @@ describe('Milestone 94: Camila explorer NPC', () => {
     try {
       const filePath = join(tempDir, 'camila-object-positions.json');
       const store = new CamilaProbeObjectState(filePath);
-      assert.deepEqual(store.getPosition('probe:ball'), { x: 45, y: 0.345, z: 14 });
+      assert.deepEqual(store.getPosition('probe:ball'), { x: 68, y: 0.345, z: 11.5 });
       assert.equal(store.getPosition('probe:nope'), null);
 
-      assert.equal(store.setPosition('probe:ball', { x: 45, y: 0.345, z: 15.5 }), true);
+      assert.equal(store.setPosition('probe:ball', { x: 68, y: 0.345, z: 13 }), true);
       assert.equal(store.setPosition('probe:nope', { x: 0, y: 0, z: 0 }), false);
-      assert.equal(store.setPosition('probe:ball', { x: 999, y: 0.345, z: 15.5 }), false);
+      assert.equal(store.setPosition('probe:ball', { x: 999, y: 0.345, z: 13 }), false);
       assert.equal(store.setPosition('probe:ball', { x: Number.NaN, y: 0, z: 0 }), false);
       store.save();
       assert.ok(existsSync(filePath));
 
       const reloaded = new CamilaProbeObjectState(filePath);
-      assert.deepEqual(reloaded.getPosition('probe:ball'), { x: 45, y: 0.345, z: 15.5 });
+      assert.deepEqual(reloaded.getPosition('probe:ball'), { x: 68, y: 0.345, z: 13 });
       assert.equal(reloaded.loadError, null);
 
       writeFileSync(filePath, '{ not json', 'utf-8');
       const corrupt = new CamilaProbeObjectState(filePath);
-      assert.deepEqual(corrupt.getPosition('probe:ball'), { x: 45, y: 0.345, z: 14 });
+      assert.deepEqual(corrupt.getPosition('probe:ball'), { x: 68, y: 0.345, z: 11.5 });
       assert.ok(corrupt.loadError);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
-  it('prompt v3 offers push_object; parse accepts it with the gate on, rejects it off', () => {
-    assert.equal(CAMILA_PROMPT_VERSION, 'camila-prompt-v3');
+  it('prompt v4 offers push/pick_up/drop; parse accepts them with gate on, rejects off', () => {
+    assert.equal(CAMILA_PROMPT_VERSION, 'camila-prompt-v5');
     assert.match(CAMILA_SYSTEM_PROMPT, /push_object/);
+    assert.match(CAMILA_SYSTEM_PROMPT, /pick_up_object/);
+    assert.match(CAMILA_SYSTEM_PROMPT, /drop_object/);
     assert.match(CAMILA_SYSTEM_PROMPT, /pushTowardsPlaceId/);
     assert.match(CAMILA_SYSTEM_PROMPT, /stationary/);
     // Prompt v3 (Lorenzo's correction): Camila is NEVER told what to do.
@@ -883,8 +886,11 @@ describe('Milestone 94: Camila explorer NPC', () => {
         expectedPosition: { x: number; y: number; z: number };
       };
       assert.equal(payload.targetObjectId, 'probe:ball');
-      assert.deepEqual(payload.fromPosition, { x: 45, y: 0.345, z: 14 });
-      assert.deepEqual(payload.expectedPosition, { x: 45, y: 0.345, z: 15.5 });
+      assert.deepEqual(payload.fromPosition, { x: 68, y: 0.345, z: 11.5 });
+      const stepDx = payload.expectedPosition.x - payload.fromPosition.x;
+      const stepDz = payload.expectedPosition.z - payload.fromPosition.z;
+      assert.ok(Math.abs(Math.hypot(stepDx, stepDz) - 1.5) < 1e-6);
+      assert.equal(payload.expectedPosition.y, 0.345);
 
       // A second push while one is pending is rejected, not stacked.
       const pending = await runtime.runCycle(CAMILA_AGENT_ID);
@@ -1009,7 +1015,7 @@ describe('Milestone 94: Camila explorer NPC', () => {
       // Nothing moved, and a fresh push works again (no stuck pending state).
       assert.deepEqual(
         controller.getCamilaObjectPositions().positions['probe:ball'],
-        { x: 45, y: 0.345, z: 14 }
+        { x: 68, y: 0.345, z: 11.5 }
       );
       const retry = await runtime.runCycle(CAMILA_AGENT_ID);
       assert.equal(retry.status, 'executed');
@@ -1019,66 +1025,169 @@ describe('Milestone 94: Camila explorer NPC', () => {
     }
   });
 
-  it('gate on: pick_up / carry / drop still return action-not-implemented-yet', async () => {
-    process.env.CAMILA_ACTIONS_ENABLED = 'true';
-    const tempDir = mkdtempSync(join(tmpdir(), 'm94-push-p2b-'));
+  it('notebook deduplicates identical/near-identical hypotheses and resolves matching ones', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-hyp-dedup-'));
     try {
-      const controller = makeController(tempDir);
-      const runtime = controller.getNpcAiRuntime();
-      for (const actionType of ['pick_up_object', 'carry_object', 'drop_object'] as const) {
-        setPushProvider(controller, {
-          actionType,
-          targetObjectId: 'probe:ball',
-          requestedAt: ON_DUTY_WORLD_TIME,
-        } as NpcActionProposal);
-        const result = await runtime.runCycle(CAMILA_AGENT_ID);
-        assert.equal(result.status, 'rejected', `${actionType} must be rejected`);
-        assert.equal(result.error?.code, 'action-not-implemented-yet');
-      }
+      const nb = new CamilaNotebook(join(tempDir, 'nb.json'));
+      const h1 = nb.addHypothesis('Quizá si acerco el gis al muro puedo rayar algo', ON_DUTY_WORLD_TIME);
+      const h2 = nb.addHypothesis('Quiza si acerco el gis al muro puedo rayar algo!', ON_DUTY_WORLD_TIME);
+      assert.equal(h1.id, h2.id);
+      assert.equal(nb.getData().hypotheses.length, 1);
+
+      const resolved = nb.resolveMatchingHypotheses(['gis', 'muro'], 'confirmed', ON_DUTY_WORLD_TIME);
+      assert.equal(resolved, 1);
+      assert.equal(nb.getData().hypotheses[0].status, 'confirmed');
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
-  it('Camila provider passes a push decision with direction through to the proposal', async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'm94-push-provider-'));
+  it('closed businesses are filtered from unvisitedPlaceIds and newly enriched places advertise hasUnseenObjects', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-closed-unseen-'));
+    try {
+      // Saturday 20:00 local (02:00 UTC next day): Wing Spot open, Pastelería La Tía Lupe closed (closes 18:00)
+      const controller = makeController(tempDir, '2026-10-11T02:00:00.000Z');
+      const perception = controller.getNpcPerception(CAMILA_AGENT_ID);
+      assert.ok(
+        !perception.unvisitedPlaceIds?.includes('building:tia-lupe-building'),
+        'Closed business must not be suggested in unvisitedPlaceIds'
+      );
+      const dollarPlace = perception.nearbyPlaces?.find((p) => p.id === 'building:dollar-2-go-building');
+      assert.equal(dollarPlace?.hasUnseenObjects, true);
+      assert.ok((dollarPlace?.unseenObjectCount ?? 0) >= 6);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('supports sitting on bench/ground, scooping water/sand, pouring into cat bowl, and patching pothole with sand', async () => {
+    process.env.CAMILA_ACTIONS_ENABLED = 'true';
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-substances-'));
     try {
       const controller = makeController(tempDir);
-      const perception = controller.getNpcPerception(CAMILA_AGENT_ID);
-      const provider = new CamilaCognitionProvider({
-        metaModel: new MockMetaModelAdapter({
-          cannedDecision: JSON.stringify({
-            actionType: 'push_object',
-            targetObjectId: 'probe:ball',
-            pushTowardsPlaceId: 'building:dollar-2-go-building',
-            reasoningContext: 'La pelota tiene que ir a la portería.',
-          }),
-        }),
-        actionsEnabled: true,
-      });
-      const result = await provider.decideAction({
-        perception,
-        goal: CAMILA_GOAL,
-        memories: [],
-      });
-      assert.equal(result.proposal.actionType, 'push_object');
-      assert.equal(result.proposal.targetObjectId, 'probe:ball');
-      assert.equal(result.proposal.pushTowardsPlaceId, 'building:dollar-2-go-building');
+      const runtime = controller.getNpcAiRuntime();
 
-      // Unknown direction place is rejected by the provider, not passed through.
-      const badProvider = new CamilaCognitionProvider({
-        metaModel: new MockMetaModelAdapter({
-          cannedDecision: JSON.stringify({
-            actionType: 'push_object',
-            targetObjectId: 'probe:ball',
-            pushTowardsPlaceId: 'place:nope',
-          }),
-        }),
-        actionsEnabled: true,
-      });
-      await assert.rejects(
-        badProvider.decideAction({ perception, goal: CAMILA_GOAL, memories: [] }),
-        /unknown push direction place/
+      // 1. Sit on the bench at Blvd. Gómez Morín
+      await moveCamilaTo(controller, 'street:blvd-gomez-morin');
+      setPushProvider(controller, {
+        actionType: 'sit',
+        targetObjectId: 'probe:bench',
+        reasoningContext: 'Voy a descansar un momento en la banca.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const sitRes = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(sitRes.status, 'executed');
+      assert.equal(runtime.getPerception(CAMILA_AGENT_ID).isSitting, true);
+      assert.equal(runtime.getPerception(CAMILA_AGENT_ID).sittingOn, 'probe:bench');
+
+      // Moving away automatically clears sitting state
+      await moveCamilaTo(controller, 'building:del-porvenir-residence');
+      assert.equal(runtime.getPerception(CAMILA_AGENT_ID).isSitting, false);
+
+      // 2. Pick up bucket, move to Calle Del Porvenir, scoop water from puddle
+      setPushProvider(controller, {
+        actionType: 'pick_up_object',
+        targetObjectId: 'probe:bucket',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      assert.equal((await runtime.runCycle(CAMILA_AGENT_ID)).status, 'executed');
+      await controller.completeObjectInteraction(CAMILA_AGENT_ID, 'probe:bucket', 'applied', { x: 7.15, y: 0.24, z: 33.1 });
+
+      await moveCamilaTo(controller, 'street:calle-del-porvenir');
+      setPushProvider(controller, {
+        actionType: 'scoop',
+        targetObjectId: 'probe:puddle',
+        reasoningContext: 'Voy a recoger agua del bache con la cubeta.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const scoopWater = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(scoopWater.status, 'executed');
+      assert.equal(runtime.getPerception(CAMILA_AGENT_ID).heldObject?.physicalState?.contents, 'water');
+      const puddleAfterScoop = runtime.getPerception(CAMILA_AGENT_ID).visibleObjectsHere?.find((o) => o.id === 'probe:puddle');
+      assert.equal(puddleAfterScoop?.physicalState?.waterLevel, 0.75);
+
+      // 3. Carry water to CatZoo and pour into cat bowl
+      await moveCamilaTo(controller, 'building:catzoo-building');
+      setPushProvider(controller, {
+        actionType: 'pour_or_apply',
+        targetObjectId: 'probe:cat-bowl',
+        reasoningContext: 'Le echo agua al plato del gato.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const pourWater = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(pourWater.status, 'executed');
+      assert.equal(runtime.getPerception(CAMILA_AGENT_ID).heldObject?.physicalState?.contents, 'empty');
+      const bowlAfter = runtime.getPerception(CAMILA_AGENT_ID).visibleObjectsHere?.find((o) => o.id === 'probe:cat-bowl');
+      assert.equal(bowlAfter?.physicalState?.contents, 'water');
+      assert.equal(bowlAfter?.physicalState?.waterLevel, 1);
+
+      // 4. Go to Dollar 2 Go, scoop sand with the bucket, carry back to Calle Del Porvenir, and patch the pothole
+      await moveCamilaTo(controller, 'building:dollar-2-go-building');
+      setPushProvider(controller, {
+        actionType: 'scoop',
+        targetObjectId: 'probe:sand-pile',
+        reasoningContext: 'Recojo tierra y arena en la cubeta.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      assert.equal((await runtime.runCycle(CAMILA_AGENT_ID)).status, 'executed');
+      assert.equal(runtime.getPerception(CAMILA_AGENT_ID).heldObject?.physicalState?.contents, 'sand');
+
+      await moveCamilaTo(controller, 'street:calle-del-porvenir');
+      setPushProvider(controller, {
+        actionType: 'pour_or_apply',
+        targetObjectId: 'probe:puddle',
+        reasoningContext: 'Echo la tierra en el bache para taparlo.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const dumpSand = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(dumpSand.status, 'executed');
+      const puddleAfterSand = runtime.getPerception(CAMILA_AGENT_ID).visibleObjectsHere?.find((o) => o.id === 'probe:puddle');
+      assert.equal(puddleAfterSand?.physicalState?.sandFillLevel, 0.34);
+      assert.equal(puddleAfterSand?.physicalState?.waterLevel, 0.4);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('allows chalk marking on bench/ground and feeds rejected actions back into recentWorldChanges', async () => {
+    process.env.CAMILA_ACTIONS_ENABLED = 'true';
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-chalk-reject-'));
+    try {
+      const controller = makeController(tempDir);
+      const runtime = controller.getNpcAiRuntime();
+
+      await moveCamilaTo(controller, 'street:blvd-gomez-morin');
+      setPushProvider(controller, {
+        actionType: 'pick_up_object',
+        targetObjectId: 'probe:chalk',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      assert.equal((await runtime.runCycle(CAMILA_AGENT_ID)).status, 'executed');
+      await controller.completeObjectInteraction(CAMILA_AGENT_ID, 'probe:chalk', 'applied', { x: -8, y: 0.3, z: 2.4 });
+
+      // Mark the bench with chalk (her exact emergent hypothesis!)
+      setPushProvider(controller, {
+        actionType: 'pour_or_apply',
+        targetObjectId: 'probe:bench',
+        reasoningContext: 'Marco la banca con el gis.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const markBench = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(markBench.status, 'executed');
+      const benchObj = runtime.getPerception(CAMILA_AGENT_ID).visibleObjectsHere?.find((o) => o.id === 'probe:bench');
+      assert.equal(benchObj?.physicalState?.chalkMarks, 1);
+
+      // An impossible physical action (scooping from bench) is rejected AND recorded into recentWorldChanges
+      setPushProvider(controller, {
+        actionType: 'scoop',
+        targetObjectId: 'probe:bench',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const badScoop = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(badScoop.status, 'rejected');
+      assert.ok(
+        (runtime.getPerception(CAMILA_AGENT_ID).recentWorldChanges ?? []).some((c) => c.includes('no funcionó')),
+        'Rejected physical action must feed back into recentWorldChanges so Camila adapts instead of looping'
       );
     } finally {
       rmSync(tempDir, { recursive: true, force: true });

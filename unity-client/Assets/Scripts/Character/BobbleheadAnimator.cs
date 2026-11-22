@@ -3,11 +3,26 @@ using UnityEngine;
 namespace MyVirtualCommunity.Character
 {
     /// <summary>
+    /// Arm and elbow posture presets applied when carrying or pushing physical world props.
+    /// </summary>
+    public enum HoldPoseStyle
+    {
+        None = 0,
+        OneHandDrink = 1,
+        OneHandCarryDown = 2,
+        OneHandFront = 3,
+        TwoHandsFront = 4,
+        TwoHandsPushWheel = 5
+    }
+
+    /// <summary>
     /// Procedural animation controller for stylized Bobblehead characters.
     /// Drives natural walking cycles with alternating opposite arm/leg swings,
-    /// knee flexion, pelvic bounce, and subtle breathing/counter-attendant stances.
+    /// knee flexion, pelvic bounce, subtle breathing/counter-attendant stances,
+    /// and coherent arm/elbow carrying poses when holding physical props.
     /// Strictly presentation-only: never modifies authoritative world state or positions.
     /// </summary>
+    [DefaultExecutionOrder(20)]
     public class BobbleheadAnimator : MonoBehaviour
     {
         [Header("Character Reference")]
@@ -27,6 +42,40 @@ namespace MyVirtualCommunity.Character
         private float _breathPhase;
         private float _currentSpeed;
         private bool _isMoving;
+        private HoldPoseStyle _holdPoseStyle = HoldPoseStyle.None;
+        private float _holdPoseWeight = 0f;
+        private HoldPoseStyle _lastActiveHoldPose = HoldPoseStyle.None;
+        private bool _isSitting = false;
+        private bool _sittingOnBench = false;
+        private float _sitWeight = 0f;
+        private float _actionDipTimer = 0f;
+
+        public HoldPoseStyle CurrentHoldPose => _holdPoseStyle;
+        public bool IsSitting => _isSitting;
+        public bool IsSittingOnBench => _sittingOnBench;
+
+        public void SetHoldPose(HoldPoseStyle style)
+        {
+            _holdPoseStyle = style;
+            if (style != HoldPoseStyle.None)
+            {
+                _lastActiveHoldPose = style;
+            }
+        }
+
+        public void SetSitting(bool sitting, bool onBench = false)
+        {
+            _isSitting = sitting;
+            if (sitting)
+            {
+                _sittingOnBench = onBench;
+            }
+        }
+
+        public void TriggerActionDip()
+        {
+            _actionDipTimer = 0.55f;
+        }
 
         // Base transform initial rotations
         private Quaternion _initTorsoRot = Quaternion.identity;
@@ -94,13 +143,164 @@ namespace MyVirtualCommunity.Character
             float dt = Time.deltaTime;
             _breathPhase += dt * breathSpeed;
 
-            if (_isMoving)
+            if (_isMoving && !_isSitting)
             {
                 AnimateWalkCycle(dt);
             }
             else
             {
                 AnimateIdleStance(dt);
+            }
+
+            ApplySittingPoseOverride(dt);
+            ApplyHoldPoseOverride(dt);
+            ApplyActionDipOverride(dt);
+        }
+
+        private void ApplySittingPoseOverride(float dt)
+        {
+            float targetSit = _isSitting ? 1f : 0f;
+            _sitWeight = Mathf.MoveTowards(_sitWeight, targetSit, dt * 6.0f);
+            if (_sitWeight <= 0.001f) return;
+
+            // Sitting lowers the pelvis and brings thighs forward (-X in Unity left-handed frame)
+            // with knees bent back down (+X). On a bench knees bend ~84 deg; on sidewalk/floor
+            // legs extend slightly forward and splayed so shoes rest naturally above ground.
+            float pelvisDropY = _sittingOnBench ? -0.05f : -0.37f;
+            Vector3 sitPelvisPos = _initPelvisPos + new Vector3(0f, pelvisDropY, 0f);
+            if (character.Pelvis != null)
+            {
+                character.Pelvis.localPosition = Vector3.Lerp(character.Pelvis.localPosition, sitPelvisPos, _sitWeight);
+            }
+
+            float thighPitch = _sittingOnBench ? -86f : -84f;
+            float thighYaw = _sittingOnBench ? 8f : 18f;
+            float kneeBend = _sittingOnBench ? 84f : 14f;
+
+            if (character.LeftLegRoot != null)
+            {
+                Quaternion targetL = _initLeftLegRot * Quaternion.Euler(thighPitch, -thighYaw, 0f);
+                character.LeftLegRoot.localRotation = Quaternion.Slerp(character.LeftLegRoot.localRotation, targetL, _sitWeight);
+            }
+            if (character.RightLegRoot != null)
+            {
+                Quaternion targetR = _initRightLegRot * Quaternion.Euler(thighPitch, thighYaw, 0f);
+                character.RightLegRoot.localRotation = Quaternion.Slerp(character.RightLegRoot.localRotation, targetR, _sitWeight);
+            }
+            if (character.LeftLowerLeg != null)
+            {
+                Quaternion targetKneeL = _initLeftKneeRot * Quaternion.Euler(kneeBend, 0f, 0f);
+                character.LeftLowerLeg.localRotation = Quaternion.Slerp(character.LeftLowerLeg.localRotation, targetKneeL, _sitWeight);
+            }
+            if (character.RightLowerLeg != null)
+            {
+                Quaternion targetKneeR = _initRightKneeRot * Quaternion.Euler(kneeBend, 0f, 0f);
+                character.RightLowerLeg.localRotation = Quaternion.Slerp(character.RightLowerLeg.localRotation, targetKneeR, _sitWeight);
+            }
+
+            // Relaxed seated hands resting near lap/knees when hands are free
+            if (_holdPoseStyle == HoldPoseStyle.None)
+            {
+                BlendArmPose(true, new Vector3(-24f, 14f, 10f), new Vector3(-32f, 0f, 0f), _sitWeight);
+                BlendArmPose(false, new Vector3(-24f, -14f, -10f), new Vector3(-32f, 0f, 0f), _sitWeight);
+            }
+        }
+
+        private void ApplyActionDipOverride(float dt)
+        {
+            if (_actionDipTimer <= 0f) return;
+            _actionDipTimer = Mathf.Max(0f, _actionDipTimer - dt);
+            float t = Mathf.Sin((_actionDipTimer / 0.55f) * Mathf.PI);
+            if (character.Torso != null)
+            {
+                character.Torso.localRotation = character.Torso.localRotation * Quaternion.Euler(18f * t, 0f, 0f);
+            }
+            if (character.RightArmRoot != null)
+            {
+                character.RightArmRoot.localRotation = character.RightArmRoot.localRotation * Quaternion.Euler(-22f * t, 0f, 0f);
+            }
+        }
+
+        private void ApplyHoldPoseOverride(float dt)
+        {
+            float targetWeight = _holdPoseStyle != HoldPoseStyle.None ? 1f : 0f;
+            _holdPoseWeight = Mathf.MoveTowards(_holdPoseWeight, targetWeight, dt * 7.5f);
+            if (_holdPoseWeight <= 0.001f) return;
+
+            HoldPoseStyle activeStyle = _holdPoseStyle != HoldPoseStyle.None ? _holdPoseStyle : _lastActiveHoldPose;
+            float sway = _isMoving ? Mathf.Sin(_walkPhase) * 2.5f : Mathf.Sin(_breathPhase) * 1.2f;
+
+            // Negative X rotation lifts a hanging (-Y) arm/forearm FORWARD (+Z) in Unity's left-handed frame.
+            // On RightArmRoot (+X), negative Y turns forward arm inward (-X) and negative Z opens outward (+X).
+            // On LeftArmRoot (-X), positive Y turns forward arm inward (+X) and positive Z opens outward (-X).
+            switch (activeStyle)
+            {
+                case HoldPoseStyle.OneHandDrink:
+                    // Right hand holds mug/coffee upright at chest level; left arm swings freely.
+                    BlendArmPose(isLeft: false,
+                        shoulderEuler: new Vector3(-50f + sway * 0.5f, -14f, -6f),
+                        forearmEuler: new Vector3(-58f, 0f, 0f),
+                        weight: _holdPoseWeight);
+                    break;
+
+                case HoldPoseStyle.OneHandCarryDown:
+                    // Right arm hangs slightly out & bent carrying bucket, watering can, tied trash bag, or umbrella.
+                    BlendArmPose(isLeft: false,
+                        shoulderEuler: new Vector3(-28f + sway * 0.8f, 0f, -20f),
+                        forearmEuler: new Vector3(-50f, 0f, 0f),
+                        weight: _holdPoseWeight);
+                    break;
+
+                case HoldPoseStyle.OneHandFront:
+                    // Right arm bends forward carrying book, chalk, tile sample, or broomstick.
+                    BlendArmPose(isLeft: false,
+                        shoulderEuler: new Vector3(-36f + sway * 0.6f, -12f, -8f),
+                        forearmEuler: new Vector3(-54f, 0f, 0f),
+                        weight: _holdPoseWeight);
+                    break;
+
+                case HoldPoseStyle.TwoHandsFront:
+                    // Both arms raised & elbows bent inward cradling larger props (ball, traffic cone, water bowl).
+                    BlendArmPose(isLeft: true,
+                        shoulderEuler: new Vector3(-40f + sway * 0.45f, 14f, 5f),
+                        forearmEuler: new Vector3(-52f, 0f, 0f),
+                        weight: _holdPoseWeight);
+                    BlendArmPose(isLeft: false,
+                        shoulderEuler: new Vector3(-40f + sway * 0.45f, -14f, -5f),
+                        forearmEuler: new Vector3(-52f, 0f, 0f),
+                        weight: _holdPoseWeight);
+                    break;
+
+                case HoldPoseStyle.TwoHandsPushWheel:
+                    // Both arms extended forward gripping the tall wheeled trash bin handle bar.
+                    BlendArmPose(isLeft: true,
+                        shoulderEuler: new Vector3(-82f + sway * 0.35f, 6f, 4f),
+                        forearmEuler: new Vector3(-16f, 0f, 0f),
+                        weight: _holdPoseWeight);
+                    BlendArmPose(isLeft: false,
+                        shoulderEuler: new Vector3(-82f + sway * 0.35f, -6f, -4f),
+                        forearmEuler: new Vector3(-16f, 0f, 0f),
+                        weight: _holdPoseWeight);
+                    break;
+            }
+        }
+
+        private void BlendArmPose(bool isLeft, Vector3 shoulderEuler, Vector3 forearmEuler, float weight)
+        {
+            Transform armRoot = isLeft ? character.LeftArmRoot : character.RightArmRoot;
+            Transform forearm = isLeft ? character.LeftForearm : character.RightForearm;
+            Quaternion initArm = isLeft ? _initLeftArmRot : _initRightArmRot;
+            Quaternion initForearm = isLeft ? _initLeftForearmRot : _initRightForearmRot;
+
+            if (armRoot != null)
+            {
+                Quaternion targetArm = initArm * Quaternion.Euler(shoulderEuler);
+                armRoot.localRotation = Quaternion.Slerp(armRoot.localRotation, targetArm, weight);
+            }
+            if (forearm != null)
+            {
+                Quaternion targetForearm = initForearm * Quaternion.Euler(forearmEuler);
+                forearm.localRotation = Quaternion.Slerp(forearm.localRotation, targetForearm, weight);
             }
         }
 

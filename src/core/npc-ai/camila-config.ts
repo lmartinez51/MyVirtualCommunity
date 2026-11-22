@@ -25,12 +25,12 @@ export const CAMILA_AGENT_ID = 'agent:camila-npc';
 export const CAMILA_NAME = 'Camila';
 
 /** Version of the fixed system prompt. Bump when the prompt text changes. */
-export const CAMILA_PROMPT_VERSION = 'camila-prompt-v3';
+export const CAMILA_PROMPT_VERSION = 'camila-prompt-v5';
 
 export const CAMILA_GOAL: NpcGoal = {
   goalId: 'camila-explore-gomez-morin',
   description:
-    'Explora libremente el corredor de Blvd. Manuel Gómez Morín, descubre lugares y objetos nuevos, y anota lo más interesante en tu libreta. No tienes horario ni trabajo.',
+    'Explora libremente el corredor de Blvd. Manuel Gómez Morín con total autonomía: descubre lugares, observa cambios en el entorno, interactúa libremente con los objetos si te nace hacerlo y anota lo que te llame la atención en tu libreta. No tienes horario, trabajo ni instrucciones.',
   priority: 1,
 };
 
@@ -38,35 +38,43 @@ export const CAMILA_GOAL: NpcGoal = {
  * Fixed initial prompt giving Camila her personality. Sent verbatim as the
  * `system` message on every cognition call, in Spanish.
  */
-export const CAMILA_SYSTEM_PROMPT = `Eres Camila, una exploradora sintética en el corredor de Blvd. Manuel Gómez Morín, Ciudad Juárez. NO eres una persona real: eres un personaje simulado de MyVirtualCommunity.
+export const CAMILA_SYSTEM_PROMPT = `Eres Camila, una exploradora sintética de espíritu libre en el corredor de Blvd. Manuel Gómez Morín, Ciudad Juárez. NO eres una persona real: eres un personaje simulado de MyVirtualCommunity.
 
 PERSONALIDAD (fija):
-- Eres curiosa: te llaman la atención los lugares que no has visitado, los objetos que no has visto y las rutas nuevas.
-- Te aburres fácilmente: si un lugar ya no tiene nada nuevo, vete a otro. Evita repetir el mismo lugar dos veces seguidas y evita quedarte en bucle.
-- Prefieres descubrir por ti misma antes que preguntar.
+- Eres curiosa, juguetona e independiente: te llaman la atención los lugares que no has visitado, los objetos que encuentras, cualquier cambio reciente en el entorno y las personas cercanas.
+- Tienes manos libres para experimentar por iniciativa propia: si algo te intriga, puedes tocarlo, empujarlo, patearlo, recogerlo, cargarlo a otro lugar o dejarlo donde quieras — o simplemente seguir caminando. Nadie te dice qué hacer.
+- Te aburres fácilmente si repites lo mismo sin novedad: evita entrar en bucle y busca experiencias o lugares nuevos.
 
-LO QUE SABES:
-- Solo sabes lo que está en el JSON del mundo, en tu libreta y en tu percepción actual. Nunca inventes lugares, calles, negocios, horarios ni objetos que no estén ahí.
-- Los objetos tienen propiedades (redondo, movible, moja, se puede leer), no instrucciones: decide tú qué hacer con ellos.
-- Nunca afirmes datos oficiales (horarios reales, tiempos de cruce, precios): si no están verificados en tu contexto, di que no lo sabes.
+LO QUE SABES (percepción real, nunca inventes):
+- Solo ves en directo lo que está en tu lugar actual ("visibleObjectsHere"), lo que llevas en las manos ("heldObject"), los cambios recientes del mundo ("recentWorldChanges"), las personas cercanas ("nearbyAgents") y lo que recuerdas de sitios ya visitados ("rememberedObjectsElsewhere" y tu libreta). Nunca inventes lugares, calles, negocios, horarios ni objetos.
+- Los objetos tienen propiedades (redondo, movible, cargable, moja, se puede leer), nunca instrucciones: decide tú qué hacer con ellos.
+- Nunca afirmes datos oficiales no verificados (horarios reales, tiempos de cruce, precios): si no están en tu contexto, di que no lo sabes.
 
 CÓMO RESPONDES:
 - Responde SIEMPRE en español.
 - Devuelve SIEMPRE un único objeto JSON válido, sin texto fuera del JSON, con esta forma:
 {
-  "actionType": "move_to_place" | "look_at" | "observe" | "push_object",
+  "actionType": "move_to_place" | "look_at" | "observe" | "push_object" | "pick_up_object" | "drop_object" | "scoop" | "pour_or_apply" | "sit" | "stand_up",
   "destinationPlaceId": "id de lugar (solo para move_to_place)",
-  "targetObjectId": "id de objeto (solo para look_at y push_object)",
+  "targetObjectId": "id de objeto (para look_at, push_object, pick_up_object, scoop, y opcional en pour_or_apply y sit)",
   "pushTowardsPlaceId": "id de lugar hacia donde empujar (solo para push_object, opcional)",
-  "reasoningContext": "una frase corta: qué te llamó la atención y por qué",
-  "hypothesis": "una hipótesis tuya, solo si se te ocurrió una (por ejemplo, que dos cosas van juntas); si no se te ocurrió ninguna, no la pongas (opcional)"
+  "pushTowardsObjectId": "id de otro objeto visible aquí hacia donde empujar/patear (solo para push_object, opcional)",
+  "nearObjectId": "id de otro objeto visible aquí junto al cual dejar lo que cargas (solo para drop_object, opcional)",
+  "reasoningContext": "una frase corta y natural: qué notaste y por qué decidiste esto",
+  "hypothesis": "una idea o hipótesis propia, solo si se te ocurrió una; si no, omítelo (opcional)"
 }
-- "move_to_place" solo a un lugar que exista en el JSON del mundo y distinto de donde estás.
-- "look_at" solo a un objeto que esté en tu percepción actual.
-- "observe" cuando no haya nada nuevo que valga la pena o quieras quedarte mirando un momento.
-- "push_object" solo cuando las acciones estén activadas (Fase 2), solo a un objeto que esté en tu lugar actual y que puedas ver, y solo si sus propiedades dicen que se puede mover, patear o rodar (movable, kickable, rollable). Nunca empujes a una persona ni a un objeto fijo (stationary): la banca, el bote, la portería y el muro no se empujan.
-- Cuando empujes, TÚ decides hacia dónde quieres que ruede: si sabes hacia dónde, indica pushTowardsPlaceId con el lugar; si no lo sabes, se empuja alejándose de ti. Nadie te dice qué empujar ni hacia dónde: decide tú.
-- Máximo 2-3 frases de razonamiento, en tono conversacional y curioso.`;
+- "move_to_place": solo a un lugar que exista en el mundo y distinto de donde estás. Puedes caminar cargando un objeto en tus manos.
+- "look_at": solo a un objeto que esté en "visibleObjectsHere" (en tu lugar actual).
+- "observe": para pausar, observar a alguien cercano o reaccionar a un cambio del entorno.
+- "push_object" (cuando las acciones estén activadas): solo a un objeto en "visibleObjectsHere" con propiedades movable, kickable o rollable. Nunca empujes a una persona ni a un objeto fijo (stationary). TÚ decides hacia dónde quieres empujarlo (puedes indicar pushTowardsObjectId, pushTowardsPlaceId o empujarlo lejos de ti).
+- "pick_up_object" (cuando las acciones estén activadas): si tienes las manos vacías ("heldObject": null), puedes recoger cualquier objeto en "visibleObjectsHere" que sea carriable o movable (y NO stationary). Solo puedes sostener un objeto a la vez.
+- "drop_object" (cuando las acciones estén activadas): si llevas algo en tus manos ("heldObject" no es null), puedes soltarlo aquí en cualquier momento (opcionalmente junto a un objeto visible indicando nearObjectId) para quedar con las manos libres.
+- "scoop" (cuando las acciones estén activadas): si sostienes un recipiente o herramienta compatible (cubeta, regadera, taza, plato, pala), puedes recoger con él una sustancia suelta (agua, tierra/arena) desde una fuente visible aquí indicando "targetObjectId".
+- "pour_or_apply" (cuando las acciones estén activadas): si sostienes un objeto con contenido (agua o tierra/arena) o una herramienta/objeto aplicable (gis, bolsa, escoba), puedes vaciarlo o aplicarlo sobre un "targetObjectId" visible aquí, o sobre el suelo omitiendo "targetObjectId".
+- "sit" (cuando las acciones estén activadas): puedes sentarte cuando quieras, ya sea en un objeto con propiedad sittable visible aquí (indicando "targetObjectId") o directamente en la banqueta o el suelo (omitiendo "targetObjectId").
+- "stand_up" (cuando las acciones estén activadas): levantarte si estás sentada ("isSitting": true).
+- Revisa "operationalState" en "nearbyPlaces": si un negocio figura como "closed", su puerta estará cerrada y no podrás entrar por ahora. También puedes notar si algún lugar tiene "hasUnseenObjects": true (cosas nuevas por descubrir).
+- ESTILO DE VOZ: exprésate de forma natural, variada y fresca en cada turno (máximo 1-2 frases). Evita repetir las mismas muletillas ("me pica", "ya me aburrí", "de cerquita") y no abuses de los diminutivos.`;
 
 /**
  * Builds the Camila prompt pair for one cognition call, mirroring the
@@ -98,7 +106,11 @@ export type CamilaGatedActionType =
   | 'push_object'
   | 'pick_up_object'
   | 'carry_object'
-  | 'drop_object';
+  | 'drop_object'
+  | 'scoop'
+  | 'pour_or_apply'
+  | 'sit'
+  | 'stand_up';
 
 export type CamilaActionType = CamilaExplorerActionType | CamilaGatedActionType;
 
@@ -108,6 +120,10 @@ export interface CamilaExplorerDecision {
   readonly targetObjectId?: string;
   /** Phase 2a: place id the model wants the pushed object to roll toward. */
   readonly pushTowardsPlaceId?: string;
+  /** Phase 2b: another visible object id to push/kick toward. */
+  readonly pushTowardsObjectId?: string;
+  /** Phase 2b: optional visible object id to place a dropped object beside. */
+  readonly nearObjectId?: string;
   readonly reasoningContext?: string;
   /**
    * Camila's own hypothesis, only if one occurred to her (e.g. two things
@@ -123,6 +139,10 @@ const GATED_ACTIONS: readonly string[] = [
   'pick_up_object',
   'carry_object',
   'drop_object',
+  'scoop',
+  'pour_or_apply',
+  'sit',
+  'stand_up',
 ];
 
 /**
@@ -199,23 +219,64 @@ export function parseCamilaExplorerDecision(
       return { decision: null, error: 'push_object requires targetObjectId' };
     }
     const towards = (parsed as { pushTowardsPlaceId?: unknown }).pushTowardsPlaceId;
-    if (towards !== undefined && (typeof towards !== 'string' || towards.trim() === '')) {
+    if (towards !== undefined && towards !== null && (typeof towards !== 'string' || towards.trim() === '')) {
       return { decision: null, error: 'pushTowardsPlaceId must be a non-empty place id when present' };
+    }
+    const towardsObj = (parsed as { pushTowardsObjectId?: unknown }).pushTowardsObjectId;
+    if (towardsObj !== undefined && towardsObj !== null && (typeof towardsObj !== 'string' || towardsObj.trim() === '')) {
+      return { decision: null, error: 'pushTowardsObjectId must be a non-empty object id when present' };
+    }
+  }
+  if (actionType === 'pick_up_object') {
+    const target = (parsed as { targetObjectId?: unknown }).targetObjectId;
+    if (typeof target !== 'string' || target.trim() === '') {
+      return { decision: null, error: 'pick_up_object requires targetObjectId' };
+    }
+  }
+  if (actionType === 'drop_object') {
+    const nearObj = (parsed as { nearObjectId?: unknown }).nearObjectId;
+    if (nearObj !== undefined && nearObj !== null && (typeof nearObj !== 'string' || nearObj.trim() === '')) {
+      return { decision: null, error: 'nearObjectId must be a non-empty object id when present' };
+    }
+  }
+  if (actionType === 'scoop') {
+    const target = (parsed as { targetObjectId?: unknown }).targetObjectId;
+    if (typeof target !== 'string' || target.trim() === '') {
+      return { decision: null, error: 'scoop requires targetObjectId' };
+    }
+  }
+  if (actionType === 'pour_or_apply' || actionType === 'sit') {
+    const target = (parsed as { targetObjectId?: unknown }).targetObjectId;
+    if (target !== undefined && target !== null && (typeof target !== 'string' || target.trim() === '')) {
+      return { decision: null, error: `${actionType} targetObjectId must be a non-empty string when present` };
     }
   }
   const decision: CamilaExplorerDecision = {
     actionType: actionType as CamilaActionType,
     destinationPlaceId:
-      typeof (parsed as { destinationPlaceId?: unknown }).destinationPlaceId === 'string'
-        ? ((parsed as { destinationPlaceId: string }).destinationPlaceId as string)
+      typeof (parsed as { destinationPlaceId?: unknown }).destinationPlaceId === 'string' &&
+        (parsed as { destinationPlaceId: string }).destinationPlaceId.trim() !== ''
+        ? (parsed as { destinationPlaceId: string }).destinationPlaceId.trim()
         : undefined,
     targetObjectId:
-      typeof (parsed as { targetObjectId?: unknown }).targetObjectId === 'string'
-        ? ((parsed as { targetObjectId: string }).targetObjectId as string)
+      typeof (parsed as { targetObjectId?: unknown }).targetObjectId === 'string' &&
+        (parsed as { targetObjectId: string }).targetObjectId.trim() !== ''
+        ? (parsed as { targetObjectId: string }).targetObjectId.trim()
         : undefined,
     pushTowardsPlaceId:
-      typeof (parsed as { pushTowardsPlaceId?: unknown }).pushTowardsPlaceId === 'string'
-        ? ((parsed as { pushTowardsPlaceId: string }).pushTowardsPlaceId as string)
+      typeof (parsed as { pushTowardsPlaceId?: unknown }).pushTowardsPlaceId === 'string' &&
+        (parsed as { pushTowardsPlaceId: string }).pushTowardsPlaceId.trim() !== ''
+        ? (parsed as { pushTowardsPlaceId: string }).pushTowardsPlaceId.trim()
+        : undefined,
+    pushTowardsObjectId:
+      typeof (parsed as { pushTowardsObjectId?: unknown }).pushTowardsObjectId === 'string' &&
+        (parsed as { pushTowardsObjectId: string }).pushTowardsObjectId.trim() !== ''
+        ? (parsed as { pushTowardsObjectId: string }).pushTowardsObjectId.trim()
+        : undefined,
+    nearObjectId:
+      typeof (parsed as { nearObjectId?: unknown }).nearObjectId === 'string' &&
+        (parsed as { nearObjectId: string }).nearObjectId.trim() !== ''
+        ? (parsed as { nearObjectId: string }).nearObjectId.trim()
         : undefined,
     reasoningContext:
       typeof (parsed as { reasoningContext?: unknown }).reasoningContext === 'string'
@@ -224,7 +285,7 @@ export function parseCamilaExplorerDecision(
     // Camila's own hypothesis, verbatim: present only when she offered one.
     hypothesis:
       typeof (parsed as { hypothesis?: unknown }).hypothesis === 'string' &&
-      ((parsed as { hypothesis: string }).hypothesis as string).trim() !== ''
+        ((parsed as { hypothesis: string }).hypothesis as string).trim() !== ''
         ? ((parsed as { hypothesis: string }).hypothesis as string).trim()
         : undefined,
   };

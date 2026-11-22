@@ -1,14 +1,23 @@
 using System.Collections.Generic;
 using UnityEngine;
+using MyVirtualCommunity.Character;
 
 namespace MyVirtualCommunity.Environment
 {
+    public enum PropContentType
+    {
+        None = 0,
+        Water = 1,
+        Sand = 2
+    }
+
     /// <summary>
-    /// Reusable tangible, movable physical prop component for Player interaction.
-    /// Provides solid collision + Rigidbody physics so the player cannot walk through props,
+    /// Reusable tangible, movable physical prop component for Player and NPC interaction.
+    /// Provides solid collision + Rigidbody physics so characters cannot walk through props,
     /// supports picking up / carrying / placing ([E]), throwing / kicking ([F]),
-    /// and upright wheeled transport (e.g. rolling a US-style trash bin to a sidewalk corner).
+    /// hand-anchored arm/elbow carrying poses, and upright wheeled transport.
     /// </summary>
+    [DefaultExecutionOrder(40)]
     [RequireComponent(typeof(Rigidbody))]
     public class InteractiveWorldProp : MonoBehaviour
     {
@@ -16,6 +25,7 @@ namespace MyVirtualCommunity.Environment
 
         [Header("Prop Identity")]
         [SerializeField] private string propName = "Objeto";
+        [SerializeField] private string probeObjectId = "";
         [SerializeField] private float interactionRange = 2.2f;
 
         [Header("Capabilities")]
@@ -26,6 +36,9 @@ namespace MyVirtualCommunity.Environment
 
         [Header("Handling & Physics")]
         [SerializeField] private Vector3 holdLocalOffset = new Vector3(0.32f, 0.92f, 0.62f);
+        [SerializeField] private HoldPoseStyle holdPoseStyle = HoldPoseStyle.OneHandFront;
+        [SerializeField] private Vector3 handGripLocalOffset = Vector3.zero;
+        [SerializeField] private Vector3 handGripLocalEuler = Vector3.zero;
         [SerializeField] private float kickForce = 9.5f;
         [SerializeField] private float kickUpwardForce = 3.2f;
         [SerializeField] private float throwForce = 7.0f;
@@ -35,9 +48,18 @@ namespace MyVirtualCommunity.Environment
         private Rigidbody rb;
         private Collider[] propColliders;
         private Transform holderTransform;
+        private BobbleheadCharacter holderCharacter;
+        private BobbleheadAnimator holderAnimator;
         private bool isHeld = false;
+        private float holdBlendTimer = 0f;
+        private float pendingPlayerSyncTimer = -1f;
+        private Vector3 lastSyncedPosition;
+        private PropContentType currentContent = PropContentType.None;
+        private GameObject waterVisualObj;
+        private GameObject sandVisualObj;
 
         public string PropName => propName;
+        public string ProbeObjectId => probeObjectId;
         public float InteractionRange => interactionRange;
         public bool CanCarry => canCarry;
         public bool CanWheelMove => canWheelMove;
@@ -46,6 +68,107 @@ namespace MyVirtualCommunity.Environment
         public bool IsHeld => isHeld;
         public float PushStrength => pushStrength;
         public Rigidbody Body => rb;
+        public PropContentType CurrentContent => currentContent;
+
+        public void SetContents(PropContentType content)
+        {
+            currentContent = content;
+            EnsureContentVisuals();
+            if (waterVisualObj != null) waterVisualObj.SetActive(content == PropContentType.Water);
+            if (sandVisualObj != null) sandVisualObj.SetActive(content == PropContentType.Sand);
+        }
+
+        private void EnsureContentVisuals()
+        {
+            if (probeObjectId == "probe:cat-bowl")
+            {
+                if (waterVisualObj == null)
+                {
+                    var existing = transform.Find("Bowl_Water");
+                    if (existing != null) waterVisualObj = existing.gameObject;
+                }
+                return;
+            }
+
+            if (probeObjectId == "probe:bucket")
+            {
+                if (waterVisualObj == null)
+                {
+                    waterVisualObj = CreateFillPrimitive("Bucket_Water_Fill", PrimitiveType.Cylinder,
+                        new Vector3(0f, 0.28f, 0f), new Vector3(0.28f, 0.015f, 0.28f), new Color(0.22f, 0.56f, 0.84f), 0.92f);
+                }
+                if (sandVisualObj == null)
+                {
+                    sandVisualObj = CreateFillPrimitive("Bucket_Sand_Fill", PrimitiveType.Sphere,
+                        new Vector3(0f, 0.28f, 0f), new Vector3(0.27f, 0.14f, 0.27f), new Color(0.76f, 0.63f, 0.43f), 0.12f);
+                }
+                return;
+            }
+
+            if (probeObjectId == "probe:watering-can")
+            {
+                if (waterVisualObj == null)
+                {
+                    waterVisualObj = CreateFillPrimitive("Can_Water_Fill", PrimitiveType.Cylinder,
+                        new Vector3(0f, 0.295f, 0f), new Vector3(0.11f, 0.008f, 0.11f), new Color(0.22f, 0.58f, 0.86f), 0.92f);
+                }
+                return;
+            }
+
+            if (probeObjectId == "probe:cup")
+            {
+                if (waterVisualObj == null)
+                {
+                    waterVisualObj = CreateFillPrimitive("Cup_Water_Fill", PrimitiveType.Cylinder,
+                        new Vector3(0f, 0.055f, 0f), new Vector3(0.075f, 0.006f, 0.075f), new Color(0.26f, 0.62f, 0.88f), 0.92f);
+                }
+                return;
+            }
+
+            if (probeObjectId == "probe:shovel")
+            {
+                if (sandVisualObj == null)
+                {
+                    sandVisualObj = CreateFillPrimitive("Shovel_Sand_Scoop", PrimitiveType.Sphere,
+                        new Vector3(0f, 0.13f, 0.04f), new Vector3(0.22f, 0.10f, 0.16f), new Color(0.76f, 0.63f, 0.43f), 0.12f);
+                }
+            }
+        }
+
+        private GameObject CreateFillPrimitive(string goName, PrimitiveType primitive, Vector3 localPos, Vector3 localScale, Color color, float smoothness)
+        {
+            GameObject obj = GameObject.CreatePrimitive(primitive);
+            obj.name = goName;
+            obj.transform.SetParent(transform, false);
+            obj.transform.localPosition = localPos;
+            obj.transform.localScale = localScale;
+            var col = obj.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+            var rend = obj.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                Material mat = new Material(rend.sharedMaterial);
+                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+                if (mat.HasProperty("_Color")) mat.SetColor("_Color", color);
+                if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
+                if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", smoothness);
+                rend.sharedMaterial = mat;
+            }
+            obj.SetActive(false);
+            return obj;
+        }
+
+        public void SetProbeObjectId(string id)
+        {
+            probeObjectId = id ?? "";
+            lastSyncedPosition = transform.position;
+        }
+
+        public void NotifyMovedByPlayer()
+        {
+            if (string.IsNullOrEmpty(probeObjectId)) return;
+            pendingPlayerSyncTimer = 1.25f;
+        }
 
         private void Awake()
         {
@@ -63,7 +186,18 @@ namespace MyVirtualCommunity.Environment
 
         private void OnDisable()
         {
+            if (isHeld && holderAnimator != null)
+            {
+                holderAnimator.SetHoldPose(HoldPoseStyle.None);
+            }
             ActiveProps.Remove(this);
+        }
+
+        public void ConfigureHoldPose(HoldPoseStyle style, Vector3 gripOffset, Vector3 gripEuler = default)
+        {
+            holdPoseStyle = style;
+            handGripLocalOffset = gripOffset;
+            handGripLocalEuler = gripEuler;
         }
 
         public void Configure(
@@ -101,7 +235,8 @@ namespace MyVirtualCommunity.Environment
             rb.useGravity = true;
             rb.isKinematic = false;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
-            rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+            rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
+            rb.sleepThreshold = 0.02f;
             rb.constraints = freezeTilt
                 ? (RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ)
                 : RigidbodyConstraints.None;
@@ -168,6 +303,14 @@ namespace MyVirtualCommunity.Environment
 
             isHeld = true;
             holderTransform = holder;
+            holderCharacter = holder.GetComponentInChildren<BobbleheadCharacter>();
+            holderAnimator = holder.GetComponentInChildren<BobbleheadAnimator>();
+            holdBlendTimer = 0f;
+
+            if (holderAnimator != null)
+            {
+                holderAnimator.SetHoldPose(canWheelMove ? HoldPoseStyle.TwoHandsPushWheel : holdPoseStyle);
+            }
 
             if (rb != null)
             {
@@ -200,10 +343,28 @@ namespace MyVirtualCommunity.Environment
                     candidatePos = refTransform.position + refTransform.forward * Mathf.Max(0.45f, wallHit.distance - 0.35f);
                 }
 
-                // Ground the dropped prop cleanly on the floor/sidewalk/bench below candidatePos
-                if (Physics.Raycast(new Vector3(candidatePos.x, refTransform.position.y + 1.4f, candidatePos.z), Vector3.down, out RaycastHit groundHit, 4.0f, ~(1 << 2), QueryTriggerInteraction.Ignore))
+                // Anti-stacking: if another prop already sits within 0.48m of candidatePos,
+                // pick a clean radial offset so objects never pile directly on top of each other.
+                candidatePos = FindUnoccupiedDropSpot(candidatePos, refTransform);
+
+                // Ground the dropped prop cleanly on floor/sidewalk/bench (ignoring other movable props!)
+                RaycastHit[] groundHits = Physics.RaycastAll(new Vector3(candidatePos.x, refTransform.position.y + 1.4f, candidatePos.z), Vector3.down, 4.0f, ~(1 << 2), QueryTriggerInteraction.Ignore);
+                float bestGroundY = float.MinValue;
+                bool foundGround = false;
+                for (int gi = 0; gi < groundHits.Length; gi++)
                 {
-                    dropPos = new Vector3(candidatePos.x, groundHit.point.y + groundClearanceOffset + 0.02f, candidatePos.z);
+                    var gh = groundHits[gi];
+                    if (gh.collider == null) continue;
+                    if (gh.collider.GetComponentInParent<InteractiveWorldProp>() != null) continue;
+                    if (gh.point.y > bestGroundY)
+                    {
+                        bestGroundY = gh.point.y;
+                        foundGround = true;
+                    }
+                }
+                if (foundGround)
+                {
+                    dropPos = new Vector3(candidatePos.x, bestGroundY + groundClearanceOffset + 0.015f, candidatePos.z);
                 }
                 else
                 {
@@ -213,8 +374,15 @@ namespace MyVirtualCommunity.Environment
                 dropRot = Quaternion.Euler(0f, refTransform.eulerAngles.y, 0f);
             }
 
+            if (holderAnimator != null)
+            {
+                holderAnimator.SetHoldPose(HoldPoseStyle.None);
+            }
+
             isHeld = false;
             holderTransform = null;
+            holderCharacter = null;
+            holderAnimator = null;
 
             transform.position = dropPos;
             transform.rotation = dropRot;
@@ -243,8 +411,15 @@ namespace MyVirtualCommunity.Environment
                 releasePos = refTransform.position + Vector3.up * 1.15f + throwDir * 0.72f;
             }
 
+            if (holderAnimator != null)
+            {
+                holderAnimator.SetHoldPose(HoldPoseStyle.None);
+            }
+
             isHeld = false;
             holderTransform = null;
+            holderCharacter = null;
+            holderAnimator = null;
 
             transform.position = releasePos;
             SetCollidersEnabled(true);
@@ -297,32 +472,135 @@ namespace MyVirtualCommunity.Environment
 
         private void LateUpdate()
         {
-            if (!isHeld || holderTransform == null) return;
-            UpdateHeldPoseImmediate();
+            if (isHeld && holderTransform != null)
+            {
+                UpdateHeldPoseImmediate();
+                return;
+            }
+
+            if (pendingPlayerSyncTimer > 0f)
+            {
+                pendingPlayerSyncTimer -= Time.deltaTime;
+                if (pendingPlayerSyncTimer <= 0f)
+                {
+                    pendingPlayerSyncTimer = -1f;
+                    if (!string.IsNullOrEmpty(probeObjectId) &&
+                        Vector3.Distance(transform.position, lastSyncedPosition) >= 0.35f &&
+                        Core.WorldCoreClient.Instance != null &&
+                        Core.WorldCoreClient.Instance.IsConnected)
+                    {
+                        lastSyncedPosition = transform.position;
+                        Core.WorldCoreClient.Instance.StartCoroutine(
+                            Core.WorldCoreClient.Instance.SyncWorldPropPosition(probeObjectId, transform.position));
+                    }
+                }
+            }
         }
 
         private void UpdateHeldPoseImmediate()
         {
             if (holderTransform == null) return;
 
+            if (holderCharacter == null || holderCharacter.RightHand == null)
+            {
+                holderCharacter = holderTransform.GetComponentInChildren<BobbleheadCharacter>();
+            }
+            if (holderAnimator == null)
+            {
+                holderAnimator = holderTransform.GetComponentInChildren<BobbleheadAnimator>();
+                if (holderAnimator != null)
+                {
+                    holderAnimator.SetHoldPose(canWheelMove ? HoldPoseStyle.TwoHandsPushWheel : holdPoseStyle);
+                }
+            }
+
+            holdBlendTimer += Time.deltaTime;
+            bool blendComplete = holdBlendTimer >= 0.16f;
+            float posLerp = blendComplete ? 1f : Mathf.Clamp01(Time.deltaTime * 22f);
+            float rotLerp = blendComplete ? 1f : Mathf.Clamp01(Time.deltaTime * 20f);
+
+            Quaternion holderYawRot = Quaternion.Euler(0f, holderTransform.eulerAngles.y, 0f);
+
             if (canWheelMove)
             {
-                // Roll wheeled bin upright on the ground directly in front of the player
+                // Roll wheeled bin upright on the ground directly in front of the character's extended hands
                 Vector3 desiredPos = holderTransform.TransformPoint(holdLocalOffset);
                 float groundY = holderTransform.position.y;
                 if (Physics.Raycast(new Vector3(desiredPos.x, holderTransform.position.y + 1.5f, desiredPos.z), Vector3.down, out RaycastHit hit, 4.0f, ~(1 << 2), QueryTriggerInteraction.Ignore))
                 {
                     groundY = hit.point.y;
                 }
-                transform.position = Vector3.Lerp(transform.position, new Vector3(desiredPos.x, groundY + groundClearanceOffset, desiredPos.z), Time.deltaTime * 16f);
-                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.Euler(0f, holderTransform.eulerAngles.y, 0f), Time.deltaTime * 14f);
+                Vector3 wheelPos = new Vector3(desiredPos.x, groundY + groundClearanceOffset, desiredPos.z);
+                transform.position = Vector3.Lerp(transform.position, wheelPos, Time.deltaTime * 18f);
+                transform.rotation = Quaternion.Slerp(transform.rotation, holderYawRot, Time.deltaTime * 16f);
+                return;
+            }
+
+            Vector3 targetPos;
+            Quaternion targetRot = holderYawRot * Quaternion.Euler(handGripLocalEuler);
+
+            if (holdPoseStyle == HoldPoseStyle.TwoHandsFront &&
+                holderCharacter != null &&
+                holderCharacter.LeftHand != null &&
+                holderCharacter.RightHand != null)
+            {
+                Vector3 handsMid = (holderCharacter.LeftHand.position + holderCharacter.RightHand.position) * 0.5f;
+                targetPos = handsMid + holderYawRot * handGripLocalOffset;
+            }
+            else if (holderCharacter != null && holderCharacter.RightHand != null)
+            {
+                targetPos = holderCharacter.RightHand.position + holderYawRot * handGripLocalOffset;
             }
             else
             {
-                Vector3 targetPos = holderTransform.TransformPoint(holdLocalOffset);
-                transform.position = Vector3.Lerp(transform.position, targetPos, Time.deltaTime * 20f);
-                transform.rotation = Quaternion.Slerp(transform.rotation, holderTransform.rotation, Time.deltaTime * 16f);
+                targetPos = holderTransform.TransformPoint(holdLocalOffset);
             }
+
+            // Never allow carried props (buckets, bags, brooms) to clip below the ground plane
+            float minSafeY = holderTransform.position.y + groundClearanceOffset + 0.03f;
+            if (targetPos.y < minSafeY)
+            {
+                targetPos.y = minSafeY;
+            }
+
+            transform.position = blendComplete ? targetPos : Vector3.Lerp(transform.position, targetPos, posLerp);
+            transform.rotation = blendComplete ? targetRot : Quaternion.Slerp(transform.rotation, targetRot, rotLerp);
+        }
+
+        private Vector3 FindUnoccupiedDropSpot(Vector3 candidate, Transform refTransform)
+        {
+            if (!IsSpotOccupiedByProp(candidate)) return candidate;
+
+            float radius = 0.56f;
+            for (int step = 0; step < 8; step++)
+            {
+                float angleRad = step * 45f * Mathf.Deg2Rad;
+                Vector3 test = new Vector3(
+                    candidate.x + Mathf.Cos(angleRad) * radius,
+                    candidate.y,
+                    candidate.z + Mathf.Sin(angleRad) * radius
+                );
+                if (!IsSpotOccupiedByProp(test))
+                {
+                    return test;
+                }
+            }
+            return candidate + refTransform.right * 0.55f;
+        }
+
+        private bool IsSpotOccupiedByProp(Vector3 pos)
+        {
+            for (int i = 0; i < ActiveProps.Count; i++)
+            {
+                var other = ActiveProps[i];
+                if (other == null || other == this || other.IsHeld) continue;
+                float distXZ = Vector2.Distance(
+                    new Vector2(other.transform.position.x, other.transform.position.z),
+                    new Vector2(pos.x, pos.z)
+                );
+                if (distXZ < 0.48f) return true;
+            }
+            return false;
         }
 
         private void SetCollidersEnabled(bool enabledState)

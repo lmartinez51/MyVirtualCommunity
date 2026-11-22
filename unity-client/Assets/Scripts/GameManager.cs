@@ -31,13 +31,44 @@ namespace MyVirtualCommunity
         [SerializeField] private bool triggerAuditCaptureNow = false;
         [SerializeField] private float testStartDelaySeconds = 1.2f;
 
+        private int activeTargetFps = 40;
+
         private void Awake()
         {
-            // Prevent uncapped GPU boost/power spike on mobile discrete GPUs (e.g. GeForce MX150) right after splash screen
-            QualitySettings.vSyncCount = 1;
-            Application.targetFrameRate = 60;
+            // Thermal & power protection for thin-and-light laptop GPUs (e.g. GeForce MX150 2GB VRAM):
+            // Cap frame rate & shadow overhead so the discrete GPU/CPU never trips EC thermal shutdown.
+            bool isLowVramMobileGpu = SystemInfo.graphicsMemorySize > 0 && SystemInfo.graphicsMemorySize <= 2500;
+            activeTargetFps = isLowVramMobileGpu ? 40 : 60;
+
+            QualitySettings.vSyncCount = isLowVramMobileGpu ? 0 : 1;
+            Application.targetFrameRate = activeTargetFps;
             Application.runInBackground = true;
+
+            if (isLowVramMobileGpu)
+            {
+                QualitySettings.shadows = ShadowQuality.HardOnly;
+                QualitySettings.shadowCascades = 0;
+                QualitySettings.shadowDistance = 26f;
+                QualitySettings.shadowResolution = ShadowResolution.Low;
+                QualitySettings.pixelLightCount = 2;
+                QualitySettings.antiAliasing = 0;
+            }
+
+            Camera mainCam = Camera.main;
+            if (mainCam != null)
+            {
+                mainCam.farClipPlane = 165f;
+                mainCam.allowHDR = false;
+                mainCam.allowMSAA = false;
+            }
+
             EnsureCoreComponents();
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            // Drop rendering rate drastically when window is unfocused/minimized to keep laptop cool
+            Application.targetFrameRate = hasFocus ? activeTargetFps : 15;
         }
 
         private void Start()

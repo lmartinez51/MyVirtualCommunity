@@ -42,6 +42,16 @@ namespace MyVirtualCommunity.Player
         private float rotationVelocity;
         private float verticalVelocity;
         private bool isInsideWingSpot = false;
+        private bool isPlayerSeated = false;
+        private bool isPlayerSeatedOnBench = false;
+        private float proximityCheckTimer = 0f;
+        private GameObject cachedBenchObj;
+        private GameObject cachedPuddleObj;
+        private GameObject cachedSandPileObj;
+        private GameObject cachedBlankWallObj;
+        private GameObject cachedTrashBinObj;
+        private GameObject cachedCatBowlObj;
+        private bool propRefsCached = false;
 
         public event Action<string> OnPromptAvailable;
         public event Action OnPromptCleared;
@@ -242,7 +252,12 @@ namespace MyVirtualCommunity.Player
 
             HandleMovement();
             CheckContinuousThresholdCrossing();
-            CheckInteractionProximity();
+            proximityCheckTimer += Time.deltaTime;
+            if (proximityCheckTimer >= 0.10f)
+            {
+                proximityCheckTimer = 0f;
+                CheckInteractionProximity();
+            }
             HandleInteractionInput();
         }
 
@@ -263,6 +278,11 @@ namespace MyVirtualCommunity.Player
 
             if (direction.magnitude >= 0.1f)
             {
+                if (isPlayerSeated)
+                {
+                    StandUpPlayer();
+                }
+
                 float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
                 if (cameraTransform != null)
                 {
@@ -360,6 +380,7 @@ namespace MyVirtualCommunity.Player
             {
                 float speed = Input.GetKey(KeyCode.LeftShift) ? runSpeed : walkSpeed;
                 prop.ApplyBodyPush(hit.moveDirection, speed);
+                prop.NotifyMovedByPlayer();
             }
         }
 
@@ -444,13 +465,18 @@ namespace MyVirtualCommunity.Player
 
             if (heldProp != null)
             {
+                string useHint = GetHeldUsePrompt(heldProp, out _, out _);
+                string basePrompt = string.IsNullOrEmpty(useHint)
+                    ? heldProp.GetInteractionPrompt()
+                    : $"{heldProp.GetInteractionPrompt()}  |  {useHint}";
+
                 if (currentTargetDoor != null)
                 {
-                    OnPromptAvailable?.Invoke($"{heldProp.GetInteractionPrompt()}  |  (Puerta: {currentTargetDoor.DoorName})");
+                    OnPromptAvailable?.Invoke($"{basePrompt}  |  (Puerta: {currentTargetDoor.DoorName})");
                 }
                 else
                 {
-                    OnPromptAvailable?.Invoke(heldProp.GetInteractionPrompt());
+                    OnPromptAvailable?.Invoke(basePrompt);
                 }
             }
             else if (isInsideWingSpot && distToCounter <= counterInteractionRadius)
@@ -464,6 +490,14 @@ namespace MyVirtualCommunity.Player
             else if (currentTargetProp != null)
             {
                 OnPromptAvailable?.Invoke(currentTargetProp.GetInteractionPrompt());
+            }
+            else if (IsNearBench(out _))
+            {
+                OnPromptAvailable?.Invoke(isPlayerSeated ? "[X] Levantarse de la Banca" : "[X] Sentarse en la Banca");
+            }
+            else if (isPlayerSeated)
+            {
+                OnPromptAvailable?.Invoke("[X] Levantarse");
             }
             else
             {
@@ -484,18 +518,42 @@ namespace MyVirtualCommunity.Player
 
             // [C] key is strictly isolated for Avatar Customization modal and never mutates door state
 
+            // [X] key toggles sitting on a nearby bench or right on the sidewalk/ground
+            if (Input.GetKeyDown(KeyCode.X))
+            {
+                if (isPlayerSeated)
+                {
+                    StandUpPlayer();
+                }
+                else
+                {
+                    SitDownPlayer();
+                }
+                return;
+            }
+
+            // [R] key uses held container/tool (scoop water/sand, pour water, patch pothole, draw with chalk, dispose trash)
+            if (Input.GetKeyDown(KeyCode.R) && heldProp != null)
+            {
+                TryUseHeldProp();
+                return;
+            }
+
             // [F] key kicks a nearby kickable prop (e.g. soccer ball) or throws a currently held prop
             if (Input.GetKeyDown(KeyCode.F))
             {
                 if (heldProp != null && heldProp.CanThrow && !heldProp.CanWheelMove)
                 {
+                    var thrown = heldProp;
                     heldProp.Throw(transform);
                     heldProp = null;
+                    thrown.NotifyMovedByPlayer();
                     return;
                 }
                 else if (heldProp == null && currentTargetProp != null && currentTargetProp.CanKick)
                 {
                     currentTargetProp.Kick(transform);
+                    currentTargetProp.NotifyMovedByPlayer();
                     return;
                 }
             }
@@ -505,8 +563,10 @@ namespace MyVirtualCommunity.Player
                 // If carrying/wheeling an object, [E] drops or parks it cleanly
                 if (heldProp != null)
                 {
+                    var dropped = heldProp;
                     heldProp.Drop(transform);
                     heldProp = null;
+                    dropped.NotifyMovedByPlayer();
                     return;
                 }
 
@@ -544,6 +604,248 @@ namespace MyVirtualCommunity.Player
                         heldProp = currentTargetProp;
                     }
                 }
+            }
+        }
+
+        private void EnsurePropRefsCached()
+        {
+            if (propRefsCached && cachedBenchObj != null) return;
+            cachedBenchObj = GameObject.Find("Probe_Bench");
+            cachedPuddleObj = GameObject.Find("Probe_Puddle");
+            cachedSandPileObj = GameObject.Find("Probe_SandPile");
+            cachedBlankWallObj = GameObject.Find("Probe_BlankWall");
+            cachedTrashBinObj = GameObject.Find("Probe_TrashBin");
+            cachedCatBowlObj = GameObject.Find("Probe_CatBowl");
+            propRefsCached = cachedBenchObj != null;
+        }
+
+        private bool IsNearBench(out GameObject benchObj)
+        {
+            EnsurePropRefsCached();
+            benchObj = cachedBenchObj;
+            if (benchObj == null) return false;
+            return Vector2.Distance(
+                new Vector2(transform.position.x, transform.position.z),
+                new Vector2(benchObj.transform.position.x, benchObj.transform.position.z)) <= 2.0f;
+        }
+
+        private void SitDownPlayer()
+        {
+            isPlayerSeated = true;
+            if (IsNearBench(out GameObject benchObj))
+            {
+                isPlayerSeatedOnBench = true;
+                Vector3 bPos = benchObj.transform.position;
+                bool prevEnabled = characterController != null && characterController.enabled;
+                if (characterController != null) characterController.enabled = false;
+                transform.position = new Vector3(bPos.x + 0.15f, bPos.y + 0.25f, bPos.z - 0.08f);
+                transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+                if (characterController != null) characterController.enabled = prevEnabled;
+                bobbleheadAnimator?.SetSitting(true, onBench: true);
+            }
+            else
+            {
+                isPlayerSeatedOnBench = false;
+                bobbleheadAnimator?.SetSitting(true, onBench: false);
+            }
+        }
+
+        private void StandUpPlayer()
+        {
+            isPlayerSeated = false;
+            bobbleheadAnimator?.SetSitting(false);
+            if (isPlayerSeatedOnBench)
+            {
+                isPlayerSeatedOnBench = false;
+                bool prevEnabled = characterController != null && characterController.enabled;
+                if (characterController != null) characterController.enabled = false;
+                transform.position = new Vector3(transform.position.x, 0.255f, transform.position.z - 0.55f);
+                if (characterController != null) characterController.enabled = prevEnabled;
+            }
+        }
+
+        private string GetHeldUsePrompt(InteractiveWorldProp prop, out string actionMode, out GameObject targetObj)
+        {
+            actionMode = "";
+            targetObj = null;
+            if (prop == null) return "";
+
+            string id = prop.ProbeObjectId;
+            PropContentType content = prop.CurrentContent;
+            bool canWater = id == "probe:bucket" || id == "probe:watering-can" || id == "probe:cup" || id == "probe:cat-bowl";
+            bool canSand = id == "probe:shovel" || id == "probe:bucket";
+
+            EnsurePropRefsCached();
+            GameObject puddle = cachedPuddleObj;
+            bool nearPuddle = puddle != null && Vector2.Distance(new Vector2(transform.position.x, transform.position.z), new Vector2(puddle.transform.position.x, puddle.transform.position.z)) <= 2.6f;
+
+            GameObject sandPile = cachedSandPileObj;
+            bool nearSand = sandPile != null && Vector2.Distance(new Vector2(transform.position.x, transform.position.z), new Vector2(sandPile.transform.position.x, sandPile.transform.position.z)) <= 2.6f;
+
+            if (content == PropContentType.None)
+            {
+                if (canSand && nearSand)
+                {
+                    actionMode = "scoop_sand";
+                    targetObj = sandPile;
+                    return "[R] Recoger tierra y arena";
+                }
+                if (canWater && nearPuddle)
+                {
+                    var sc = WorldSubstanceController.Instance;
+                    if (sc == null || (sc.PotholeWaterLevel > 0.05f && sc.PotholeSandFillLevel < 0.95f))
+                    {
+                        actionMode = "scoop_water";
+                        targetObj = puddle;
+                        return "[R] Recoger agua del bache";
+                    }
+                }
+                if (id == "probe:chalk")
+                {
+                    GameObject wall = cachedBlankWallObj;
+                    if (wall != null && Vector2.Distance(new Vector2(transform.position.x, transform.position.z), new Vector2(wall.transform.position.x, wall.transform.position.z)) <= 2.8f)
+                    {
+                        actionMode = "draw_wall";
+                        targetObj = wall;
+                        return "[R] Dibujar con gis en el muro";
+                    }
+                }
+                if (id == "probe:trash-bag")
+                {
+                    GameObject bin = cachedTrashBinObj;
+                    if (bin != null && Vector2.Distance(new Vector2(transform.position.x, transform.position.z), new Vector2(bin.transform.position.x, bin.transform.position.z)) <= 2.6f)
+                    {
+                        actionMode = "dispose_trash";
+                        targetObj = bin;
+                        return "[R] Meter bolsa en el bote";
+                    }
+                }
+                return "";
+            }
+
+            if (content == PropContentType.Sand)
+            {
+                if (nearPuddle)
+                {
+                    actionMode = "fill_pothole";
+                    targetObj = puddle;
+                    return "[R] Echar tierra en el bache";
+                }
+                actionMode = "dump_sand_ground";
+                return "[R] Vaciar tierra aquí";
+            }
+
+            if (content == PropContentType.Water)
+            {
+                GameObject catBowl = cachedCatBowlObj;
+                if (catBowl != null && id != "probe:cat-bowl" && Vector2.Distance(new Vector2(transform.position.x, transform.position.z), new Vector2(catBowl.transform.position.x, catBowl.transform.position.z)) <= 2.4f)
+                {
+                    actionMode = "pour_cat_bowl";
+                    targetObj = catBowl;
+                    return "[R] Llenar Plato de Agua";
+                }
+                if (nearPuddle)
+                {
+                    actionMode = "pour_puddle";
+                    targetObj = puddle;
+                    return "[R] Vaciar agua al bache";
+                }
+                actionMode = "pour_ground";
+                return "[R] Vaciar agua aquí";
+            }
+
+            return "";
+        }
+
+        private void TryUseHeldProp()
+        {
+            if (heldProp == null) return;
+            string prompt = GetHeldUsePrompt(heldProp, out string actionMode, out GameObject targetObj);
+            if (string.IsNullOrEmpty(actionMode)) return;
+
+            bobbleheadAnimator?.TriggerActionDip();
+            var sc = WorldSubstanceController.Instance;
+            var client = WorldCoreClient.Instance;
+
+            switch (actionMode)
+            {
+                case "scoop_sand":
+                    heldProp.SetContents(PropContentType.Sand);
+                    if (client != null && client.IsConnected)
+                        client.StartCoroutine(client.SyncWorldPropState(heldProp.ProbeObjectId, heldProp.transform.position, contents: "sand"));
+                    break;
+
+                case "scoop_water":
+                    heldProp.SetContents(PropContentType.Water);
+                    sc?.ScoopWaterFromPothole(0.25f);
+                    if (client != null && client.IsConnected)
+                    {
+                        client.StartCoroutine(client.SyncWorldPropState(heldProp.ProbeObjectId, heldProp.transform.position, contents: "water", waterLevel: 1.0f));
+                        if (sc != null && targetObj != null)
+                            client.StartCoroutine(client.SyncWorldPropState("probe:puddle", targetObj.transform.position, waterLevel: sc.PotholeWaterLevel, sandFillLevel: sc.PotholeSandFillLevel));
+                    }
+                    break;
+
+                case "fill_pothole":
+                    heldProp.SetContents(PropContentType.None);
+                    sc?.AddSandToPothole(0.34f);
+                    if (client != null && client.IsConnected)
+                    {
+                        client.StartCoroutine(client.SyncWorldPropState(heldProp.ProbeObjectId, heldProp.transform.position, contents: "empty"));
+                        if (sc != null && targetObj != null)
+                            client.StartCoroutine(client.SyncWorldPropState("probe:puddle", targetObj.transform.position, waterLevel: sc.PotholeWaterLevel, sandFillLevel: sc.PotholeSandFillLevel));
+                    }
+                    break;
+
+                case "dump_sand_ground":
+                    heldProp.SetContents(PropContentType.None);
+                    sc?.SpawnSandMound(transform.position + transform.forward * 0.9f);
+                    if (client != null && client.IsConnected)
+                        client.StartCoroutine(client.SyncWorldPropState(heldProp.ProbeObjectId, heldProp.transform.position, contents: "empty"));
+                    break;
+
+                case "pour_cat_bowl":
+                    heldProp.SetContents(PropContentType.None);
+                    targetObj?.GetComponent<InteractiveWorldProp>()?.SetContents(PropContentType.Water);
+                    if (client != null && client.IsConnected)
+                    {
+                        client.StartCoroutine(client.SyncWorldPropState(heldProp.ProbeObjectId, heldProp.transform.position, contents: "empty", waterLevel: 0f));
+                        if (targetObj != null)
+                            client.StartCoroutine(client.SyncWorldPropState("probe:cat-bowl", targetObj.transform.position, contents: "water", waterLevel: 1.0f));
+                    }
+                    break;
+
+                case "pour_puddle":
+                    heldProp.SetContents(PropContentType.None);
+                    sc?.AddWaterToPothole(0.25f);
+                    if (client != null && client.IsConnected)
+                    {
+                        client.StartCoroutine(client.SyncWorldPropState(heldProp.ProbeObjectId, heldProp.transform.position, contents: "empty", waterLevel: 0f));
+                        if (sc != null && targetObj != null)
+                            client.StartCoroutine(client.SyncWorldPropState("probe:puddle", targetObj.transform.position, waterLevel: sc.PotholeWaterLevel, sandFillLevel: sc.PotholeSandFillLevel));
+                    }
+                    break;
+
+                case "pour_ground":
+                    heldProp.SetContents(PropContentType.None);
+                    sc?.SpawnWaterSplash(transform.position + transform.forward * 0.85f);
+                    if (client != null && client.IsConnected)
+                        client.StartCoroutine(client.SyncWorldPropState(heldProp.ProbeObjectId, heldProp.transform.position, contents: "empty", waterLevel: 0f));
+                    break;
+
+                case "draw_wall":
+                    sc?.AddChalkDrawing();
+                    if (client != null && client.IsConnected && sc != null && targetObj != null)
+                        client.StartCoroutine(client.SyncWorldPropState("probe:blank-wall", targetObj.transform.position, chalkMarks: sc.BlankWallChalkMarks));
+                    break;
+
+                case "dispose_trash":
+                    GameObject bagGo = heldProp.gameObject;
+                    heldProp = null;
+                    sc?.DisposeTrashBagInBin(bagGo, targetObj);
+                    if (client != null && client.IsConnected && targetObj != null)
+                        client.StartCoroutine(client.SyncWorldPropState("probe:trash-bag", targetObj.transform.position));
+                    break;
             }
         }
 
@@ -749,6 +1051,7 @@ namespace MyVirtualCommunity.Player
 
         public bool IsInsideWingSpot { get => isInsideWingSpot; set => isInsideWingSpot = value; }
         public void SetInsideWingSpot(bool inside) => isInsideWingSpot = inside;
+        public InteractiveWorldProp HeldProp => heldProp;
         public PlayerSpawnConfig SpawnConfig => spawnConfig;
         public Vector3 EntranceInteriorPosition => entranceInteriorPosition;
         public Vector3 EntranceExteriorPosition => entranceExteriorPosition;

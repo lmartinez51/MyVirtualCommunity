@@ -95,6 +95,48 @@ namespace MyVirtualCommunity.Environment
             CreateOverheadPowerGrid();
             CreateCamilaProbeObjects();
             SetupLighting();
+            OptimizeStaticEnvironmentAndLights();
+        }
+
+        /// <summary>
+        /// Thermal & GPU optimization pass:
+        /// 1. Static-batches all non-interactive architectural meshes per district group,
+        ///    collapsing ~2,500+ individual primitive draw calls into ~40 batched draw calls.
+        /// 2. Disables real-time shadows on all local Point/Spot lights and attaches
+        ///    DistanceLightCuller so at most 4 nearby lights are active at any time.
+        /// </summary>
+        private void OptimizeStaticEnvironmentAndLights()
+        {
+            // 1. Static-batch every architectural root except dynamic props
+            var batchList = new System.Collections.Generic.List<GameObject>(256);
+            for (int c = 0; c < transform.childCount; c++)
+            {
+                Transform group = transform.GetChild(c);
+                if (group == null || group.name == "Camila_ProbeObjects") continue;
+
+                batchList.Clear();
+                var renderers = group.GetComponentsInChildren<MeshRenderer>(false);
+                for (int r = 0; r < renderers.Length; r++)
+                {
+                    var mr = renderers[r];
+                    if (mr == null) continue;
+                    // Never static-batch moving doors, dynamic status signs, or movable props
+                    if (mr.GetComponentInParent<InteractiveDoor>() != null) continue;
+                    if (mr.GetComponentInParent<InteractiveWorldProp>() != null) continue;
+                    if (mr.GetComponentInParent<BusinessStatusSign>() != null) continue;
+                    if (mr.GetComponent<TextMesh>() != null) continue;
+                    batchList.Add(mr.gameObject);
+                }
+
+                if (batchList.Count >= 4)
+                {
+                    StaticBatchingUtility.Combine(batchList.ToArray(), group.gameObject);
+                }
+            }
+
+            // 2. Enforce zero shadows on all local Point/Spot lights & register with DistanceLightCuller
+            var culler = GetComponent<DistanceLightCuller>() ?? gameObject.AddComponent<DistanceLightCuller>();
+            culler.CollectSceneLights(transform);
         }
 
         /// <summary>
@@ -106,14 +148,17 @@ namespace MyVirtualCommunity.Environment
         /// </summary>
         private void CreateCamilaProbeObjects()
         {
+            var substanceCtrl = GetComponent<WorldSubstanceController>() ?? gameObject.AddComponent<WorldSubstanceController>();
+
             GameObject root = new GameObject("Camila_ProbeObjects");
             root.transform.SetParent(transform, false);
 
-            // Cluster: fútbol — tangible kickable & carriable soccer ball (Dollar 2 Go parking, asphalt top Y = 0.12m)
+            // Cluster: fútbol — placed in the open, construction-free east expanse of the Dollar 2 Go lot
+            // (X: 65..71, Z: 11.5..18.0, asphalt top Y = 0.12m — clear of buildings, parked cars, trees, and rear fence)
             // Ball diameter = 0.45m (radius = 0.225m) -> center Y = 0.12 + 0.225 = 0.345m (flush on asphalt)
             GameObject ballRoot = new GameObject("Probe_Ball");
             ballRoot.transform.SetParent(root.transform, false);
-            ballRoot.transform.localPosition = new Vector3(45f, 0.345f, 14f);
+            ballRoot.transform.localPosition = new Vector3(68f, 0.345f, 11.5f);
             CreateSphere(ballRoot.transform, "Ball_Body", Vector3.zero, new Vector3(0.45f, 0.45f, 0.45f), new Color(0.96f, 0.96f, 0.96f), false, 0.45f);
             CreateSphere(ballRoot.transform, "Ball_Panel_Top", new Vector3(0f, 0.17f, 0f), new Vector3(0.18f, 0.12f, 0.18f), new Color(0.12f, 0.12f, 0.14f), false, 0.3f);
             CreateSphere(ballRoot.transform, "Ball_Panel_Front", new Vector3(0f, 0.02f, 0.17f), new Vector3(0.18f, 0.18f, 0.11f), new Color(0.12f, 0.12f, 0.14f), false, 0.3f);
@@ -126,32 +171,88 @@ namespace MyVirtualCommunity.Environment
             ballProp.Configure("Pelota", carry: true, wheelMove: false, kick: true, throwable: true,
                 mass: 0.45f, drag: 0.35f, angularDrag: 0.5f,
                 holdOffset: new Vector3(0.28f, 0.96f, 0.58f), groundOffset: 0.225f, bounciness: 0.65f, range: 2.2f, pushPower: 4.2f);
+            ballProp.ConfigureHoldPose(Character.HoldPoseStyle.TwoHandsFront, new Vector3(0f, 0.03f, 0.13f));
+            ballProp.SetProbeObjectId("probe:ball");
 
-            // Solid soccer goal posts so the ball physically collides with the frame
-            CreateBox(root.transform, "Probe_SmallGoal_PostWest", new Vector3(43.5f, 0.55f, 32f), new Vector3(0.12f, 1.3f, 0.12f), Color.white, true);
-            CreateBox(root.transform, "Probe_SmallGoal_PostEast", new Vector3(46.5f, 0.55f, 32f), new Vector3(0.12f, 1.3f, 0.12f), Color.white, true);
-            CreateBox(root.transform, "Probe_SmallGoal_Crossbar", new Vector3(45f, 1.2f, 32f), new Vector3(3.1f, 0.12f, 0.12f), Color.white, true);
+            // Solid grounded mini soccer goal facing south toward the ball (asphalt top Y = 0.12m, height = 1.35m, depth = 0.90m)
+            float goalX = 68.0f;
+            float goalZ = 18.0f;
+            float goalBaseY = 0.12f;
+            Color goalPostColor = new Color(0.95f, 0.96f, 0.97f);
+            Color goalNetColor = new Color(0.86f, 0.88f, 0.90f);
+            CreateBox(root.transform, "Probe_SmallGoal_PostWest", new Vector3(goalX - 1.50f, goalBaseY + 0.675f, goalZ), new Vector3(0.10f, 1.35f, 0.10f), goalPostColor, true);
+            CreateBox(root.transform, "Probe_SmallGoal_PostEast", new Vector3(goalX + 1.50f, goalBaseY + 0.675f, goalZ), new Vector3(0.10f, 1.35f, 0.10f), goalPostColor, true);
+            CreateBox(root.transform, "Probe_SmallGoal_Crossbar", new Vector3(goalX, goalBaseY + 1.35f, goalZ), new Vector3(3.10f, 0.10f, 0.10f), goalPostColor, true);
+            // Rear base frame & depth stanchions so the goal reads unmistakably as a soccer goal and catches kicked balls
+            CreateBox(root.transform, "Probe_SmallGoal_BaseWest", new Vector3(goalX - 1.50f, goalBaseY + 0.04f, goalZ + 0.45f), new Vector3(0.08f, 0.08f, 0.90f), goalPostColor, true);
+            CreateBox(root.transform, "Probe_SmallGoal_BaseEast", new Vector3(goalX + 1.50f, goalBaseY + 0.04f, goalZ + 0.45f), new Vector3(0.08f, 0.08f, 0.90f), goalPostColor, true);
+            CreateBox(root.transform, "Probe_SmallGoal_BaseRear", new Vector3(goalX, goalBaseY + 0.04f, goalZ + 0.90f), new Vector3(3.08f, 0.08f, 0.08f), goalPostColor, true);
+            CreateBox(root.transform, "Probe_SmallGoal_TopRear", new Vector3(goalX, goalBaseY + 1.32f, goalZ + 0.55f), new Vector3(3.04f, 0.06f, 0.06f), goalPostColor, false);
+            CreateBox(root.transform, "Probe_SmallGoal_TopStrutW", new Vector3(goalX - 1.50f, goalBaseY + 1.32f, goalZ + 0.28f), new Vector3(0.06f, 0.06f, 0.56f), goalPostColor, false);
+            CreateBox(root.transform, "Probe_SmallGoal_TopStrutE", new Vector3(goalX + 1.50f, goalBaseY + 1.32f, goalZ + 0.28f), new Vector3(0.06f, 0.06f, 0.56f), goalPostColor, false);
+            GameObject strutW = CreateBox(root.transform, "Probe_SmallGoal_BackStrutW", new Vector3(goalX - 1.50f, goalBaseY + 0.68f, goalZ + 0.72f), new Vector3(0.06f, 1.35f, 0.06f), goalPostColor, true);
+            strutW.transform.localRotation = Quaternion.Euler(15f, 0f, 0f);
+            GameObject strutE = CreateBox(root.transform, "Probe_SmallGoal_BackStrutE", new Vector3(goalX + 1.50f, goalBaseY + 0.68f, goalZ + 0.72f), new Vector3(0.06f, 1.35f, 0.06f), goalPostColor, true);
+            strutE.transform.localRotation = Quaternion.Euler(15f, 0f, 0f);
+            // Subtle white net grid (back + sides) with rear ball-stop collider
+            for (int ni = 1; ni <= 5; ni++)
+            {
+                float ny = goalBaseY + ni * 0.22f;
+                float nz = Mathf.Lerp(goalZ + 0.88f, goalZ + 0.58f, ni / 6f);
+                CreateBox(root.transform, $"Probe_SmallGoal_NetH_{ni}", new Vector3(goalX, ny, nz), new Vector3(2.96f, 0.015f, 0.015f), goalNetColor, false);
+            }
+            for (float nx = -1.20f; nx <= 1.21f; nx += 0.30f)
+            {
+                GameObject netV = CreateBox(root.transform, $"Probe_SmallGoal_NetV_{nx:F1}", new Vector3(goalX + nx, goalBaseY + 0.68f, goalZ + 0.72f), new Vector3(0.015f, 1.30f, 0.015f), goalNetColor, false);
+                netV.transform.localRotation = Quaternion.Euler(15f, 0f, 0f);
+            }
+            // Invisible back net ball-catcher collider so kicked balls stay inside the goal
+            GameObject netStopper = new GameObject("Probe_SmallGoal_NetBackCollider");
+            netStopper.transform.SetParent(root.transform, false);
+            netStopper.transform.localPosition = new Vector3(goalX, goalBaseY + 0.68f, goalZ + 0.86f);
+            var netBox = netStopper.AddComponent<BoxCollider>();
+            netBox.size = new Vector3(3.0f, 1.32f, 0.08f);
 
-            // Tangible movable traffic cones grounded on rear asphalt edge (Y = 0.12m, total height 0.56m)
-            GameObject coneWest = CreateCylinder(root.transform, "Probe_ConeWest", new Vector3(42f, 0.40f, 27.6f), new Vector3(0.32f, 0.28f, 0.32f), new Color(0.95f, 0.45f, 0.10f), true);
-            coneWest.AddComponent<InteractiveWorldProp>().Configure("Cono Naranja", true, false, false, true, 1.1f, 1.2f, 1.8f, new Vector3(0.30f, 0.88f, 0.62f), 0.28f, 0.05f, 2.2f, 2.2f, freezeTilt: true);
-            GameObject coneEast = CreateCylinder(root.transform, "Probe_ConeEast", new Vector3(48f, 0.40f, 27.6f), new Vector3(0.32f, 0.28f, 0.32f), new Color(0.95f, 0.45f, 0.10f), true);
-            coneEast.AddComponent<InteractiveWorldProp>().Configure("Cono Naranja", true, false, false, true, 1.1f, 1.2f, 1.8f, new Vector3(0.30f, 0.88f, 0.62f), 0.28f, 0.05f, 2.2f, 2.2f, freezeTilt: true);
+            // Tangible movable traffic cones grounded on open east lot asphalt (Y = 0.12m, total height 0.56m)
+            GameObject coneWest = CreateCylinder(root.transform, "Probe_ConeWest", new Vector3(65f, 0.40f, 14.5f), new Vector3(0.32f, 0.28f, 0.32f), new Color(0.95f, 0.45f, 0.10f), true);
+            var coneWestProp = coneWest.AddComponent<InteractiveWorldProp>();
+            coneWestProp.Configure("Cono Naranja", true, false, false, true, 1.1f, 1.2f, 1.8f, new Vector3(0.30f, 0.88f, 0.62f), 0.28f, 0.05f, 2.2f, 2.2f, freezeTilt: true);
+            coneWestProp.ConfigureHoldPose(Character.HoldPoseStyle.TwoHandsFront, new Vector3(0f, 0.05f, 0.10f));
+            coneWestProp.SetProbeObjectId("probe:cone-west");
 
-            // Cluster: basura — tangible trash bag, US-style wheeled trash bin (Arboleda sidewalk), broom
-            GameObject trashBag = CreateSphere(root.transform, "Probe_TrashBag", new Vector3(-4f, 0.40f, 3.5f), new Vector3(0.46f, 0.32f, 0.46f), new Color(0.12f, 0.12f, 0.14f), true, 0.45f);
-            trashBag.AddComponent<InteractiveWorldProp>().Configure("Bolsa de Basura", true, false, false, true, 2.2f, 2.5f, 3.0f, new Vector3(0.28f, 0.78f, 0.60f), 0.16f, 0.02f, 2.2f, 1.6f, freezeTilt: true);
+            GameObject coneEast = CreateCylinder(root.transform, "Probe_ConeEast", new Vector3(71f, 0.40f, 14.5f), new Vector3(0.32f, 0.28f, 0.32f), new Color(0.95f, 0.45f, 0.10f), true);
+            var coneEastProp = coneEast.AddComponent<InteractiveWorldProp>();
+            coneEastProp.Configure("Cono Naranja", true, false, false, true, 1.1f, 1.2f, 1.8f, new Vector3(0.30f, 0.88f, 0.62f), 0.28f, 0.05f, 2.2f, 2.2f, freezeTilt: true);
+            coneEastProp.ConfigureHoldPose(Character.HoldPoseStyle.TwoHandsFront, new Vector3(0f, 0.05f, 0.10f));
+            coneEastProp.SetProbeObjectId("probe:cone-east");
+
+            // Cluster: basura — realistic tied black garbage bag grounded flush (Y = 0.24m) on the East corner sidewalk
+            // of Calle Del Porvenir & Blvd. Manuel Gómez Morín right next to the corner utility pole (19.3, 0.24, 1.4)
+            GameObject trashBag = CreateDetailedTiedTrashBag(root.transform, "Probe_TrashBag", new Vector3(19.78f, 0.24f, 1.25f));
+            var bagCol = trashBag.AddComponent<BoxCollider>();
+            bagCol.center = new Vector3(0f, 0.25f, 0f);
+            bagCol.size = new Vector3(0.46f, 0.50f, 0.46f);
+            var trashBagProp = trashBag.AddComponent<InteractiveWorldProp>();
+            trashBagProp.Configure("Bolsa de Basura", true, false, false, true, 2.2f, 2.5f, 3.0f, new Vector3(0.28f, 0.78f, 0.60f), 0.0f, 0.02f, 2.2f, 1.6f, freezeTilt: true);
+            trashBagProp.ConfigureHoldPose(Character.HoldPoseStyle.OneHandCarryDown, new Vector3(0.02f, -0.38f, 0.02f));
+            trashBagProp.SetProbeObjectId("probe:trash-bag");
 
             GameObject trashBin = CreateUsWheeledTrashBin(root.transform, "Probe_TrashBin", new Vector3(107.55f, 0.24f, 30f), new Color(0.30f, 0.32f, 0.35f), new Color(0.20f, 0.22f, 0.25f));
             var binCol = trashBin.AddComponent<BoxCollider>();
             binCol.center = new Vector3(0f, 0.51f, 0f);
             binCol.size = new Vector3(0.62f, 1.02f, 0.66f);
-            trashBin.AddComponent<InteractiveWorldProp>().Configure("Bote de Basura", carry: false, wheelMove: true, kick: false, throwable: false,
+            var trashBinProp = trashBin.AddComponent<InteractiveWorldProp>();
+            trashBinProp.Configure("Bote de Basura", carry: false, wheelMove: true, kick: false, throwable: false,
                 mass: 12.0f, drag: 3.0f, angularDrag: 4.0f,
-                holdOffset: new Vector3(0f, 0f, 1.05f), groundOffset: 0.0f, bounciness: 0.0f, range: 2.4f, pushPower: 2.0f, freezeTilt: true);
+                holdOffset: new Vector3(0f, 0f, 0.74f), groundOffset: 0.0f, bounciness: 0.0f, range: 2.4f, pushPower: 2.0f, freezeTilt: true);
+            trashBinProp.ConfigureHoldPose(Character.HoldPoseStyle.TwoHandsPushWheel, Vector3.zero);
+            trashBinProp.SetProbeObjectId("probe:trash-bin");
 
             GameObject broom = CreateBox(root.transform, "Probe_Broom", new Vector3(-18f, 0.79f, 6f), new Vector3(0.06f, 1.1f, 0.06f), new Color(0.55f, 0.40f, 0.20f), true);
-            broom.AddComponent<InteractiveWorldProp>().Configure("Escoba", true, false, false, true, 0.8f, 1.5f, 2.0f, new Vector3(0.34f, 0.90f, 0.52f), 0.55f, 0.05f, 2.2f, 1.8f);
+            var broomProp = broom.AddComponent<InteractiveWorldProp>();
+            broomProp.Configure("Escoba", true, false, false, true, 0.8f, 1.5f, 2.0f, new Vector3(0.34f, 0.90f, 0.52f), 0.55f, 0.05f, 2.2f, 1.8f);
+            broomProp.ConfigureHoldPose(Character.HoldPoseStyle.OneHandFront, new Vector3(0f, 0.08f, 0.03f), new Vector3(10f, 0f, -6f));
+            broomProp.SetProbeObjectId("probe:broom");
 
             // Cluster: agua — true 9.5cm recessed 3D street pothole with pooled rainwater in Calle Del Porvenir (X=13.5, Z=25)
             CreateRecessedStreetPothole(root.transform, "Probe_Puddle", new Vector3(13.5f, 0f, 25f));
@@ -161,13 +262,19 @@ namespace MyVirtualCommunity.Environment
             var bucketCol = bucket.AddComponent<BoxCollider>();
             bucketCol.center = new Vector3(0f, 0.18f, 0f);
             bucketCol.size = new Vector3(0.36f, 0.36f, 0.36f);
-            bucket.AddComponent<InteractiveWorldProp>().Configure("Cubeta", true, false, false, true, 1.4f, 2.0f, 2.5f, new Vector3(0.32f, 0.82f, 0.58f), 0.0f, 0.05f, 2.2f, 2.0f, freezeTilt: true);
+            var bucketProp = bucket.AddComponent<InteractiveWorldProp>();
+            bucketProp.Configure("Cubeta", true, false, false, true, 1.4f, 2.0f, 2.5f, new Vector3(0.32f, 0.82f, 0.58f), 0.0f, 0.05f, 2.2f, 2.0f, freezeTilt: true);
+            bucketProp.ConfigureHoldPose(Character.HoldPoseStyle.OneHandCarryDown, new Vector3(0.03f, -0.45f, 0.02f));
+            bucketProp.SetProbeObjectId("probe:bucket");
 
             GameObject wateringCan = CreateDetailedWateringCan(root.transform, "Probe_WateringCan", new Vector3(7.20f, 0.24f, 33.75f));
             var canCol = wateringCan.AddComponent<BoxCollider>();
             canCol.center = new Vector3(0.06f, 0.16f, 0f);
             canCol.size = new Vector3(0.46f, 0.32f, 0.28f);
-            wateringCan.AddComponent<InteractiveWorldProp>().Configure("Regadera", true, false, false, true, 1.5f, 2.0f, 2.5f, new Vector3(0.34f, 0.84f, 0.60f), 0.0f, 0.05f, 2.2f, 2.0f, freezeTilt: true);
+            var canProp = wateringCan.AddComponent<InteractiveWorldProp>();
+            canProp.Configure("Regadera", true, false, false, true, 1.5f, 2.0f, 2.5f, new Vector3(0.34f, 0.84f, 0.60f), 0.0f, 0.05f, 2.2f, 2.0f, freezeTilt: true);
+            canProp.ConfigureHoldPose(Character.HoldPoseStyle.OneHandCarryDown, new Vector3(0.03f, -0.30f, 0.06f), new Vector3(0f, -90f, 0f));
+            canProp.SetProbeObjectId("probe:watering-can");
 
             // Cluster: descanso — solid fixed-to-ground tubular steel & mesh sidewalk bench (sidewalk top Y = 0.24m)
             // Seat top rests at world Y = 0.685m; placed at Z = 2.15m to leave a wide walkway behind it
@@ -175,22 +282,176 @@ namespace MyVirtualCommunity.Environment
 
             // Tangible, carriable resting items grounded flush on top of the bench seat (seat top = 0.685m)
             GameObject book = CreateBox(root.transform, "Probe_Book", new Vector3(60.0f, 0.710f, 2.15f), new Vector3(0.28f, 0.045f, 0.21f), new Color(0.95f, 0.90f, 0.75f), true, 0.15f);
-            book.AddComponent<InteractiveWorldProp>().Configure("Libro", true, false, false, true, 0.4f, 2.0f, 2.5f, new Vector3(0.26f, 0.95f, 0.52f), 0.025f, 0.02f, 2.2f, 1.2f);
+            var bookProp = book.AddComponent<InteractiveWorldProp>();
+            bookProp.Configure("Libro", true, false, false, true, 0.4f, 2.0f, 2.5f, new Vector3(0.26f, 0.95f, 0.52f), 0.025f, 0.02f, 2.2f, 1.2f);
+            bookProp.ConfigureHoldPose(Character.HoldPoseStyle.OneHandFront, new Vector3(0f, 0.02f, 0.06f), new Vector3(16f, -12f, 0f));
+            bookProp.SetProbeObjectId("probe:book");
 
             GameObject cup = CreateCylinder(root.transform, "Probe_Cup", new Vector3(60.48f, 0.750f, 2.15f), new Vector3(0.09f, 0.062f, 0.09f), Color.white, true, 0.55f);
-            cup.AddComponent<InteractiveWorldProp>().Configure("Taza", true, false, false, true, 0.3f, 2.0f, 2.5f, new Vector3(0.26f, 0.96f, 0.50f), 0.062f, 0.05f, 2.2f, 1.2f, freezeTilt: true);
+            var cupProp = cup.AddComponent<InteractiveWorldProp>();
+            cupProp.Configure("Taza", true, false, false, true, 0.3f, 2.0f, 2.5f, new Vector3(0.26f, 0.96f, 0.50f), 0.062f, 0.05f, 2.2f, 1.2f, freezeTilt: true);
+            cupProp.ConfigureHoldPose(Character.HoldPoseStyle.OneHandDrink, new Vector3(0f, 0.025f, 0.040f));
+            cupProp.SetProbeObjectId("probe:cup");
 
             GameObject umbrella = CreateFoldedUmbrellaOnBench(root.transform, "Probe_Umbrella", new Vector3(59.46f, 0.720f, 2.17f));
             var umbCol = umbrella.AddComponent<BoxCollider>();
             umbCol.center = new Vector3(0.03f, 0f, 0f);
             umbCol.size = new Vector3(0.84f, 0.08f, 0.10f);
-            umbrella.AddComponent<InteractiveWorldProp>().Configure("Paraguas", true, false, false, true, 0.6f, 1.8f, 2.2f, new Vector3(0.32f, 0.92f, 0.56f), 0.045f, 0.05f, 2.2f, 1.6f);
+            var umbProp = umbrella.AddComponent<InteractiveWorldProp>();
+            umbProp.Configure("Paraguas", true, false, false, true, 0.6f, 1.8f, 2.2f, new Vector3(0.32f, 0.92f, 0.56f), 0.045f, 0.05f, 2.2f, 1.6f);
+            umbProp.ConfigureHoldPose(Character.HoldPoseStyle.OneHandCarryDown, new Vector3(0.02f, -0.02f, 0.04f), new Vector3(18f, 90f, 0f));
+            umbProp.SetProbeObjectId("probe:umbrella");
 
             // Cluster: arte — carriable chalk flush on Wing Spot sidewalk (Y = 0.24m) + blank wall
             GameObject chalk = CreateBox(root.transform, "Probe_Chalk", new Vector3(-8f, 0.265f, 2.4f), new Vector3(0.25f, 0.05f, 0.08f), new Color(0.95f, 0.30f, 0.55f), true);
-            chalk.AddComponent<InteractiveWorldProp>().Configure("Gis de Colores", true, false, false, true, 0.25f, 2.5f, 3.0f, new Vector3(0.24f, 0.94f, 0.48f), 0.025f, 0.02f, 2.2f, 1.0f);
+            var chalkProp = chalk.AddComponent<InteractiveWorldProp>();
+            chalkProp.Configure("Gis de Colores", true, false, false, true, 0.25f, 2.5f, 3.0f, new Vector3(0.24f, 0.94f, 0.48f), 0.025f, 0.02f, 2.2f, 1.0f);
+            chalkProp.ConfigureHoldPose(Character.HoldPoseStyle.OneHandFront, new Vector3(0f, -0.01f, 0.03f), new Vector3(0f, 80f, 14f));
+            chalkProp.SetProbeObjectId("probe:chalk");
 
-            CreateBox(root.transform, "Probe_BlankWall", new Vector3(-2.5f, 1.24f, 8f), new Vector3(0.15f, 2.0f, 3.0f), new Color(0.92f, 0.90f, 0.85f), false);
+            GameObject blankWall = CreateBox(root.transform, "Probe_BlankWall", new Vector3(-2.5f, 1.24f, 8f), new Vector3(0.15f, 2.0f, 3.0f), new Color(0.92f, 0.90f, 0.85f), false);
+            substanceCtrl.RegisterBlankWall(blankWall.transform);
+
+            // East corridor neutral props: Acabados HRC ceramic tile sample & CatZoo turquoise water bowl
+            GameObject tileSample = CreateBox(root.transform, "Probe_TileSample", new Vector3(82.8f, 0.265f, 3.15f), new Vector3(0.32f, 0.045f, 0.32f), new Color(0.84f, 0.78f, 0.70f), true, 0.65f);
+            CreateBox(tileSample.transform, "Tile_Inlay_Accent", new Vector3(0f, 0.025f, 0f), new Vector3(0.22f, 0.008f, 0.22f), new Color(0.26f, 0.42f, 0.48f), false, 0.75f);
+            var tileProp = tileSample.AddComponent<InteractiveWorldProp>();
+            tileProp.Configure("Muestra de Loseta", true, false, false, true, 1.2f, 2.0f, 2.5f, new Vector3(0.28f, 0.90f, 0.54f), 0.025f, 0.02f, 2.2f, 1.4f, freezeTilt: true);
+            tileProp.ConfigureHoldPose(Character.HoldPoseStyle.OneHandFront, new Vector3(0f, 0.01f, 0.07f), new Vector3(18f, 0f, 0f));
+            tileProp.SetProbeObjectId("probe:tile-sample");
+
+            GameObject catBowl = new GameObject("Probe_CatBowl");
+            catBowl.transform.SetParent(root.transform, false);
+            catBowl.transform.localPosition = new Vector3(74.6f, 0.24f, 25.0f);
+            CreateCylinder(catBowl.transform, "Bowl_Outer", new Vector3(0f, 0.055f, 0f), new Vector3(0.28f, 0.055f, 0.28f), new Color(0.14f, 0.68f, 0.68f), false, 0.60f);
+            GameObject bowlWater = CreateCylinder(catBowl.transform, "Bowl_Water", new Vector3(0f, 0.088f, 0f), new Vector3(0.22f, 0.012f, 0.22f), new Color(0.32f, 0.72f, 0.92f), false, 0.92f);
+            bowlWater.SetActive(false); // Starts dry/empty so pouring water into the bowl visibly fills it
+            var bowlCol = catBowl.AddComponent<BoxCollider>();
+            bowlCol.center = new Vector3(0f, 0.055f, 0f);
+            bowlCol.size = new Vector3(0.28f, 0.11f, 0.28f);
+            var bowlProp = catBowl.AddComponent<InteractiveWorldProp>();
+            bowlProp.Configure("Plato de Agua", true, false, false, true, 0.5f, 2.2f, 2.5f, new Vector3(0.28f, 0.88f, 0.54f), 0.0f, 0.02f, 2.2f, 1.4f, freezeTilt: true);
+            bowlProp.ConfigureHoldPose(Character.HoldPoseStyle.TwoHandsFront, new Vector3(0f, -0.04f, 0.06f));
+            bowlProp.SetProbeObjectId("probe:cat-bowl");
+
+            // Cluster: terreno — loose earth/sand mound & metal shovel in the open west lot of Dollar 2 Go
+            // (X = 27.5..29.0, Z = 11.0..11.2, asphalt top Y = 0.12m — clear of trees, cars, and building)
+            CreateSandEarthMound(root.transform, "Probe_SandPile", new Vector3(27.5f, 0.12f, 11.2f));
+
+            GameObject shovel = CreateDetailedShovel(root.transform, "Probe_Shovel", new Vector3(29.0f, 0.12f, 11.0f));
+            var shovelCol = shovel.AddComponent<BoxCollider>();
+            shovelCol.center = new Vector3(0f, 0.55f, 0f);
+            shovelCol.size = new Vector3(0.26f, 1.12f, 0.16f);
+            var shovelProp = shovel.AddComponent<InteractiveWorldProp>();
+            shovelProp.Configure("Pala", true, false, false, true, 1.3f, 1.8f, 2.2f, new Vector3(0.32f, 0.88f, 0.54f), 0.0f, 0.02f, 2.2f, 1.6f, freezeTilt: true);
+            shovelProp.ConfigureHoldPose(Character.HoldPoseStyle.OneHandFront, new Vector3(0.02f, -0.45f, 0.06f), new Vector3(18f, 0f, -6f));
+            shovelProp.SetProbeObjectId("probe:shovel");
+        }
+
+        /// <summary>
+        /// Builds a realistic loose earth & sand mound resting flush on asphalt (local Y = 0.0m).
+        /// </summary>
+        private GameObject CreateSandEarthMound(Transform parent, string name, Vector3 basePosition)
+        {
+            GameObject mound = new GameObject(name);
+            mound.transform.SetParent(parent, false);
+            mound.transform.localPosition = basePosition;
+
+            Color sandWarm = new Color(0.76f, 0.63f, 0.43f);
+            Color earthDark = new Color(0.58f, 0.46f, 0.30f);
+            Color pebbleGrey = new Color(0.45f, 0.42f, 0.38f);
+
+            // Wide slumped base apron flush on asphalt
+            CreateCylinder(mound.transform, "Sand_Base_Apron", new Vector3(0f, 0.05f, 0f), new Vector3(1.95f, 0.05f, 1.75f), earthDark, false, 0.08f);
+            // Layered organic domes forming a natural dumped sand/soil pile (~0.58m tall)
+            CreateSphere(mound.transform, "Sand_Main_Dome", new Vector3(0f, 0.16f, 0f), new Vector3(1.65f, 0.72f, 1.50f), sandWarm, false, 0.10f);
+            CreateSphere(mound.transform, "Sand_Lobe_West", new Vector3(-0.38f, 0.12f, 0.18f), new Vector3(1.05f, 0.48f, 0.96f), earthDark, false, 0.08f);
+            CreateSphere(mound.transform, "Sand_Lobe_East", new Vector3(0.40f, 0.11f, -0.15f), new Vector3(1.00f, 0.44f, 0.92f), sandWarm, false, 0.10f);
+            CreateSphere(mound.transform, "Sand_Peak", new Vector3(0.04f, 0.34f, 0.02f), new Vector3(0.92f, 0.44f, 0.84f), sandWarm, false, 0.10f);
+
+            // Scattered gravel clods around the rim
+            CreateSphere(mound.transform, "Sand_Clod_1", new Vector3(-0.78f, 0.04f, -0.35f), new Vector3(0.18f, 0.08f, 0.16f), pebbleGrey, false, 0.12f);
+            CreateSphere(mound.transform, "Sand_Clod_2", new Vector3(0.82f, 0.04f, 0.32f), new Vector3(0.16f, 0.07f, 0.15f), earthDark, false, 0.12f);
+            CreateSphere(mound.transform, "Sand_Clod_3", new Vector3(0.25f, 0.04f, 0.76f), new Vector3(0.20f, 0.08f, 0.16f), pebbleGrey, false, 0.12f);
+
+            var col = mound.AddComponent<BoxCollider>();
+            col.center = new Vector3(0f, 0.22f, 0f);
+            col.size = new Vector3(1.60f, 0.44f, 1.45f);
+            return mound;
+        }
+
+        /// <summary>
+        /// Builds a recognizable construction shovel (metal scoop blade, ferrule, wooden shaft, D-grip)
+        /// resting upright/slightly leaned with base at local Y = 0.0m.
+        /// </summary>
+        private GameObject CreateDetailedShovel(Transform parent, string name, Vector3 basePosition)
+        {
+            GameObject shovel = new GameObject(name);
+            shovel.transform.SetParent(parent, false);
+            shovel.transform.localPosition = basePosition;
+
+            Color steelBlade = new Color(0.42f, 0.45f, 0.49f);
+            Color woodShaft = new Color(0.60f, 0.42f, 0.22f);
+            Color gripDark = new Color(0.18f, 0.18f, 0.20f);
+
+            // Curved/tapered metal scoop blade (bottom at local Y = 0.00m)
+            CreateBox(shovel.transform, "Shovel_Blade_Main", new Vector3(0f, 0.12f, 0.01f), new Vector3(0.24f, 0.24f, 0.025f), steelBlade, false, 0.55f);
+            CreateBox(shovel.transform, "Shovel_Blade_Lip_L", new Vector3(-0.115f, 0.13f, 0.03f), new Vector3(0.022f, 0.21f, 0.055f), steelBlade, false, 0.55f);
+            CreateBox(shovel.transform, "Shovel_Blade_Lip_R", new Vector3(0.115f, 0.13f, 0.03f), new Vector3(0.022f, 0.21f, 0.055f), steelBlade, false, 0.55f);
+            // Steel socket collar
+            CreateCylinder(shovel.transform, "Shovel_Socket", new Vector3(0f, 0.28f, 0f), new Vector3(0.052f, 0.075f, 0.052f), steelBlade, false, 0.55f);
+            // Wooden handle shaft (Y: 0.30m to 1.02m)
+            CreateCylinder(shovel.transform, "Shovel_Shaft", new Vector3(0f, 0.66f, 0f), new Vector3(0.038f, 0.36f, 0.038f), woodShaft, false, 0.25f);
+            // Top D-handle grip
+            CreateBox(shovel.transform, "Shovel_Grip_L", new Vector3(-0.055f, 1.06f, 0f), new Vector3(0.022f, 0.09f, 0.024f), gripDark, false, 0.30f);
+            CreateBox(shovel.transform, "Shovel_Grip_R", new Vector3(0.055f, 1.06f, 0f), new Vector3(0.022f, 0.09f, 0.024f), gripDark, false, 0.30f);
+            CreateBox(shovel.transform, "Shovel_Grip_Top", new Vector3(0f, 1.105f, 0f), new Vector3(0.13f, 0.026f, 0.028f), gripDark, false, 0.30f);
+            return shovel;
+        }
+
+        /// <summary>
+        /// Builds a realistic tied black polyethylene garbage bag with a slumped heavy base
+        /// resting strictly flush at local Y = 0.0m (zero floating), gathered/twisted neck,
+        /// contrasting red tie-string with knot tails, and flared bunched plastic top flaps.
+        /// </summary>
+        private GameObject CreateDetailedTiedTrashBag(Transform parent, string name, Vector3 basePosition)
+        {
+            GameObject bag = new GameObject(name);
+            bag.transform.SetParent(parent, false);
+            bag.transform.localPosition = basePosition;
+
+            Color bagBlack = new Color(0.10f, 0.105f, 0.12f);
+            Color bagCrease = new Color(0.14f, 0.145f, 0.165f);
+            Color tieRed = new Color(0.86f, 0.18f, 0.15f);
+
+            // Flat-bottomed slumped lower base (cylinder bottom strictly at local Y = 0.00m)
+            CreateCylinder(bag.transform, "Bag_Flat_Base", new Vector3(0f, 0.09f, 0f), new Vector3(0.44f, 0.09f, 0.42f), bagBlack, false, 0.48f);
+
+            // Organic slumped body lobes resting heavily on the concrete
+            CreateSphere(bag.transform, "Bag_Belly_Main", new Vector3(0f, 0.17f, 0f), new Vector3(0.46f, 0.34f, 0.44f), bagBlack, false, 0.50f);
+            CreateSphere(bag.transform, "Bag_Lobe_Left", new Vector3(-0.08f, 0.14f, 0.05f), new Vector3(0.32f, 0.28f, 0.32f), bagCrease, false, 0.46f);
+            CreateSphere(bag.transform, "Bag_Lobe_Right", new Vector3(0.09f, 0.13f, -0.04f), new Vector3(0.30f, 0.26f, 0.32f), bagBlack, false, 0.48f);
+            CreateSphere(bag.transform, "Bag_Shoulder_Upper", new Vector3(0f, 0.27f, 0f), new Vector3(0.32f, 0.22f, 0.30f), bagCrease, false, 0.52f);
+
+            // Gathered / rolled cinched neck (Y: 0.31m to 0.42m)
+            CreateCylinder(bag.transform, "Bag_Twisted_Neck", new Vector3(0f, 0.37f, 0f), new Vector3(0.11f, 0.065f, 0.10f), bagBlack, false, 0.45f);
+
+            // Contrasting red string / twist-tie wrapped snugly around the cinched neck (Y = 0.385m)
+            CreateCylinder(bag.transform, "Bag_Tie_Band", new Vector3(0f, 0.385f, 0f), new Vector3(0.125f, 0.014f, 0.115f), tieRed, false, 0.35f);
+            GameObject knotA = CreateBox(bag.transform, "Bag_Tie_Tail_A", new Vector3(0.075f, 0.37f, 0.03f), new Vector3(0.085f, 0.014f, 0.014f), tieRed, false, 0.30f);
+            knotA.transform.localRotation = Quaternion.Euler(0f, -22f, -32f);
+            GameObject knotB = CreateBox(bag.transform, "Bag_Tie_Tail_B", new Vector3(0.070f, 0.365f, -0.03f), new Vector3(0.075f, 0.014f, 0.014f), tieRed, false, 0.30f);
+            knotB.transform.localRotation = Quaternion.Euler(0f, 28f, -45f);
+
+            // Bunched / crinkled flared plastic top ears sticking up above the tie (Y: 0.41m to 0.53m)
+            GameObject earL = CreateBox(bag.transform, "Bag_Top_Ear_L", new Vector3(-0.045f, 0.455f, 0.015f), new Vector3(0.095f, 0.115f, 0.055f), bagCrease, false, 0.50f);
+            earL.transform.localRotation = Quaternion.Euler(12f, 18f, 24f);
+            GameObject earR = CreateBox(bag.transform, "Bag_Top_Ear_R", new Vector3(0.045f, 0.460f, -0.020f), new Vector3(0.090f, 0.125f, 0.050f), bagBlack, false, 0.50f);
+            earR.transform.localRotation = Quaternion.Euler(-14f, -25f, -22f);
+            GameObject earC = CreateBox(bag.transform, "Bag_Top_CenterFold", new Vector3(0.005f, 0.445f, 0.025f), new Vector3(0.075f, 0.095f, 0.045f), bagBlack, false, 0.48f);
+            earC.transform.localRotation = Quaternion.Euler(22f, 5f, -8f);
+
+            return bag;
         }
 
         /// <summary>
@@ -230,7 +491,22 @@ namespace MyVirtualCommunity.Environment
             CreateBox(pothole.transform, "Pothole_Aggregate_2", new Vector3(0.28f, -0.084f, 0.16f), new Vector3(0.24f, 0.022f, 0.26f), crackedLip, false, 0.10f);
 
             // 4. Glossy standing rainwater pooled INSIDE the pothole at Y = -0.042m (4.2cm below asphalt level, no collider)
-            CreateBox(pothole.transform, "Pothole_Water_Surface", new Vector3(0f, -0.042f, 0f), new Vector3(1.42f, 0.008f, 1.12f), puddleWater, false, 0.94f);
+            GameObject waterSurf = CreateBox(pothole.transform, "Pothole_Water_Surface", new Vector3(0f, -0.042f, 0f), new Vector3(1.42f, 0.008f, 1.12f), puddleWater, false, 0.94f);
+
+            // 5. Progressive compacted earth/sand fill patch (starts hidden; rises up to street level Y=0.002m when filled with sand!)
+            GameObject sandFill = CreateBox(pothole.transform, "Pothole_Sand_Fill", new Vector3(0f, -0.082f, 0f), new Vector3(1.46f, 0.025f, 1.16f), new Color(0.74f, 0.61f, 0.42f), false, 0.10f);
+            sandFill.SetActive(false);
+
+            // Walkable flush patch collider enabled once the pothole is fully patched with sand/earth
+            GameObject patchColObj = new GameObject("Pothole_Patch_Collider");
+            patchColObj.transform.SetParent(pothole.transform, false);
+            patchColObj.transform.localPosition = new Vector3(0f, -0.01f, 0f);
+            var patchBox = patchColObj.AddComponent<BoxCollider>();
+            patchBox.size = new Vector3(1.52f, 0.02f, 1.22f);
+            patchBox.enabled = false;
+
+            var substanceCtrl = GetComponent<WorldSubstanceController>() ?? gameObject.AddComponent<WorldSubstanceController>();
+            substanceCtrl.RegisterPothole(pothole.transform, waterSurf.transform, sandFill.transform, patchBox);
         }
 
         /// <summary>
@@ -631,23 +907,22 @@ namespace MyVirtualCommunity.Environment
             CreateZebraCrosswalk(root.transform, new Vector3(13.5f, 0.02f, 2.50f), 9.0f, 2.8f, false);
 
             // Wheelchair Accessibility Curb Ramps on Both Corners of Calle Del Porvenir
-            // Direct pedestrian connectivity across Calle Del Porvenir crosswalk (Z in [1.80, 3.20]):
-            // West Corner Ramp (descending from X = 7.0m to 8.5m into Calle Del Porvenir roadway):
-            CreateWheelchairRamp(root.transform, "Calle_Del_Porvenir_Wheelchair_Ramp_West", new Vector3(7.75f, 0.1225f, 2.50f), 1.518f, 1.40f, -8.90f);
+            // Flush top-surface alignment: sidewalk top (Y = 0.240m) -> street asphalt (Y = 0.000m) across Z in [1.80, 3.20]
+            // West Corner Ramp (descending from X = 7.00m sidewalk edge to X = 8.50m Calle Del Porvenir asphalt):
+            CreateWheelchairRamp(root.transform, "Calle_Del_Porvenir_Wheelchair_Ramp_West", sidewalkEdgeX: 7.00f, streetEdgeX: 8.50f, centerZ: 2.50f, zWidth: 1.40f);
 
-            // East Corner Ramp (descending from X = 20.0m to 18.5m into Calle Del Porvenir roadway):
-            CreateWheelchairRamp(root.transform, "Calle_Del_Porvenir_Wheelchair_Ramp_East", new Vector3(19.25f, 0.1225f, 2.50f), 1.518f, 1.40f, 8.90f);
+            // East Corner Ramp (descending from X = 20.00m sidewalk edge to X = 18.50m Calle Del Porvenir asphalt):
+            CreateWheelchairRamp(root.transform, "Calle_Del_Porvenir_Wheelchair_Ramp_East", sidewalkEdgeX: 20.00f, streetEdgeX: 18.50f, centerZ: 2.50f, zWidth: 1.40f);
 
             // Zebra Crosswalk at Av. La Arboleda (X: 95.0 to 107.0, Z in [1.1, 3.9] strictly inside Arboleda, connecting wheelchair ramps)
             CreateZebraCrosswalk(root.transform, new Vector3(101.0f, 0.02f, 2.50f), 11.0f, 2.8f, false);
 
             // Wheelchair Accessibility Curb Ramps on Both Corners of Avenida La Arboleda
-            // Direct pedestrian connectivity across Avenida La Arboleda crosswalk (Z in [1.80, 3.20]):
-            // West Corner Ramp (descending from X = 93.5m to 95.0m into Avenida La Arboleda roadway):
-            CreateWheelchairRamp(root.transform, "Av_La_Arboleda_Wheelchair_Ramp_West", new Vector3(94.25f, 0.1225f, 2.50f), 1.518f, 1.40f, -8.90f);
+            // West Corner Ramp (descending from X = 93.50m sidewalk edge to X = 95.00m Avenida La Arboleda asphalt):
+            CreateWheelchairRamp(root.transform, "Av_La_Arboleda_Wheelchair_Ramp_West", sidewalkEdgeX: 93.50f, streetEdgeX: 95.00f, centerZ: 2.50f, zWidth: 1.40f);
 
-            // East Corner Ramp (descending from X = 108.5m to 107.0m into Avenida La Arboleda roadway):
-            CreateWheelchairRamp(root.transform, "Av_La_Arboleda_Wheelchair_Ramp_East", new Vector3(107.75f, 0.1225f, 2.50f), 1.518f, 1.40f, 8.90f);
+            // East Corner Ramp (descending from X = 108.50m sidewalk edge to X = 107.00m Avenida La Arboleda asphalt):
+            CreateWheelchairRamp(root.transform, "Av_La_Arboleda_Wheelchair_Ramp_East", sidewalkEdgeX: 108.50f, streetEdgeX: 107.00f, centerZ: 2.50f, zWidth: 1.40f);
 
             // Sidewalk pedestrian street lamps along north sidewalk (storefront sidewalk apron kept clear)
             CreateStreetLamp(root.transform, new Vector3(-25f, 0.24f, 1.2f));
@@ -2728,19 +3003,19 @@ namespace MyVirtualCommunity.Environment
             Color alumColor = new Color(0.22f, 0.22f, 0.25f);
 
             // Architectural Building Shell (Hollowed front bays so interior showroom and foyer are visible through glass)
-            // Rear Main Building Mass (Z: 8.5m to 21.0m)
-            CreateBox(root.transform, "HRC_Building_Body", new Vector3(85.0f, 3.0f, 14.75f), new Vector3(18.0f, 6.0f, 12.5f), whiteStucco);
+            // Rear Main Building Mass (strictly non-overlapping: white stucco X: 76.0..88.2, dark stone tower X: 88.2..94.0 — zero Z-fighting on Av. La Arboleda wall!)
+            CreateBox(root.transform, "HRC_Building_Body", new Vector3(82.10f, 3.0f, 14.75f), new Vector3(12.20f, 6.0f, 12.5f), whiteStucco);
             CreateBox(root.transform, "HRC_Stone_Tower_Body", new Vector3(91.1f, 3.6f, 14.75f), new Vector3(5.8f, 7.2f, 12.5f), darkStoneColor);
 
-            // Exterior Enclosing Side Walls & Roof
-            CreateBox(root.transform, "HRC_Exterior_Wall_East", new Vector3(93.90f, 3.6f, 6.425f), new Vector3(0.20f, 7.2f, 4.15f), darkStoneColor);
-            CreateBox(root.transform, "HRC_Exterior_Wall_West", new Vector3(76.0f, 2.25f, 6.05f), new Vector3(0.20f, 4.5f, 4.90f), woodBaseColor);
-            CreateBox(root.transform, "HRC_Interior_Divider_Center", new Vector3(88.20f, 2.5f, 6.425f), new Vector3(0.15f, 5.0f, 4.15f), new Color(0.92f, 0.92f, 0.92f));
-            CreateBox(root.transform, "HRC_Interior_Divider_Kiosk", new Vector3(79.50f, 2.5f, 6.425f), new Vector3(0.15f, 5.0f, 4.15f), new Color(0.92f, 0.92f, 0.92f));
+            // Exterior Enclosing Side Walls & Roof (trimmed cleanly to meet front piers/kiosk with zero coplanar overlap)
+            CreateBox(root.transform, "HRC_Exterior_Wall_East", new Vector3(93.90f, 3.6f, 6.5125f), new Vector3(0.20f, 7.2f, 3.975f), darkStoneColor);
+            CreateBox(root.transform, "HRC_Exterior_Wall_West", new Vector3(76.10f, 2.25f, 7.25f), new Vector3(0.20f, 4.5f, 2.50f), woodBaseColor);
+            CreateBox(root.transform, "HRC_Interior_Divider_Center", new Vector3(88.20f, 2.5f, 6.5125f), new Vector3(0.15f, 5.0f, 3.975f), new Color(0.92f, 0.92f, 0.92f));
+            CreateBox(root.transform, "HRC_Interior_Divider_Kiosk", new Vector3(79.50f, 2.5f, 7.25f), new Vector3(0.15f, 5.0f, 2.50f), new Color(0.92f, 0.92f, 0.92f));
 
-            // Showroom Ceiling
-            CreateBox(root.transform, "HRC_Showroom_Ceiling", new Vector3(83.85f, 5.90f, 6.425f), new Vector3(8.7f, 0.20f, 4.15f), whiteStucco);
-            CreateBox(root.transform, "HRC_Tower_Ceiling", new Vector3(91.1f, 7.10f, 6.425f), new Vector3(5.8f, 0.20f, 4.15f), darkStoneColor);
+            // Showroom Ceiling (inset cleanly inside exterior wall skins to prevent Z-fighting)
+            CreateBox(root.transform, "HRC_Showroom_Ceiling", new Vector3(83.85f, 5.90f, 6.52f), new Vector3(8.50f, 0.20f, 3.92f), whiteStucco);
+            CreateBox(root.transform, "HRC_Tower_Ceiling", new Vector3(91.05f, 7.10f, 6.52f), new Vector3(5.50f, 0.20f, 3.92f), darkStoneColor);
 
             // Interior Showroom Floor (Polished porcelain tile finish)
             CreateBox(root.transform, "HRC_Showroom_Floor", new Vector3(85.0f, 0.10f, 12.75f), new Vector3(17.6f, 0.20f, 16.0f), new Color(0.88f, 0.86f, 0.84f));
@@ -2787,36 +3062,40 @@ namespace MyVirtualCommunity.Environment
             CreateTextMesh(root.transform, "HRC_Subtitle_3D_Text", new Vector3(91.30f, -10.0f, 4.12f), Vector3.zero, "", 1, 0.001f, Color.white, TextAlignment.Left, TextAnchor.MiddleLeft);
             CreateBox(root.transform, "HRC_Sign_Underline", new Vector3(92.20f, 5.50f, 4.12f), new Vector3(2.00f, 0.035f, 0.02f), Color.white);
 
-            // Floor-to-Ceiling Glazed Storefront Curtain Wall & Transom Glazing (Clear opening: X: 88.50 to 93.70, Y: 0.0 to 4.40)
-            CreateGlassPane(root.transform, "HRC_Entrance_Curtain_Glass", new Vector3(91.1f, 2.2f, 4.35f), new Vector3(5.2f, 4.3f, 0.05f), false);
+            // Floor-to-Ceiling Glazed Storefront Curtain Wall & Transom Glazing (split cleanly around doors & behind mullions — zero double-glass Z-fighting!)
+            CreateGlassPane(root.transform, "HRC_Entrance_Curtain_Glass", new Vector3(91.10f, 3.44f, 4.37f), new Vector3(5.16f, 1.88f, 0.025f), false);
+            CreateGlassPane(root.transform, "HRC_Entrance_Curtain_Glass_Sidelight_L", new Vector3(89.255f, 1.215f, 4.37f), new Vector3(1.48f, 2.38f, 0.025f), false);
+            CreateGlassPane(root.transform, "HRC_Entrance_Curtain_Glass_Sidelight_R", new Vector3(92.995f, 1.215f, 4.37f), new Vector3(1.38f, 2.38f, 0.025f), false);
 
-            // Architectural Dark Aluminum Framing & Mullions
+            // Architectural Dark Aluminum Framing & Mullions (positioned cleanly in front of curtain glass at Z = 4.31)
             // Transom Header Mullion across top of doors (Y: 2.45m)
-            CreateBox(root.transform, "HRC_Mullion_Horiz_Mid", new Vector3(91.1f, 2.45f, 4.32f), new Vector3(5.2f, 0.08f, 0.08f), alumColor);
+            CreateBox(root.transform, "HRC_Mullion_Horiz_Mid", new Vector3(91.1f, 2.45f, 4.31f), new Vector3(5.18f, 0.08f, 0.06f), alumColor);
             // Vertical Mullions flanking double doors (X = 90.05m and X = 92.25m)
-            CreateBox(root.transform, "HRC_Mullion_Vert_L", new Vector3(90.05f, 2.2f, 4.32f), new Vector3(0.08f, 4.4f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Mullion_Vert_R", new Vector3(92.25f, 2.2f, 4.32f), new Vector3(0.08f, 4.4f, 0.08f), alumColor);
+            CreateBox(root.transform, "HRC_Mullion_Vert_L", new Vector3(90.05f, 2.2f, 4.31f), new Vector3(0.08f, 4.38f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Mullion_Vert_R", new Vector3(92.25f, 2.2f, 4.31f), new Vector3(0.08f, 4.38f, 0.06f), alumColor);
 
             // Double Commercial Glass Entrance Doors (Center X: 91.15m, Total Width: 2.14m, Height: 2.42m)
             // Perimeter Door Frame Members (Hollow, allows complete transparency into showroom foyer)
-            CreateBox(root.transform, "HRC_Door_Frame_Header", new Vector3(91.15f, 2.41f, 4.30f), new Vector3(2.14f, 0.08f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Door_Frame_Jamb_L", new Vector3(90.10f, 1.22f, 4.30f), new Vector3(0.06f, 2.38f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Door_Frame_Jamb_R", new Vector3(92.20f, 1.22f, 4.30f), new Vector3(0.06f, 2.38f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Door_Meeting_Stile", new Vector3(91.15f, 1.22f, 4.30f), new Vector3(0.06f, 2.38f, 0.08f), alumColor);
-            // Compatibility alias
-            CreateBox(root.transform, "HRC_Door_Frame_Outer", new Vector3(91.15f, 2.41f, 4.30f), new Vector3(2.14f, 0.08f, 0.08f), alumColor);
+            CreateBox(root.transform, "HRC_Door_Frame_Header", new Vector3(91.15f, 2.38f, 4.29f), new Vector3(2.12f, 0.06f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Door_Frame_Jamb_L", new Vector3(90.11f, 1.18f, 4.29f), new Vector3(0.05f, 2.34f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Door_Frame_Jamb_R", new Vector3(92.19f, 1.18f, 4.29f), new Vector3(0.05f, 2.34f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Door_Meeting_Stile", new Vector3(91.15f, 1.18f, 4.29f), new Vector3(0.05f, 2.34f, 0.06f), alumColor);
+            // Non-rendering compatibility alias (avoids duplicate coplanar mesh Z-fighting with HRC_Door_Frame_Header)
+            GameObject doorFrameAlias = new GameObject("HRC_Door_Frame_Outer");
+            doorFrameAlias.transform.SetParent(root.transform, false);
+            doorFrameAlias.transform.localPosition = new Vector3(91.15f, 2.38f, 4.29f);
 
-            // Left Door Leaf Panel (X: 90.10m to 91.15m, Center: 90.625m)
-            CreateGlassPane(root.transform, "HRC_Door_Glass_L", new Vector3(90.625f, 1.22f, 4.28f), new Vector3(0.96f, 2.32f, 0.03f), false);
-            CreateBox(root.transform, "HRC_Door_L_Red_Stripe", new Vector3(90.625f, 1.05f, 4.25f), new Vector3(0.94f, 0.05f, 0.01f), new Color(0.85f, 0.15f, 0.15f));
-            CreateBox(root.transform, "HRC_Door_L_Kickplate", new Vector3(90.625f, 0.10f, 4.28f), new Vector3(0.96f, 0.18f, 0.04f), alumColor);
+            // Left Door Leaf Panel (X: 90.14m to 91.12m, glass starts cleanly above kickplate)
+            CreateGlassPane(root.transform, "HRC_Door_Glass_L", new Vector3(90.63f, 1.27f, 4.28f), new Vector3(0.95f, 2.14f, 0.02f), false);
+            CreateBox(root.transform, "HRC_Door_L_Red_Stripe", new Vector3(90.63f, 1.05f, 4.255f), new Vector3(0.93f, 0.05f, 0.01f), new Color(0.85f, 0.15f, 0.15f));
+            CreateBox(root.transform, "HRC_Door_L_Kickplate", new Vector3(90.63f, 0.10f, 4.28f), new Vector3(0.95f, 0.18f, 0.04f), alumColor);
             // Chrome Vertical Tubular Pull Handle
             CreateCylinder(root.transform, "HRC_Door_Handle_L", new Vector3(91.02f, 1.15f, 4.20f), new Vector3(0.035f, 0.85f, 0.035f), new Color(0.92f, 0.92f, 0.95f), false);
 
-            // Right Door Leaf Panel (X: 91.15m to 92.20m, Center: 91.675m)
-            CreateGlassPane(root.transform, "HRC_Door_Glass_R", new Vector3(91.675f, 1.22f, 4.28f), new Vector3(0.96f, 2.32f, 0.03f), false);
-            CreateBox(root.transform, "HRC_Door_R_Red_Stripe", new Vector3(91.675f, 1.05f, 4.25f), new Vector3(0.94f, 0.05f, 0.01f), new Color(0.85f, 0.15f, 0.15f));
-            CreateBox(root.transform, "HRC_Door_R_Kickplate", new Vector3(91.675f, 0.10f, 4.28f), new Vector3(0.96f, 0.18f, 0.04f), alumColor);
+            // Right Door Leaf Panel (X: 91.18m to 92.16m, glass starts cleanly above kickplate)
+            CreateGlassPane(root.transform, "HRC_Door_Glass_R", new Vector3(91.67f, 1.27f, 4.28f), new Vector3(0.95f, 2.14f, 0.02f), false);
+            CreateBox(root.transform, "HRC_Door_R_Red_Stripe", new Vector3(91.67f, 1.05f, 4.255f), new Vector3(0.93f, 0.05f, 0.01f), new Color(0.85f, 0.15f, 0.15f));
+            CreateBox(root.transform, "HRC_Door_R_Kickplate", new Vector3(91.67f, 0.10f, 4.28f), new Vector3(0.95f, 0.18f, 0.04f), alumColor);
             // Chrome Vertical Tubular Pull Handle
             CreateCylinder(root.transform, "HRC_Door_Handle_R", new Vector3(91.28f, 1.15f, 4.20f), new Vector3(0.035f, 0.85f, 0.035f), new Color(0.92f, 0.92f, 0.95f), false);
 
@@ -2951,16 +3230,18 @@ namespace MyVirtualCommunity.Environment
             CreateBox(root.transform, "HRC_Window_Wall_Pier_R", new Vector3(87.675f, 1.25f, 4.45f), new Vector3(1.05f, 1.60f, 0.16f), whiteStucco);
 
             // TWO SQUARE SHOWROOM DISPLAY WINDOWS WITH HORIZONTAL DIVIDER MULLIONS & INTERIOR CHAIRS
-            // Window 1 (Left): Centered at X = 83.95m, Sill at Y = 0.45m (Clear open opening: 1.30m wide x 1.50m high)
-            CreateBox(root.transform, "HRC_Window_1_Frame_Top", new Vector3(83.95f, 2.025f, 4.43f), new Vector3(1.40f, 0.05f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Window_1_Frame_Bottom", new Vector3(83.95f, 0.475f, 4.43f), new Vector3(1.40f, 0.05f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Window_1_Frame_Jamb_L", new Vector3(83.275f, 1.25f, 4.43f), new Vector3(0.05f, 1.50f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Window_1_Frame_Jamb_R", new Vector3(84.625f, 1.25f, 4.43f), new Vector3(0.05f, 1.50f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Window_1_Mullion", new Vector3(83.95f, 1.25f, 4.43f), new Vector3(1.30f, 0.04f, 0.06f), alumColor);
-            CreateBox(root.transform, "HRC_Window_1_Sill", new Vector3(83.95f, 0.43f, 4.35f), new Vector3(1.50f, 0.08f, 0.22f), Color.white);
-            // Backward compatibility alias for tests querying HRC_Window_1_Frame
-            CreateBox(root.transform, "HRC_Window_1_Frame", new Vector3(83.95f, 2.025f, 4.43f), new Vector3(1.40f, 0.05f, 0.08f), alumColor);
-            CreateGlassPane(root.transform, "HRC_Window_1_Glass", new Vector3(83.95f, 1.25f, 4.40f), new Vector3(1.28f, 1.48f, 0.04f), false);
+            // Window 1 (Left): Centered at X = 83.95m, Sill at Y = 0.45m (glass cleanly behind mullions at Z = 4.46, zero duplicate frame box!)
+            CreateBox(root.transform, "HRC_Window_1_Frame_Top", new Vector3(83.95f, 2.025f, 4.42f), new Vector3(1.40f, 0.05f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Window_1_Frame_Bottom", new Vector3(83.95f, 0.475f, 4.42f), new Vector3(1.40f, 0.05f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Window_1_Frame_Jamb_L", new Vector3(83.275f, 1.25f, 4.42f), new Vector3(0.05f, 1.50f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Window_1_Frame_Jamb_R", new Vector3(84.625f, 1.25f, 4.42f), new Vector3(0.05f, 1.50f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Window_1_Mullion", new Vector3(83.95f, 1.25f, 4.41f), new Vector3(1.30f, 0.04f, 0.04f), alumColor);
+            CreateBox(root.transform, "HRC_Window_1_Sill", new Vector3(83.95f, 0.42f, 4.35f), new Vector3(1.50f, 0.07f, 0.22f), Color.white);
+            // Non-rendering compatibility alias (avoids Z-fighting with HRC_Window_1_Frame_Top)
+            GameObject win1FrameAlias = new GameObject("HRC_Window_1_Frame");
+            win1FrameAlias.transform.SetParent(root.transform, false);
+            win1FrameAlias.transform.localPosition = new Vector3(83.95f, 2.025f, 4.42f);
+            CreateGlassPane(root.transform, "HRC_Window_1_Glass", new Vector3(83.95f, 1.25f, 4.46f), new Vector3(1.28f, 1.48f, 0.02f), false);
 
             // Showroom Display Platform & Designer Chair inside Window 1
             CreateBox(root.transform, "HRC_Showroom_Podium_1", new Vector3(83.95f, 0.12f, 5.00f), new Vector3(1.30f, 0.16f, 1.30f), new Color(0.85f, 0.82f, 0.78f));
@@ -2991,17 +3272,19 @@ namespace MyVirtualCommunity.Environment
             w1Light.intensity = 2.8f;
             w1Light.shadows = LightShadows.None;
 
-            // Window 2 (Right): Centered at X = 86.45m, Sill at Y = 0.45m (Clear open opening: 1.30m wide x 1.50m high)
+            // Window 2 (Right): Centered at X = 86.45m, Sill at Y = 0.45m (glass cleanly behind mullions at Z = 4.46, zero duplicate frame box!)
             // Perimeter Frame Members
-            CreateBox(root.transform, "HRC_Window_2_Frame_Top", new Vector3(86.45f, 2.025f, 4.43f), new Vector3(1.40f, 0.05f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Window_2_Frame_Bottom", new Vector3(86.45f, 0.475f, 4.43f), new Vector3(1.40f, 0.05f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Window_2_Frame_Jamb_L", new Vector3(85.775f, 1.25f, 4.43f), new Vector3(0.05f, 1.50f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Window_2_Frame_Jamb_R", new Vector3(87.125f, 1.25f, 4.43f), new Vector3(0.05f, 1.50f, 0.08f), alumColor);
-            CreateBox(root.transform, "HRC_Window_2_Mullion", new Vector3(86.45f, 1.25f, 4.43f), new Vector3(1.30f, 0.04f, 0.06f), alumColor);
-            CreateBox(root.transform, "HRC_Window_2_Sill", new Vector3(86.45f, 0.43f, 4.35f), new Vector3(1.50f, 0.08f, 0.22f), Color.white);
-            // Backward compatibility alias for tests querying HRC_Window_2_Frame
-            CreateBox(root.transform, "HRC_Window_2_Frame", new Vector3(86.45f, 2.025f, 4.43f), new Vector3(1.40f, 0.05f, 0.08f), alumColor);
-            CreateGlassPane(root.transform, "HRC_Window_2_Glass", new Vector3(86.45f, 1.25f, 4.40f), new Vector3(1.28f, 1.48f, 0.04f), false);
+            CreateBox(root.transform, "HRC_Window_2_Frame_Top", new Vector3(86.45f, 2.025f, 4.42f), new Vector3(1.40f, 0.05f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Window_2_Frame_Bottom", new Vector3(86.45f, 0.475f, 4.42f), new Vector3(1.40f, 0.05f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Window_2_Frame_Jamb_L", new Vector3(85.775f, 1.25f, 4.42f), new Vector3(0.05f, 1.50f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Window_2_Frame_Jamb_R", new Vector3(87.125f, 1.25f, 4.42f), new Vector3(0.05f, 1.50f, 0.06f), alumColor);
+            CreateBox(root.transform, "HRC_Window_2_Mullion", new Vector3(86.45f, 1.25f, 4.41f), new Vector3(1.30f, 0.04f, 0.04f), alumColor);
+            CreateBox(root.transform, "HRC_Window_2_Sill", new Vector3(86.45f, 0.42f, 4.35f), new Vector3(1.50f, 0.07f, 0.22f), Color.white);
+            // Non-rendering compatibility alias (avoids Z-fighting with HRC_Window_2_Frame_Top)
+            GameObject win2FrameAlias = new GameObject("HRC_Window_2_Frame");
+            win2FrameAlias.transform.SetParent(root.transform, false);
+            win2FrameAlias.transform.localPosition = new Vector3(86.45f, 2.025f, 4.42f);
+            CreateGlassPane(root.transform, "HRC_Window_2_Glass", new Vector3(86.45f, 1.25f, 4.46f), new Vector3(1.28f, 1.48f, 0.02f), false);
 
             // Showroom Display Platform & Modern Armchair inside Window 2
             CreateBox(root.transform, "HRC_Showroom_Podium_2", new Vector3(86.45f, 0.12f, 5.00f), new Vector3(1.30f, 0.16f, 1.30f), new Color(0.85f, 0.82f, 0.78f));
@@ -3046,20 +3329,20 @@ namespace MyVirtualCommunity.Environment
             CreateTexturedQuad(root.transform, "HRC_Kiosk_Upper_Wood_South", new Vector3(77.75f, 3.4f, 3.58f), new Vector3(3.5f, 2.2f, 1.0f), "HRC_Wood_Decking.png");
             CreateTexturedQuad(root.transform, "HRC_Kiosk_Upper_Wood_East", new Vector3(79.52f, 3.4f, 4.80f), new Vector3(2.4f, 2.2f, 1.0f), "HRC_Wood_Decking.png", new Vector3(0f, 90f, 0f));
 
-            // Corner Glazed Showcase Vitrine (Lower level, Y: 0.0m to 2.2m)
+            // Corner Glazed Showcase Vitrine (Lower level, Y: 0.16m to 2.20m — cleanly separated from wood body & kickplates, zero Z-fighting!)
             // South Face Glass & Branding ("COMPOSITE DECK / ULTRASHIELD")
-            CreateGlassPane(root.transform, "HRC_Kiosk_Glass_South", new Vector3(77.75f, 1.15f, 3.56f), new Vector3(3.4f, 2.2f, 0.04f), false);
-            CreateTexturedQuad(root.transform, "HRC_Kiosk_UltraShield_Banner", new Vector3(77.75f, 1.15f, 3.53f), new Vector3(3.2f, 1.6f, 1.0f), "HRC_Kiosk_Graphic.png");
+            CreateGlassPane(root.transform, "HRC_Kiosk_Glass_South", new Vector3(77.75f, 1.18f, 3.56f), new Vector3(3.40f, 2.02f, 0.02f), false);
+            CreateTexturedQuad(root.transform, "HRC_Kiosk_UltraShield_Banner", new Vector3(77.75f, 1.18f, 3.53f), new Vector3(3.2f, 1.6f, 1.0f), "HRC_Kiosk_Graphic.png");
 
-            // East Face Glass & Branding
-            CreateGlassPane(root.transform, "HRC_Kiosk_Glass_East", new Vector3(79.52f, 1.15f, 4.80f), new Vector3(2.3f, 2.2f, 0.04f), false);
-            CreateTexturedQuad(root.transform, "HRC_Kiosk_UltraShield_Banner_East", new Vector3(79.55f, 1.15f, 4.80f), new Vector3(2.2f, 1.6f, 1.0f), "HRC_Kiosk_Graphic.png", new Vector3(0f, -90f, 0f));
+            // East Face Glass & Branding (properly aligned along Z-axis so it sits flush on East face X = 79.53)
+            CreateGlassPane(root.transform, "HRC_Kiosk_Glass_East", new Vector3(79.53f, 1.18f, 4.80f), new Vector3(0.02f, 2.02f, 2.30f), false);
+            CreateTexturedQuad(root.transform, "HRC_Kiosk_UltraShield_Banner_East", new Vector3(79.56f, 1.18f, 4.80f), new Vector3(2.2f, 1.6f, 1.0f), "HRC_Kiosk_Graphic.png", new Vector3(0f, -90f, 0f));
 
             // Black Steel Corner Frame Posts & Kickplates
             Color frameColor = new Color(0.15f, 0.15f, 0.18f);
-            CreateBox(root.transform, "HRC_Kiosk_Frame_Corner", new Vector3(79.50f, 1.15f, 3.60f), new Vector3(0.08f, 2.3f, 0.08f), frameColor);
-            CreateBox(root.transform, "HRC_Kiosk_Kickplate_South", new Vector3(77.75f, 0.08f, 3.56f), new Vector3(3.5f, 0.16f, 0.06f), frameColor);
-            CreateBox(root.transform, "HRC_Kiosk_Kickplate_East", new Vector3(79.52f, 0.08f, 4.80f), new Vector3(0.06f, 0.16f, 2.4f), frameColor);
+            CreateBox(root.transform, "HRC_Kiosk_Frame_Corner", new Vector3(79.51f, 1.15f, 3.59f), new Vector3(0.08f, 2.3f, 0.08f), frameColor);
+            CreateBox(root.transform, "HRC_Kiosk_Kickplate_South", new Vector3(77.75f, 0.08f, 3.56f), new Vector3(3.48f, 0.16f, 0.05f), frameColor);
+            CreateBox(root.transform, "HRC_Kiosk_Kickplate_East", new Vector3(79.53f, 0.08f, 4.80f), new Vector3(0.05f, 0.16f, 2.38f), frameColor);
         }
 
         // =========================================================================
@@ -3176,11 +3459,11 @@ namespace MyVirtualCommunity.Environment
             // Modern Curved Silver Streetlamp along corner curb (matching photo)
             CreateModernCurvedStreetlamp(root.transform, new Vector3(108.8f, 0.24f, 4.4f));
 
-            // Vertical Commercial Mupi Advertising Totem on sidewalk (showing AT&T 5G poster)
-            CreateAttMupiTotem(root.transform, new Vector3(113.8f, 0.24f, 4.8f));
+            // Vertical Commercial Mupi Advertising Totem positioned behind/west of the sculpture near the steps (matching Street View photos)
+            CreateAttMupiTotem(root.transform, new Vector3(109.8f, 0.24f, 8.8f));
 
-            // MONUMENTAL ORANGE ABSTRACT SCULPTURE (5 Stacked 3D Faceted Stars on Dark Basalt Pedestal)
-            CreateStackedStarSculpture(root.transform, new Vector3(111.4f, 0.24f, 6.6f));
+            // MONUMENTAL ORANGE GEOMETRIC STEEL TOTEM SCULPTURE (5 identical hollow interlocking modules on stone planter bed, matching 7045 Blvd. Gómez Morín)
+            CreateStackedStarSculpture(root.transform, new Vector3(113.0f, 0.24f, 5.4f));
 
             // ---------------------------------------------------------------------
             // 2. MAIN TOWER BUILDING VOLUME (5 Stories + Parapet, H: 21.2m)
@@ -3488,72 +3771,117 @@ namespace MyVirtualCommunity.Environment
             return starObj;
         }
 
+        /// <summary>
+        /// Builds one hollow interlocking faceted steel module of the iconic 7045 Blvd. Gómez Morín
+        /// (Corporativo Arboleda / AT&T) orange geometric totem sculpture.
+        /// Four symmetric cardinal folded V-prism steel arms wrap an open hollow center so sky
+        /// and architecture remain visible straight through the diamond cavities from every angle.
+        /// </summary>
+        private GameObject CreateGeometricTotemModule(Transform parent, string name, float centerY, Color outerOrange, Color innerOrange)
+        {
+            GameObject mod = new GameObject(name);
+            mod.transform.SetParent(parent, false);
+            mod.transform.localPosition = new Vector3(0f, centerY, 0f);
+
+            // 4 cardinal folded steel chevron arms (South, East, North, West -> 0, 90, 180, 270 deg)
+            // Leaves the center core and all 4 diagonal 45-deg diamond cavities completely hollow!
+            for (int i = 0; i < 4; i++)
+            {
+                GameObject arm = new GameObject($"Arm_{i}");
+                arm.transform.SetParent(mod.transform, false);
+                arm.transform.localRotation = Quaternion.Euler(0f, i * 90f, 0f);
+
+                // Bold flat outer equatorial face block (the crisp horizontal band seen on every module)
+                CreateBox(arm.transform, "Outer_Facet", new Vector3(0f, 0f, 0.84f), new Vector3(0.76f, 0.36f, 0.26f), outerOrange, false, 0.28f);
+
+                // Upper sloped folded steel wing: climbs from outer equator (Z=0.82, Y=0.14) to top collar (Z=0.40, Y=0.78)
+                GameObject upperWing = CreateBox(arm.transform, "Upper_Slope", new Vector3(0f, 0.44f, 0.62f), new Vector3(0.76f, 0.78f, 0.24f), outerOrange, false, 0.25f);
+                upperWing.transform.localRotation = Quaternion.Euler(-34f, 0f, 0f);
+
+                // Lower sloped folded steel wing: descends from outer equator (Z=0.82, Y=-0.14) to bottom collar (Z=0.40, Y=-0.78)
+                GameObject lowerWing = CreateBox(arm.transform, "Lower_Slope", new Vector3(0f, -0.44f, 0.62f), new Vector3(0.76f, 0.78f, 0.24f), innerOrange, false, 0.22f);
+                lowerWing.transform.localRotation = Quaternion.Euler(34f, 0f, 0f);
+
+                // Top & bottom hollow structural junction collars tying into adjacent stacked modules
+                CreateBox(arm.transform, "Top_Collar_Bar", new Vector3(0f, 0.75f, 0.42f), new Vector3(0.84f, 0.14f, 0.24f), outerOrange, false, 0.25f);
+                CreateBox(arm.transform, "Bottom_Collar_Bar", new Vector3(0f, -0.75f, 0.42f), new Vector3(0.84f, 0.14f, 0.24f), innerOrange, false, 0.22f);
+            }
+
+            return mod;
+        }
+
         private GameObject CreateStackedStarSculpture(Transform parent, Vector3 basePos)
         {
             GameObject sculptureGroup = new GameObject("ATT_Orange_Star_Sculpture");
             sculptureGroup.transform.SetParent(parent, false);
             sculptureGroup.transform.localPosition = basePos;
 
-            Color sculptureOrange = new Color(0.98f, 0.42f, 0.05f); // Vibrant architectural cadmium orange
-            Color darkPlinth = new Color(0.14f, 0.14f, 0.16f);       // Dark basalt granite
+            // Faithful warm matte-satin burnt terracotta-orange painted steel (from 7045 Blvd. Gómez Morín photos)
+            Color sculptureOrange = new Color(0.83f, 0.30f, 0.13f);
+            Color sculptureInnerShade = new Color(0.72f, 0.24f, 0.10f);
+            Color curbConcrete = new Color(0.74f, 0.73f, 0.70f);
+            Color gravelBase = new Color(0.46f, 0.42f, 0.39f);
+            Color hedgeGreen = new Color(0.24f, 0.46f, 0.16f);
 
-            // 1. Basalt Pedestal / Plinth
-            CreateBox(sculptureGroup.transform, "Sculpture_Pedestal_Foundation", new Vector3(0f, 0.15f, 0f), new Vector3(2.2f, 0.30f, 2.2f), darkPlinth);
-            CreateBox(sculptureGroup.transform, "Sculpture_Pedestal_Top", new Vector3(0f, 0.35f, 0f), new Vector3(1.8f, 0.10f, 1.8f), new Color(0.20f, 0.20f, 0.22f));
-            CreateCylinder(sculptureGroup.transform, "Sculpture_Steel_Mounting_Plate", new Vector3(0f, 0.42f, 0f), new Vector3(1.2f, 0.04f, 1.2f), new Color(0.25f, 0.25f, 0.28f));
+            // 1. Low Polygonal Concrete Planter Curb & River-Rock Gravel Bed (flush with plaza sidewalk Y = 0.0m)
+            CreateBox(sculptureGroup.transform, "Sculpture_Pedestal_Foundation", new Vector3(-0.35f, 0.11f, 0f), new Vector3(3.60f, 0.22f, 2.50f), curbConcrete, true, 0.10f);
+            CreateBox(sculptureGroup.transform, "Sculpture_Gravel_Bed", new Vector3(-0.35f, 0.19f, 0f), new Vector3(3.30f, 0.10f, 2.20f), gravelBase, false, 0.05f);
 
-            // 2. Central Structural Steel Core Column (internal backbone)
-            CreateCylinder(sculptureGroup.transform, "Sculpture_Central_Spine", new Vector3(0f, 3.8f, 0f), new Vector3(0.28f, 6.8f, 0.28f), sculptureOrange);
-
-            // 3. Five 3D Star Modules Stacked Vertically with artistic alternating rotational rhythm
-            // Star 1 (Bottom, largest base anchor): Y = 1.30m, outerR = 1.15m, innerR = 0.45m, vertR = 0.75m, rotY = 0 deg
-            Create3DStarSculptureModule(sculptureGroup.transform, "Star_Module_1_Bottom", new Vector3(0f, 1.30f, 0f), 1.15f, 0.45f, 0.75f, 0f, sculptureOrange);
-
-            // Structural transition collar 1-2
-            CreateCylinder(sculptureGroup.transform, "Sculpture_Collar_1_2", new Vector3(0f, 2.05f, 0f), new Vector3(0.40f, 0.30f, 0.40f), sculptureOrange);
-
-            // Star 2: Y = 2.70m, outerR = 1.05m, innerR = 0.40f, vertR = 0.70m, rotY = 22.5 deg
-            Create3DStarSculptureModule(sculptureGroup.transform, "Star_Module_2", new Vector3(0f, 2.70f, 0f), 1.05f, 0.40f, 0.70f, 22.5f, sculptureOrange);
-
-            // Structural transition collar 2-3
-            CreateCylinder(sculptureGroup.transform, "Sculpture_Collar_2_3", new Vector3(0f, 3.40f, 0f), new Vector3(0.36f, 0.30f, 0.36f), sculptureOrange);
-
-            // Star 3 (Midlevel): Y = 4.00m, outerR = 0.95m, innerR = 0.36f, vertR = 0.65m, rotY = -15.0 deg
-            Create3DStarSculptureModule(sculptureGroup.transform, "Star_Module_3_Mid", new Vector3(0f, 4.00f, 0f), 0.95f, 0.36f, 0.65f, -15.0f, sculptureOrange);
-
-            // Structural transition collar 3-4
-            CreateCylinder(sculptureGroup.transform, "Sculpture_Collar_3_4", new Vector3(0f, 4.65f, 0f), new Vector3(0.32f, 0.30f, 0.32f), sculptureOrange);
-
-            // Star 4: Y = 5.25m, outerR = 0.85m, innerR = 0.32f, vertR = 0.60m, rotY = 30.0 deg
-            Create3DStarSculptureModule(sculptureGroup.transform, "Star_Module_4", new Vector3(0f, 5.25f, 0f), 0.85f, 0.32f, 0.60f, 30.0f, sculptureOrange);
-
-            // Structural transition collar 4-5
-            CreateCylinder(sculptureGroup.transform, "Sculpture_Collar_4_5", new Vector3(0f, 5.85f, 0f), new Vector3(0.28f, 0.30f, 0.28f), sculptureOrange);
-
-            // Star 5 (Apex / Crown): Y = 6.45m, outerR = 0.75m, innerR = 0.28f, vertR = 0.65m, rotY = -22.5 deg
-            Create3DStarSculptureModule(sculptureGroup.transform, "Star_Module_5_Crown", new Vector3(0f, 6.45f, 0f), 0.75f, 0.28f, 0.65f, -22.5f, sculptureOrange);
-
-            // Finial pinnacle spire at apex reaching Y ~ 7.45m
-            CreateCylinder(sculptureGroup.transform, "Sculpture_Apex_Spire", new Vector3(0f, 7.25f, 0f), new Vector3(0.08f, 0.40f, 0.08f), sculptureOrange);
-
-            // 4. Ground Architectural Uplight Projectors on Pedestal
-            for (int a = 0; a < 4; a++)
+            // Scattered 3D river cobble stones around the sculpture base
+            Vector3[] stoneOffsets = new Vector3[]
             {
-                float rad = a * 90f * Mathf.Deg2Rad + Mathf.PI * 0.25f;
-                Vector3 uplightPos = new Vector3(Mathf.Cos(rad) * 0.95f, 0.38f, Mathf.Sin(rad) * 0.95f);
-                CreateCylinder(sculptureGroup.transform, $"Sculpture_Uplight_{a}", uplightPos, new Vector3(0.12f, 0.06f, 0.12f), new Color(0.2f, 0.2f, 0.22f));
-                CreateCylinder(sculptureGroup.transform, $"Sculpture_Uplight_Lens_{a}", uplightPos + new Vector3(0f, 0.035f, 0f), new Vector3(0.09f, 0.01f, 0.09f), new Color(1.0f, 0.95f, 0.85f));
+                new Vector3(-1.35f, 0.25f, -0.55f), new Vector3(-0.95f, 0.26f, 0.45f),
+                new Vector3(-1.55f, 0.25f, 0.15f), new Vector3(-0.65f, 0.25f, -0.72f),
+                new Vector3(0.85f, 0.25f, -0.60f), new Vector3(1.05f, 0.25f, 0.35f),
+                new Vector3(0.15f, 0.25f, -0.82f), new Vector3(-1.15f, 0.26f, -0.15f)
+            };
+            for (int s = 0; s < stoneOffsets.Length; s++)
+            {
+                Color stoneCol = (s % 2 == 0) ? new Color(0.55f, 0.49f, 0.44f) : new Color(0.38f, 0.34f, 0.32f);
+                CreateSphere(sculptureGroup.transform, $"Sculpture_RiverStone_{s}", stoneOffsets[s], new Vector3(0.28f, 0.14f, 0.24f), stoneCol, false, 0.12f);
             }
 
-            // Warm evening accent light illuminating sculpture
+            // Low manicured boxwood hedge extending west toward Av. La Arboleda (matching Street View reference)
+            CreateBox(sculptureGroup.transform, "Sculpture_West_Hedge", new Vector3(-2.65f, 0.36f, 0.15f), new Vector3(2.10f, 0.68f, 1.15f), hedgeGreen, true, 0.05f);
+
+            // Low concrete anchor pad directly beneath Module 1
+            CreateBox(sculptureGroup.transform, "Sculpture_Pedestal_Top", new Vector3(0f, 0.22f, 0f), new Vector3(1.35f, 0.06f, 1.35f), new Color(0.30f, 0.29f, 0.28f), true);
+
+            // 2. Five IDENTICAL Uniform-Width Hollow Interlocking Geometric Steel Modules (NO central pole, NO spire!)
+            // Total height: 5 * 1.62m = 8.10m above stone bed (Y: 0.24m -> 8.34m local, matching reference photos)
+            float moduleHeight = 1.62f;
+            float baseOffsetY = 0.25f + moduleHeight * 0.5f; // 1.06m
+            string[] modNames = { "Star_Module_1_Bottom", "Star_Module_2", "Star_Module_3_Mid", "Star_Module_4", "Star_Module_5_Crown" };
+            for (int m = 0; m < 5; m++)
+            {
+                float yCenter = baseOffsetY + m * moduleHeight;
+                CreateGeometricTotemModule(sculptureGroup.transform, modNames[m], yCenter, sculptureOrange, sculptureInnerShade);
+            }
+
+            // Solid bounding collider around the totem footprint so neither player nor Camila walks through it
+            GameObject totemColObj = new GameObject("Sculpture_Totem_Collider");
+            totemColObj.transform.SetParent(sculptureGroup.transform, false);
+            totemColObj.transform.localPosition = new Vector3(0f, 4.30f, 0f);
+            var totemCol = totemColObj.AddComponent<BoxCollider>();
+            totemCol.size = new Vector3(1.90f, 8.10f, 1.90f);
+
+            // 3. Two Low Ground Architectural Uplights nestled in the river gravel
+            Vector3[] lightOffsets = { new Vector3(-1.60f, 0.26f, -0.78f), new Vector3(1.12f, 0.26f, -0.72f) };
+            for (int a = 0; a < lightOffsets.Length; a++)
+            {
+                CreateCylinder(sculptureGroup.transform, $"Sculpture_Uplight_{a}", lightOffsets[a], new Vector3(0.14f, 0.08f, 0.14f), new Color(0.16f, 0.16f, 0.18f), false);
+                CreateCylinder(sculptureGroup.transform, $"Sculpture_Uplight_Lens_{a}", lightOffsets[a] + new Vector3(0f, 0.045f, 0f), new Vector3(0.10f, 0.01f, 0.10f), new Color(1.0f, 0.94f, 0.82f), false);
+            }
+
+            // Warm accent light highlighting the terracotta steel facets
             GameObject sLightObj = new GameObject("Sculpture_Accent_Light");
             sLightObj.transform.SetParent(sculptureGroup.transform, false);
-            sLightObj.transform.localPosition = new Vector3(0f, 2.5f, 0f);
+            sLightObj.transform.localPosition = new Vector3(0f, 3.2f, -1.6f);
             Light sLight = sLightObj.AddComponent<Light>();
             sLight.type = LightType.Point;
-            sLight.color = new Color(1.0f, 0.75f, 0.45f);
-            sLight.range = 8.0f;
-            sLight.intensity = 1.8f;
+            sLight.color = new Color(1.0f, 0.78f, 0.50f);
+            sLight.range = 9.5f;
+            sLight.intensity = 1.6f;
             sLight.shadows = LightShadows.None;
 
             return sculptureGroup;
@@ -6254,39 +6582,54 @@ namespace MyVirtualCommunity.Environment
             }
         }
 
-        private void CreateWheelchairRamp(Transform parent, string name, Vector3 center, float xLen, float zWidth, float zRotAngle)
+        private void CreateWheelchairRamp(Transform parent, string name, float sidewalkEdgeX, float streetEdgeX, float centerZ, float zWidth)
         {
             Color rampSafetyYellow = new Color(0.96f, 0.82f, 0.10f);
             Color rampBorderYellow = new Color(0.85f, 0.68f, 0.05f);
             Color symbolBlue = new Color(0.06f, 0.38f, 0.78f);
 
+            const float sidewalkTopY = 0.24f;
+            const float streetTopY = 0.00f;
+            const float slabThickness = 0.10f;
+
+            float runX = Mathf.Abs(streetEdgeX - sidewalkEdgeX);
+            float riseY = sidewalkTopY - streetTopY;
+            float slopeLen = Mathf.Sqrt(runX * runX + riseY * riseY);
+            bool descendsEast = streetEdgeX > sidewalkEdgeX;
+            float zRotAngle = (descendsEast ? -1f : 1f) * Mathf.Atan2(riseY, runX) * Mathf.Rad2Deg;
+
+            // Exact top-face geometry: slabTopCenter sits midway between (sidewalkEdgeX, 0.24) and (streetEdgeX, 0.00).
+            // Shifting box center inward by -rampUp * (slabThickness / 2) guarantees BOTH top corners meet
+            // the sidewalk at exact Y = 0.240m and the street asphalt at exact Y = 0.000m with zero step or overhang.
+            Vector3 rampUp = Quaternion.Euler(0f, 0f, zRotAngle) * Vector3.up;
+            Vector3 slabTopCenter = new Vector3((sidewalkEdgeX + streetEdgeX) * 0.5f, (sidewalkTopY + streetTopY) * 0.5f, centerZ);
+            Vector3 slabCenter = slabTopCenter - rampUp * (slabThickness * 0.5f);
+
             GameObject rampRoot = new GameObject(name);
             rampRoot.transform.SetParent(parent);
 
             // 1. Inclined Ramp Main Slab (Physical collider enabled for smooth wheelchair / player rolling)
-            GameObject rampSlab = CreateBox(rampRoot.transform, $"{name}_Slab", center, new Vector3(xLen, 0.10f, zWidth), rampSafetyYellow, true);
+            GameObject rampSlab = CreateBox(rampRoot.transform, $"{name}_Slab", slabCenter, new Vector3(slopeLen, slabThickness, zWidth), rampSafetyYellow, true);
             rampSlab.transform.localEulerAngles = new Vector3(0f, 0f, zRotAngle);
 
-            // 2. Flared Transition Side Wings (Border stripes preventing trip hazard on sides)
+            // 2. Flared Transition Side Stripes strictly flush on the sloped top surface
             float halfWidth = zWidth / 2f;
-            GameObject wingSouth = CreateBox(rampRoot.transform, $"{name}_Wing_South", new Vector3(center.x, center.y + 0.002f, center.z - halfWidth + 0.06f), new Vector3(xLen, 0.104f, 0.12f), rampBorderYellow, false);
+            Vector3 stripeTopCenter = slabTopCenter + rampUp * 0.002f;
+            GameObject wingSouth = CreateBox(rampRoot.transform, $"{name}_Wing_South", new Vector3(stripeTopCenter.x, stripeTopCenter.y, centerZ - halfWidth + 0.06f), new Vector3(slopeLen, 0.006f, 0.12f), rampBorderYellow, false);
             wingSouth.transform.localEulerAngles = new Vector3(0f, 0f, zRotAngle);
 
-            GameObject wingNorth = CreateBox(rampRoot.transform, $"{name}_Wing_North", new Vector3(center.x, center.y + 0.002f, center.z + halfWidth - 0.06f), new Vector3(xLen, 0.104f, 0.12f), rampBorderYellow, false);
+            GameObject wingNorth = CreateBox(rampRoot.transform, $"{name}_Wing_North", new Vector3(stripeTopCenter.x, stripeTopCenter.y, centerZ + halfWidth - 0.06f), new Vector3(slopeLen, 0.006f, 0.12f), rampBorderYellow, false);
             wingNorth.transform.localEulerAngles = new Vector3(0f, 0f, zRotAngle);
 
-            // 3. Tactile / Warning Landing Bar at Upper Sidewalk Threshold (Sidewalk junction)
-            float landingX = zRotAngle < 0 ? (center.x - xLen / 2f + 0.06f) : (center.x + xLen / 2f - 0.06f);
-            CreateBox(rampRoot.transform, $"{name}_Landing_Strip", new Vector3(landingX, 0.245f, center.z), new Vector3(0.12f, 0.015f, zWidth), rampBorderYellow, false);
+            // 3. Tactile / Warning Landing Bar flush on top of the sidewalk threshold right before the slope
+            float landingX = descendsEast ? (sidewalkEdgeX - 0.07f) : (sidewalkEdgeX + 0.07f);
+            CreateBox(rampRoot.transform, $"{name}_Landing_Strip", new Vector3(landingX, sidewalkTopY + 0.004f, centerZ), new Vector3(0.14f, 0.008f, zWidth), rampBorderYellow, false);
 
             // 4. Universal International Symbol of Access (ISA - Blue square with white 3D relief wheelchair pictogram)
-            // Precise normal vector and surface offset to prevent clipping or Z-fighting with ramp slab
-            Vector3 rampUp = Quaternion.Euler(0f, 0f, zRotAngle) * Vector3.up;
-            Vector3 slabTopCenter = center + rampUp * 0.050f;
-
+            // Placed flush on the exact true top center of the ramp slab with zero clipping or Z-fighting
             GameObject badgeAnchor = new GameObject($"{name}_ISA_Anchor");
             badgeAnchor.transform.SetParent(rampRoot.transform, false);
-            badgeAnchor.transform.localPosition = slabTopCenter + rampUp * 0.006f;
+            badgeAnchor.transform.localPosition = slabTopCenter + rampUp * 0.005f;
             badgeAnchor.transform.localRotation = Quaternion.Euler(0f, 0f, zRotAngle);
 
             // Enlarged Blue painted square background (0.80m x 0.80m, thickness 0.008m)
@@ -7267,6 +7610,12 @@ namespace MyVirtualCommunity.Environment
             box.transform.localRotation = Quaternion.identity;
             box.transform.localScale = size;
             SetColor(box, color, smoothness);
+            // Disable shadow casting on small/decorative trim to cut GPU shadow-pass load on mobile GPUs
+            if (!addCollider || (size.x < 0.45f && size.y < 0.45f && size.z < 0.45f))
+            {
+                var rend = box.GetComponent<Renderer>();
+                if (rend != null) rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
             if (!addCollider)
             {
                 var col = box.GetComponent<Collider>();
@@ -7284,6 +7633,11 @@ namespace MyVirtualCommunity.Environment
             box.transform.localEulerAngles = eulerAngles;
             box.transform.localScale = size;
             SetColor(box, color, smoothness);
+            if (!addCollider || (size.x < 0.45f && size.y < 0.45f && size.z < 0.45f))
+            {
+                var rend = box.GetComponent<Renderer>();
+                if (rend != null) rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
             if (!addCollider)
             {
                 var col = box.GetComponent<Collider>();
@@ -7301,6 +7655,11 @@ namespace MyVirtualCommunity.Environment
             cyl.transform.localRotation = Quaternion.identity;
             cyl.transform.localScale = size;
             SetColor(cyl, color, smoothness);
+            if (!addCollider || (size.x < 0.45f && size.y < 0.45f && size.z < 0.45f))
+            {
+                var rend = cyl.GetComponent<Renderer>();
+                if (rend != null) rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
             if (!addCollider)
             {
                 var col = cyl.GetComponent<Collider>();
@@ -7318,6 +7677,11 @@ namespace MyVirtualCommunity.Environment
             sphere.transform.localRotation = Quaternion.identity;
             sphere.transform.localScale = size;
             SetColor(sphere, color, smoothness);
+            if (!addCollider || (size.x < 0.55f && size.y < 0.55f && size.z < 0.55f))
+            {
+                var rend = sphere.GetComponent<Renderer>();
+                if (rend != null) rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
             if (!addCollider)
             {
                 var col = sphere.GetComponent<Collider>();

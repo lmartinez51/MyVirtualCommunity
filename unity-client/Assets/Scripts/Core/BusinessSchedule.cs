@@ -37,6 +37,7 @@ namespace MyVirtualCommunity.Core
 
     /// <summary>
     /// Business schedule configuration.
+    /// Supports both uniform daily hours and per-day split/overnight schedules.
     /// </summary>
     [System.Serializable]
     public class BusinessScheduleInfo
@@ -46,12 +47,39 @@ namespace MyVirtualCommunity.Core
         public string timeZone = "America/Ciudad_Juarez";
         public int[] operatingDays = new int[] { 1, 2, 3, 4, 5, 6 }; // Mon-Sat
         public BusinessOperatingHours hours = new BusinessOperatingHours(9, 0, 18, 0);
+        public Dictionary<int, BusinessOperatingHours[]> dailyWindows = null;
         public int lastEntryCutoffMinutes = 15;
 
         public BusinessScheduleInfo(string id, string name)
         {
             this.businessId = id;
             this.name = name;
+        }
+
+        public static BusinessScheduleInfo CreateWingSpotSchedule()
+        {
+            var info = new BusinessScheduleInfo("restaurant:wing-spot", "Wing Spot Gómez Morín");
+            info.operatingDays = new int[] { 0, 1, 2, 3, 4, 5, 6 };
+            info.hours = new BusinessOperatingHours(12, 0, 3, 0);
+            info.lastEntryCutoffMinutes = 15;
+            info.dailyWindows = new Dictionary<int, BusinessOperatingHours[]>
+            {
+                // Sunday: 3 PM - 12 AM
+                { 0, new[] { new BusinessOperatingHours(15, 0, 24, 0) } },
+                // Monday: 3 PM - 12 AM
+                { 1, new[] { new BusinessOperatingHours(15, 0, 24, 0) } },
+                // Tuesday: 3 PM - 12 AM
+                { 2, new[] { new BusinessOperatingHours(15, 0, 24, 0) } },
+                // Wednesday: 12-1 AM & 12 PM-1 AM (next day)
+                { 3, new[] { new BusinessOperatingHours(0, 0, 1, 0), new BusinessOperatingHours(12, 0, 1, 0) } },
+                // Thursday: 12 PM - 3 AM (next day)
+                { 4, new[] { new BusinessOperatingHours(12, 0, 3, 0) } },
+                // Friday: 12 PM - 3 AM (next day)
+                { 5, new[] { new BusinessOperatingHours(12, 0, 3, 0) } },
+                // Saturday: 12 PM - 3 AM (next day)
+                { 6, new[] { new BusinessOperatingHours(12, 0, 3, 0) } }
+            };
+            return info;
         }
     }
 
@@ -63,7 +91,7 @@ namespace MyVirtualCommunity.Core
     {
         private static readonly Dictionary<string, BusinessScheduleInfo> registry = new Dictionary<string, BusinessScheduleInfo>()
         {
-            { "restaurant:wing-spot", new BusinessScheduleInfo("restaurant:wing-spot", "Wing Spot Gómez Morín") },
+            { "restaurant:wing-spot", BusinessScheduleInfo.CreateWingSpotSchedule() },
             { "restaurant:pasteleria-tia-lupe", new BusinessScheduleInfo("restaurant:pasteleria-tia-lupe", "Pastelerías La Tía Lupe") }
         };
 
@@ -168,6 +196,97 @@ namespace MyVirtualCommunity.Core
             return EvaluateStatus(businessId, GetAuthoritativeTimeUtc());
         }
 
+        private static BusinessOperatingHours[] GetWindowsForDay(BusinessScheduleInfo schedule, int dayOfWeek)
+        {
+            if (schedule.dailyWindows != null)
+            {
+                return schedule.dailyWindows.TryGetValue(dayOfWeek, out var wins) && wins != null
+                    ? wins
+                    : Array.Empty<BusinessOperatingHours>();
+            }
+            if (schedule.operatingDays != null)
+            {
+                for (int i = 0; i < schedule.operatingDays.Length; i++)
+                {
+                    if (schedule.operatingDays[i] == dayOfWeek)
+                    {
+                        return new[] { schedule.hours };
+                    }
+                }
+            }
+            return Array.Empty<BusinessOperatingHours>();
+        }
+
+        private static string FormatHourMinute(int hour, int minute)
+        {
+            int normH = hour == 24 ? 0 : hour;
+            return $"{normH:D2}:{minute:D2}";
+        }
+
+        private static BusinessOperationalState EvaluateDetail(
+            BusinessScheduleInfo schedule,
+            DateTime utcTime,
+            out BusinessOperatingHours activeWindow)
+        {
+            DateTime localTime = ConvertToLocalBusinessTime(utcTime, schedule.timeZone);
+            int dayOfWeek = (int)localTime.DayOfWeek;
+            int prevDay = (dayOfWeek + 6) % 7;
+            int timeOfDayMinutes = localTime.Hour * 60 + localTime.Minute;
+            int cutoff = schedule.lastEntryCutoffMinutes;
+
+            var todayWindows = GetWindowsForDay(schedule, dayOfWeek);
+            var prevWindows = GetWindowsForDay(schedule, prevDay);
+            activeWindow = todayWindows.Length > 0 ? todayWindows[0] : schedule.hours;
+
+            // 1. Check spillover from yesterday's overnight windows (close < open, e.g. 12:00 -> 03:00)
+            for (int i = 0; i < prevWindows.Length; i++)
+            {
+                var win = prevWindows[i];
+                int openMin = win.openHour * 60 + win.openMinute;
+                int closeMin = win.closeHour * 60 + win.closeMinute;
+                if (closeMin < openMin && closeMin > 0 && timeOfDayMinutes < closeMin)
+                {
+                    activeWindow = win;
+                    int cutoffMin = Math.Max(0, closeMin - cutoff);
+                    return timeOfDayMinutes >= cutoffMin
+                        ? BusinessOperationalState.ClosingSoon
+                        : BusinessOperationalState.Open;
+                }
+            }
+
+            // 2. Check today's windows (same-day and overnight start)
+            for (int i = 0; i < todayWindows.Length; i++)
+            {
+                var win = todayWindows[i];
+                int openMin = win.openHour * 60 + win.openMinute;
+                int closeMin = win.closeHour * 60 + win.closeMinute;
+                if (closeMin < openMin)
+                {
+                    if (timeOfDayMinutes >= openMin)
+                    {
+                        activeWindow = win;
+                        int minsUntilClose = (1440 - timeOfDayMinutes) + closeMin;
+                        return minsUntilClose <= cutoff
+                            ? BusinessOperationalState.ClosingSoon
+                            : BusinessOperationalState.Open;
+                    }
+                }
+                else
+                {
+                    if (timeOfDayMinutes >= openMin && timeOfDayMinutes < closeMin)
+                    {
+                        activeWindow = win;
+                        int cutoffMin = closeMin - cutoff;
+                        return timeOfDayMinutes >= cutoffMin
+                            ? BusinessOperationalState.ClosingSoon
+                            : BusinessOperationalState.Open;
+                    }
+                }
+            }
+
+            return BusinessOperationalState.Closed;
+        }
+
         /// <summary>
         /// Evaluates business operational status at a specific time.
         /// </summary>
@@ -175,38 +294,7 @@ namespace MyVirtualCommunity.Core
         {
             var schedule = GetSchedule(businessId);
             if (schedule == null) return BusinessOperationalState.Open;
-
-            DateTime localTime = ConvertToLocalBusinessTime(utcTime, schedule.timeZone);
-            int dayOfWeek = (int)localTime.DayOfWeek; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-
-            bool isOperatingDay = false;
-            if (schedule.operatingDays != null)
-            {
-                for (int i = 0; i < schedule.operatingDays.Length; i++)
-                {
-                    if (schedule.operatingDays[i] == dayOfWeek)
-                    {
-                        isOperatingDay = true;
-                        break;
-                    }
-                }
-            }
-            if (!isOperatingDay) return BusinessOperationalState.Closed;
-
-            int timeOfDayMinutes = localTime.Hour * 60 + localTime.Minute;
-            int openMinutes = schedule.hours.openHour * 60 + schedule.hours.openMinute;
-            int closeMinutes = schedule.hours.closeHour * 60 + schedule.hours.closeMinute;
-            int cutoffMinutes = closeMinutes - schedule.lastEntryCutoffMinutes;
-
-            if (timeOfDayMinutes < openMinutes || timeOfDayMinutes >= closeMinutes)
-            {
-                return BusinessOperationalState.Closed;
-            }
-            if (timeOfDayMinutes >= cutoffMinutes && timeOfDayMinutes < closeMinutes)
-            {
-                return BusinessOperationalState.ClosingSoon;
-            }
-            return BusinessOperationalState.Open;
+            return EvaluateDetail(schedule, utcTime, out _);
         }
 
         /// <summary>
@@ -231,9 +319,9 @@ namespace MyVirtualCommunity.Core
                 return true;
             }
 
-            var status = EvaluateStatus(businessId, utcTime);
-            string closeStr = $"{schedule.hours.closeHour:D2}:{schedule.hours.closeMinute:D2}";
-            string openStr = $"{schedule.hours.openHour:D2}:{schedule.hours.openMinute:D2}";
+            var status = EvaluateDetail(schedule, utcTime, out var activeWindow);
+            string openStr = FormatHourMinute(activeWindow.openHour, activeWindow.openMinute);
+            string closeStr = FormatHourMinute(activeWindow.closeHour, activeWindow.closeMinute);
 
             if (status == BusinessOperationalState.Open)
             {

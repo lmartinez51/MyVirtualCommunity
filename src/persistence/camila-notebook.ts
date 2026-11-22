@@ -122,8 +122,12 @@ export class CamilaNotebook {
     }
   }
 
-  /** Short text excerpt sent to the model each cycle (newest first). */
-  public toExcerpt(maxDiaryEntries = 10, maxHypotheses = 5): string {
+  /**
+   * Short factual excerpt sent to the model each cycle.
+   * Compacts diary lines to their first factual action/observation clause so
+   * the model remembers WHAT happened without echoing its own verbal catchphrases.
+   */
+  public toExcerpt(maxDiaryEntries = 8, maxHypotheses = 5): string {
     const diary = this.data.diary.slice(-maxDiaryEntries);
     const open = this.data.hypotheses.filter((h) => h.status === 'open').slice(-maxHypotheses);
     const lines: string[] = [];
@@ -138,9 +142,22 @@ export class CamilaNotebook {
             .join('; ')
       );
     }
-    for (const e of diary) lines.push(`- [${e.timestamp}] ${e.text}`);
+    for (const e of diary) {
+      const compact = this.compactDiaryLine(e.text);
+      lines.push(`- [${e.timestamp}] ${compact}`);
+    }
     for (const h of open) lines.push(`Hipótesis abierta: ${h.text}`);
     return lines.join('\n');
+  }
+
+  private compactDiaryLine(text: string): string {
+    const trimmed = text.trim();
+    // Keep only the concise factual head (before verbose reasoning sentences) to prevent self-echoing catchphrases.
+    const dotIdx = trimmed.indexOf('. ');
+    if (dotIdx > 0 && dotIdx <= 115) {
+      return trimmed.slice(0, dotIdx + 1);
+    }
+    return trimmed.length > 115 ? `${trimmed.slice(0, 112)}...` : trimmed;
   }
 
   public addDiaryEntry(text: string, timestamp: string, placeId?: string): void {
@@ -198,10 +215,15 @@ export class CamilaNotebook {
   }
 
   public addHypothesis(text: string, timestamp: string): CamilaHypothesis {
+    const trimmed = text.trim();
+    const existing = this.findDuplicateOpenHypothesis(trimmed);
+    if (existing) {
+      return existing;
+    }
     this.hypothesisCounter += 1;
     const hypothesis: CamilaHypothesis = {
       id: `hyp:${Date.now()}-${this.hypothesisCounter}`,
-      text,
+      text: trimmed,
       createdAt: timestamp,
       status: 'open',
     };
@@ -211,6 +233,81 @@ export class CamilaNotebook {
       hypotheses: [...this.data.hypotheses, hypothesis].slice(-CAMILA_NOTEBOOK_MAX_HYPOTHESES),
     };
     return hypothesis;
+  }
+
+  /**
+   * Resolves any open hypotheses whose text mentions at least two of the given
+   * keywords (or a direct object keyword pair) once Camila physically tests them.
+   */
+  public resolveMatchingHypotheses(
+    keywords: readonly string[],
+    status: 'confirmed' | 'refuted',
+    timestamp: string
+  ): number {
+    const normalizedKeys = keywords
+      .map((k) => this.normalizeForDedup(k))
+      .filter((k) => k.length >= 3);
+    if (normalizedKeys.length === 0) return 0;
+
+    let resolvedCount = 0;
+    const updated = this.data.hypotheses.map((h) => {
+      if (h.status !== 'open') return h;
+      const norm = this.normalizeForDedup(h.text);
+      let hits = 0;
+      for (const kw of normalizedKeys) {
+        if (norm.includes(kw)) hits += 1;
+      }
+      const threshold = normalizedKeys.length >= 2 ? 2 : 1;
+      if (hits >= threshold) {
+        resolvedCount += 1;
+        return { ...h, status };
+      }
+      return h;
+    });
+
+    if (resolvedCount > 0) {
+      this.data = {
+        ...this.data,
+        updatedAt: timestamp,
+        hypotheses: updated,
+      };
+    }
+    return resolvedCount;
+  }
+
+  private findDuplicateOpenHypothesis(candidateText: string): CamilaHypothesis | null {
+    const candidateNorm = this.normalizeForDedup(candidateText);
+    if (!candidateNorm) return null;
+    const candidateTokens = new Set(candidateNorm.split(' ').filter((w) => w.length >= 3));
+
+    for (const h of this.data.hypotheses) {
+      if (h.status !== 'open') continue;
+      const existingNorm = this.normalizeForDedup(h.text);
+      if (existingNorm === candidateNorm) return h;
+
+      if (candidateTokens.size >= 4) {
+        const existingTokens = new Set(existingNorm.split(' ').filter((w) => w.length >= 3));
+        let intersection = 0;
+        for (const t of candidateTokens) {
+          if (existingTokens.has(t)) intersection += 1;
+        }
+        const union = candidateTokens.size + existingTokens.size - intersection;
+        if (union > 0 && intersection / union >= 0.72) {
+          return h;
+        }
+      }
+    }
+    return null;
+  }
+
+  private normalizeForDedup(text: string): string {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   public resolveHypothesis(id: string, status: 'confirmed' | 'refuted', timestamp: string): void {
