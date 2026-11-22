@@ -693,6 +693,50 @@ export class WorldHttpServer {
             }
             return;
           }
+
+          // Milestone 94 Phase 2a: POST /api/npc/:agentId/object-interaction
+          // Reports the physical result of a dispatched Camila push (or its
+          // failure) from Unity, so World Core commits the object's new
+          // position. Only agent:camila-npc can report; the runtime only
+          // commits when a matching push is pending.
+          if (method === 'POST' && action === 'object-interaction') {
+            try {
+              const body = (await this.readJsonBody(req)) ?? {};
+              const targetObjectId =
+                typeof body.targetObjectId === 'string' ? body.targetObjectId : undefined;
+              const rawStatus = typeof body.status === 'string' ? body.status : 'failed';
+              const status = rawStatus === 'applied' ? 'applied' : 'failed';
+              const rawPos = body.newPosition as { x?: unknown; y?: unknown; z?: unknown } | null;
+              const newPosition =
+                rawPos !== null &&
+                typeof rawPos === 'object' &&
+                typeof rawPos.x === 'number' &&
+                typeof rawPos.y === 'number' &&
+                typeof rawPos.z === 'number'
+                  ? { x: rawPos.x, y: rawPos.y, z: rawPos.z }
+                  : undefined;
+
+              const result = await this.controller.completeObjectInteraction(
+                agentId,
+                targetObjectId,
+                status,
+                newPosition
+              );
+              this.sendJson(res, 200, {
+                success: result.success,
+                result,
+              });
+            } catch (err) {
+              this.sendJson(res, 500, {
+                success: false,
+                error: {
+                  code: 'object-interaction-error',
+                  message: (err as Error).message,
+                },
+              });
+            }
+            return;
+          }
         }
       }
 

@@ -171,6 +171,13 @@ export interface NpcActionProposal {
   readonly destinationPlaceId?: string;
   /** Milestone 94: probe object id for 'look_at' / Phase 2 interact actions. */
   readonly targetObjectId?: string;
+  /** Milestone 94 Phase 2a: place id a pushed object should roll toward ('push_object'). */
+  readonly pushTowardsPlaceId?: string;
+  /**
+   * Milestone 94 Phase 2a (prompt v3): Camila's own hypothesis, only if one
+   * occurred to her. Passed through verbatim; the runtime never invents one.
+   */
+  readonly hypothesis?: string;
   readonly parameters?: Record<string, unknown>;
   readonly reasoningContext?: string;
   readonly requestedAt: string;

@@ -150,11 +150,28 @@ export class CamilaCognitionProvider implements NpcCognitionProvider {
         throw new Error(`Camila chose unknown object "${decision.targetObjectId}"`);
       }
     }
+    if (decision.actionType === 'push_object') {
+      if (!findProbeObjectById(decision.targetObjectId ?? '')) {
+        throw new Error(`Camila chose unknown object "${decision.targetObjectId}"`);
+      }
+      if (decision.pushTowardsPlaceId !== undefined) {
+        const knownPlace = (perception.nearbyPlaces ?? []).some(
+          (p) => p.id === decision.pushTowardsPlaceId
+        );
+        if (!knownPlace) {
+          throw new Error(
+            `Camila chose unknown push direction place "${decision.pushTowardsPlaceId}"`
+          );
+        }
+      }
+    }
 
     const proposal: NpcActionProposal = {
       actionType: decision.actionType,
       destinationPlaceId: decision.destinationPlaceId,
       targetObjectId: decision.targetObjectId,
+      pushTowardsPlaceId: decision.pushTowardsPlaceId,
+      hypothesis: decision.hypothesis,
       reasoningContext: decision.reasoningContext,
       requestedAt: perception.worldTime,
     };

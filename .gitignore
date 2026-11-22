@@ -5,3 +5,8 @@ data/
 .DS_Store
 Builds/
 logs/
+# Entorno local: el .env real (con MODEL_API_KEY) NUNCA se sube a GitHub.
+.env
+.env.local
+.env.*
+!.env.example

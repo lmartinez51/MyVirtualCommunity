@@ -422,6 +422,53 @@ namespace MyVirtualCommunity.Core
         }
 
         /// <summary>
+        /// Milestone 94 Phase 2a: Reports the physical result of a dispatched Camila
+        /// push (or its failure) to World Core (POST /api/npc/:agentId/object-interaction)
+        /// so the object's new position is committed — or nothing is committed on failure.
+        /// Floats are formatted with InvariantCulture so a comma-decimal locale never
+        /// produces invalid JSON.
+        /// </summary>
+        public IEnumerator ReportObjectInteraction(
+            string agentId,
+            string targetObjectId,
+            string status = "applied",
+            Vector3 newPosition = default,
+            string message = null,
+            Action<bool> onComplete = null)
+        {
+            string url = $"{serverBaseUrl}/api/npc/{agentId}/object-interaction";
+            string safeTarget = (targetObjectId ?? "").Replace("\"", "");
+            string safeStatus = (status ?? "failed").Replace("\"", "");
+            string safeMsg = (message ?? "").Replace("\"", "'");
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            string payload = $"{{\"targetObjectId\":\"{safeTarget}\",\"status\":\"{safeStatus}\",\"newPosition\":{{\"x\":{newPosition.x.ToString(inv)},\"y\":{newPosition.y.ToString(inv)},\"z\":{newPosition.z.ToString(inv)}}},\"message\":\"{safeMsg}\"}}";
+
+            bool succeeded = false;
+            using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
+            {
+                byte[] bodyRaw = Encoding.UTF8.GetBytes(payload);
+                req.uploadHandler = new UploadHandlerRaw(bodyRaw);
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/json");
+                req.timeout = 10;
+
+                yield return req.SendWebRequest();
+
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    succeeded = true;
+                    StartCoroutine(FetchNpcDiagnostics(agentId));
+                }
+                else
+                {
+                    Debug.LogWarning($"[WorldCoreClient] ReportObjectInteraction failed for {agentId} ({req.responseCode}): {req.error}");
+                }
+            }
+
+            onComplete?.Invoke(succeeded);
+        }
+
+        /// <summary>
         /// Parses the authoritative simulation world time received from World Core.
         /// Returns null if not yet connected or hydrated.
         /// </summary>
