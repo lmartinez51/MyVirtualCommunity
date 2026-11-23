@@ -57,7 +57,7 @@ namespace MyVirtualCommunity
             Camera mainCam = Camera.main;
             if (mainCam != null)
             {
-                mainCam.farClipPlane = 165f;
+                mainCam.farClipPlane = 240f;
                 mainCam.allowHDR = false;
                 mainCam.allowMSAA = false;
             }
