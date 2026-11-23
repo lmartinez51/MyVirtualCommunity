@@ -113,6 +113,9 @@ export class MetaModelApiAdapter implements MetaModelPort {
             { role: 'user', content: userContent },
           ],
           temperature: context.temperature ?? 0.7,
+          ...(context.frequencyPenalty !== undefined
+            ? { frequency_penalty: context.frequencyPenalty }
+            : {}),
           reasoning_effort: context.reasoningEffort ?? 'minimal',
         }),
         signal: controller.signal,

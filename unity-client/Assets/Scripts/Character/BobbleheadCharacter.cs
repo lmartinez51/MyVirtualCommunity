@@ -32,6 +32,8 @@ namespace MyVirtualCommunity.Character
         public Transform RightArmRoot { get; private set; }
         public Transform LeftForearm { get; private set; }
         public Transform RightForearm { get; private set; }
+        public Transform LeftHand { get; private set; }
+        public Transform RightHand { get; private set; }
         public Transform LeftLegRoot { get; private set; }
         public Transform RightLegRoot { get; private set; }
         public Transform LeftLowerLeg { get; private set; }
@@ -617,6 +619,7 @@ namespace MyVirtualCommunity.Character
 
             // Articulated 4-Finger Sculpted Hand with contoured palm
             var hand = CreatePart(forearm, $"Hand{sfx}", new Vector3(0f, -0.105f, 0f));
+            if (isLeft) LeftHand = hand; else RightHand = hand;
             var handMesh = TrackMesh(BobbleheadGeometry.CreateStylizedHand(isLeft));
             AttachMeshRenderer(hand.gameObject, handMesh, skinMat);
 

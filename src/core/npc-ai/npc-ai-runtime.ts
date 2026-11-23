@@ -33,12 +33,12 @@
 import type { WorldState } from '../world-state.js';
 import type { WorldSessionController, CommandDispatchResult } from '../../server/session-controller.js';
 import { NpcMemoryStore } from './npc-memory.js';
-import { deriveNpcPerception } from './npc-perception.js';
+import { deriveNpcPerception, type CamilaLiveSensorySnapshot } from './npc-perception.js';
 import { DeterministicNpcCognitionProvider } from './providers/deterministic-cognition-provider.js';
 import { createMoveToPlaceIntent, dispatchAgentIntent } from '../agent-intent.js';
 import type { RuntimeTraversalCoordinator } from '../traversal-coordinator.js';
 import { CAMILA_AGENT_ID, isCamilaActionAllowed, isCamilaActionEnabled } from './camila-config.js';
-import { findProbeObjectById, findProbeObjectsByPlace } from '../camila-probe-objects.js';
+import { CAMILA_PROBE_OBJECTS, findProbeObjectById, findProbeObjectsByPlace } from '../camila-probe-objects.js';
 import {
   CamilaProbeObjectState,
   CAMILA_OBJECT_POSITION_BOUNDS,
@@ -78,6 +78,10 @@ const VALID_ACTION_TYPES: readonly NpcActionType[] = [
   'pick_up_object',
   'carry_object',
   'drop_object',
+  'scoop',
+  'pour_or_apply',
+  'sit',
+  'stand_up',
 ];
 
 export interface NpcAiRuntimeOptions {
@@ -115,13 +119,16 @@ export interface CamilaObjectPushResult {
   readonly newPosition?: UnityPosition;
 }
 
-/** A push the runtime dispatched and is waiting for Unity to report back. */
+/** An object interaction (push / pick_up / drop) waiting for Unity's physical report. */
 export interface PendingCamilaPush {
   readonly agentId: string;
+  readonly interactionType: 'push' | 'pick_up' | 'drop';
   readonly targetObjectId: string;
   readonly fromPosition: UnityPosition;
   readonly expectedPosition: UnityPosition;
   readonly pushTowardsPlaceId?: string;
+  readonly pushTowardsObjectId?: string;
+  readonly nearObjectId?: string;
   /** Camila's own hypothesis from her decision, if she offered one. */
   readonly hypothesis?: string;
   readonly worldTime: string;
@@ -153,7 +160,20 @@ export class NpcAiRuntime {
     'kickable',
     'rollable',
   ];
+  /** Affordances that make an object pick-up-able (Phase 2b). 'stationary' objects never are. */
+  private static readonly CARRIABLE_AFFORDANCES: readonly string[] = [
+    'carriable',
+    'movable',
+    'foldable',
+  ];
   private pendingPushByAgent = new Map<string, PendingCamilaPush>();
+  private heldCyclesByAgent = new Map<string, number>();
+  private heldOriginPlaceByAgent = new Map<string, string>();
+  private latestLivePlayerContext?: {
+    playerPosition?: UnityPosition;
+    playerHeldObjectId?: string | null;
+    camilaPosition?: UnityPosition;
+  };
 
   constructor(options: NpcAiRuntimeOptions) {
     this.controller = options.controller;
@@ -202,9 +222,116 @@ export class NpcAiRuntime {
     return this.memoryStore;
   }
 
+  private buildLiveSensorySnapshot(agentId?: string): CamilaLiveSensorySnapshot {
+    const id = agentId ?? CAMILA_AGENT_ID;
+    const heldId = this.objectState.getHeldObjectId(id);
+    return {
+      objectState: this.objectState,
+      notebook: this.notebook,
+      playerPosition: this.latestLivePlayerContext?.playerPosition,
+      playerHeldObjectId: this.latestLivePlayerContext?.playerHeldObjectId,
+      camilaPosition: this.latestLivePlayerContext?.camilaPosition,
+      heldCycles: heldId ? (this.heldCyclesByAgent.get(id) ?? 0) : undefined,
+      heldOriginPlaceId: heldId ? this.heldOriginPlaceByAgent.get(id) : undefined,
+    };
+  }
+
+  /** Updates the latest live Unity proximity snapshot (player position / held item / Camila position). */
+  public updateLiveSensoryContext(context?: {
+    playerPosition?: UnityPosition;
+    playerHeldObjectId?: string | null;
+    camilaPosition?: UnityPosition;
+  }): void {
+    if (!context) return;
+    this.latestLivePlayerContext = {
+      playerPosition: context.playerPosition ?? this.latestLivePlayerContext?.playerPosition,
+      playerHeldObjectId:
+        context.playerHeldObjectId !== undefined
+          ? context.playerHeldObjectId
+          : this.latestLivePlayerContext?.playerHeldObjectId,
+      camilaPosition: context.camilaPosition ?? this.latestLivePlayerContext?.camilaPosition,
+    };
+  }
+
+  /**
+   * Living World: records when the human Player moves, kicks, drops, or wheels
+   * a tangible InteractiveWorldProp in Unity so Camila perceives the change.
+   */
+  public syncPlayerMovedObject(
+    objectId: string,
+    newPosition: UnityPosition,
+    worldTime: string,
+    physicalStatePatch?: Partial<import('../camila-probe-object-state.js').ProbeObjectPhysicalState>
+  ): { success: boolean; changed: boolean; placeId?: string; message: string } {
+    const object = findProbeObjectById(objectId);
+    if (!object) {
+      return { success: false, changed: false, message: `Unknown probe object "${objectId}".` };
+    }
+    const hasPos = isValidObjectPosition(newPosition);
+    const hasStatePatch = Boolean(physicalStatePatch && Object.keys(physicalStatePatch).length > 0);
+    if (!hasPos && !hasStatePatch) {
+      return { success: false, changed: false, message: `Invalid position or state patch for "${objectId}".` };
+    }
+
+    let movedDist = 0;
+    const prevPlace = this.objectState.getEffectivePlaceId(objectId) ?? object.placeId;
+    if (hasPos) {
+      const previous = this.objectState.getPosition(objectId);
+      movedDist = previous
+        ? Math.hypot(newPosition.x - previous.x, newPosition.z - previous.z)
+        : 0;
+      if (movedDist >= 0.35) {
+        this.objectState.setPosition(objectId, newPosition);
+        if (this.objectState.getHeldObjectId(CAMILA_AGENT_ID) === objectId) {
+          this.objectState.clearHeldObject(CAMILA_AGENT_ID);
+        }
+      }
+    }
+
+    if (hasStatePatch && physicalStatePatch) {
+      this.objectState.setPhysicalState(objectId, physicalStatePatch);
+    }
+
+    if (movedDist < 0.35 && !hasStatePatch) {
+      return { success: true, changed: false, placeId: prevPlace, message: 'No significant movement.' };
+    }
+
+    const newPlace = this.objectState.getEffectivePlaceId(objectId) ?? object.placeId;
+    try {
+      this.objectState.save();
+    } catch {
+      // Best-effort persistence for player prop sync
+    }
+
+    if (movedDist >= 0.35) {
+      const placeChangedNote =
+        newPlace !== prevPlace ? ` (ahora está en ${newPlace}, antes en ${prevPlace})` : ` en ${newPlace}`;
+      this.objectState.recordWorldChange({
+        timestamp: worldTime,
+        kind: 'player_moved',
+        objectId,
+        summary: `Alguien movió "${object.name}" (${object.id}) ${movedDist.toFixed(1)}m${placeChangedNote}.`,
+      });
+    } else if (hasStatePatch) {
+      this.objectState.recordWorldChange({
+        timestamp: worldTime,
+        kind: 'player_moved',
+        objectId,
+        summary: `Alguien cambió el estado de "${object.name}" (${object.id}) en ${newPlace}.`,
+      });
+    }
+
+    return {
+      success: true,
+      changed: true,
+      placeId: newPlace,
+      message: `Synced "${objectId}" at ${newPlace}.`,
+    };
+  }
+
   public getPerception(agentId: string): NpcPerception {
     const state = (this.controller as any).state as WorldState;
-    return deriveNpcPerception(state, agentId, this.memoryStore);
+    return deriveNpcPerception(state, agentId, this.memoryStore, this.buildLiveSensorySnapshot());
   }
 
   public getDiagnostics(agentId: string): NpcAiDiagnostics {
@@ -221,13 +348,33 @@ export class NpcAiRuntime {
   /**
    * Executes a single AI cognition cycle for the target agent.
    */
-  public async runCycle(agentId: string): Promise<NpcAiCycleResult> {
+  public async runCycle(
+    agentId: string,
+    liveContext?: {
+      playerPosition?: UnityPosition;
+      playerHeldObjectId?: string | null;
+      camilaPosition?: UnityPosition;
+    }
+  ): Promise<NpcAiCycleResult> {
     const startTime = Date.now();
     this.cycleCounter += 1;
     const cycleId = `cycle:${agentId}:${Date.now()}-${this.cycleCounter}`;
 
+    if (liveContext) {
+      this.updateLiveSensoryContext(liveContext);
+    }
+
+    if (agentId === CAMILA_AGENT_ID && this.objectState.getHeldObjectId(agentId)) {
+      this.heldCyclesByAgent.set(agentId, (this.heldCyclesByAgent.get(agentId) ?? 0) + 1);
+    }
+
     const state = (this.controller as any).state as WorldState;
-    const perception = deriveNpcPerception(state, agentId, this.memoryStore);
+    const perception = deriveNpcPerception(
+      state,
+      agentId,
+      this.memoryStore,
+      this.buildLiveSensorySnapshot(agentId)
+    );
     const worldTime = perception.worldTime;
     const goal = this.getGoalForAgent(agentId);
     const provider = this.getProviderForAgent(agentId);
@@ -400,6 +547,11 @@ export class NpcAiRuntime {
       });
       const success = dispatchResult.success;
       if (success) {
+        // Automatically stand up if Camila was seated before walking away
+        if (this.objectState.getSittingState(agentId)) {
+          this.objectState.clearSittingState(agentId);
+          try { this.objectState.save(); } catch { /* best-effort */ }
+        }
         this.activeTraversalStartedWallMs.set(agentId, Date.now());
         this.memoryStore.addMemory({
           type: 'discovery',
@@ -407,6 +559,7 @@ export class NpcAiRuntime {
           timestamp: worldTime,
           placeId: destination,
         });
+        this.appendCamilaDiary(agentId, worldTime, `Me dirijo a ${destination}. ${proposal.reasoningContext ?? ''}`);
       }
       const result: NpcAiCycleResult = {
         cycleId,
@@ -426,7 +579,6 @@ export class NpcAiRuntime {
         durationMs: Date.now() - startTime,
       };
       this.lastCycleByAgent.set(agentId, result);
-      this.appendCamilaDiary(agentId, worldTime, `Me dirijo a ${destination}. ${proposal.reasoningContext ?? ''}`);
       return result;
     }
 
@@ -471,9 +623,11 @@ export class NpcAiRuntime {
     }
 
     // Phase 2a: push_object is executed (gate already enforced above).
-    // pick_up / carry / drop are still Phase 2b: types exist, execution does not.
     if (proposal.actionType === 'push_object') {
       const pushResult = this.executePushObject(agentId, perception, proposal, worldTime);
+      if (pushResult.status !== 'executed') {
+        this.recordCamilaRejectionFeedback(agentId, worldTime, perception, proposal, pushResult.error);
+      }
       const result: NpcAiCycleResult = {
         cycleId,
         agentId,
@@ -489,11 +643,128 @@ export class NpcAiRuntime {
       return result;
     }
 
-    if (
-      proposal.actionType === 'pick_up_object' ||
-      proposal.actionType === 'carry_object' ||
-      proposal.actionType === 'drop_object'
-    ) {
+    // Phase 2b ("Manos Libres"): pick_up_object and drop_object are now executed!
+    if (proposal.actionType === 'pick_up_object') {
+      const pickResult = this.executePickUpObject(agentId, perception, proposal, worldTime);
+      if (pickResult.status !== 'executed') {
+        this.recordCamilaRejectionFeedback(agentId, worldTime, perception, proposal, pickResult.error);
+      }
+      const result: NpcAiCycleResult = {
+        cycleId,
+        agentId,
+        worldTime,
+        status: pickResult.status,
+        perception,
+        proposal,
+        commandDispatched: pickResult.commandDispatched,
+        error: pickResult.error,
+        durationMs: Date.now() - startTime,
+      };
+      this.lastCycleByAgent.set(agentId, result);
+      return result;
+    }
+
+    if (proposal.actionType === 'drop_object') {
+      const dropResult = this.executeDropObject(agentId, perception, proposal, worldTime);
+      if (dropResult.status !== 'executed') {
+        this.recordCamilaRejectionFeedback(agentId, worldTime, perception, proposal, dropResult.error);
+      }
+      const result: NpcAiCycleResult = {
+        cycleId,
+        agentId,
+        worldTime,
+        status: dropResult.status,
+        perception,
+        proposal,
+        commandDispatched: dropResult.commandDispatched,
+        error: dropResult.error,
+        durationMs: Date.now() - startTime,
+      };
+      this.lastCycleByAgent.set(agentId, result);
+      return result;
+    }
+
+    if (proposal.actionType === 'scoop') {
+      const scoopResult = this.executeScoop(agentId, perception, proposal, worldTime);
+      if (scoopResult.status !== 'executed') {
+        this.recordCamilaRejectionFeedback(agentId, worldTime, perception, proposal, scoopResult.error);
+      }
+      const result: NpcAiCycleResult = {
+        cycleId,
+        agentId,
+        worldTime,
+        status: scoopResult.status,
+        perception,
+        proposal,
+        commandDispatched: scoopResult.commandDispatched,
+        error: scoopResult.error,
+        durationMs: Date.now() - startTime,
+      };
+      this.lastCycleByAgent.set(agentId, result);
+      return result;
+    }
+
+    if (proposal.actionType === 'pour_or_apply') {
+      const applyResult = this.executePourOrApply(agentId, perception, proposal, worldTime);
+      if (applyResult.status !== 'executed') {
+        this.recordCamilaRejectionFeedback(agentId, worldTime, perception, proposal, applyResult.error);
+      }
+      const result: NpcAiCycleResult = {
+        cycleId,
+        agentId,
+        worldTime,
+        status: applyResult.status,
+        perception,
+        proposal,
+        commandDispatched: applyResult.commandDispatched,
+        error: applyResult.error,
+        durationMs: Date.now() - startTime,
+      };
+      this.lastCycleByAgent.set(agentId, result);
+      return result;
+    }
+
+    if (proposal.actionType === 'sit') {
+      const sitResult = this.executeSit(agentId, perception, proposal, worldTime);
+      if (sitResult.status !== 'executed') {
+        this.recordCamilaRejectionFeedback(agentId, worldTime, perception, proposal, sitResult.error);
+      }
+      const result: NpcAiCycleResult = {
+        cycleId,
+        agentId,
+        worldTime,
+        status: sitResult.status,
+        perception,
+        proposal,
+        commandDispatched: sitResult.commandDispatched,
+        error: sitResult.error,
+        durationMs: Date.now() - startTime,
+      };
+      this.lastCycleByAgent.set(agentId, result);
+      return result;
+    }
+
+    if (proposal.actionType === 'stand_up') {
+      const standResult = this.executeStandUp(agentId, perception, proposal, worldTime);
+      if (standResult.status !== 'executed') {
+        this.recordCamilaRejectionFeedback(agentId, worldTime, perception, proposal, standResult.error);
+      }
+      const result: NpcAiCycleResult = {
+        cycleId,
+        agentId,
+        worldTime,
+        status: standResult.status,
+        perception,
+        proposal,
+        commandDispatched: standResult.commandDispatched,
+        error: standResult.error,
+        durationMs: Date.now() - startTime,
+      };
+      this.lastCycleByAgent.set(agentId, result);
+      return result;
+    }
+
+    if (proposal.actionType === 'carry_object') {
       const result: NpcAiCycleResult = {
         cycleId,
         agentId,
@@ -503,7 +774,7 @@ export class NpcAiRuntime {
         proposal,
         error: {
           code: 'action-not-implemented-yet',
-          message: `Action "${proposal.actionType}" is unlocked but has no Phase 2 execution yet (Phase 2b: pick up / carry / drop).`,
+          message: `Action "carry_object" is implicit: use pick_up_object then move_to_place to carry an object.`,
         },
         durationMs: Date.now() - startTime,
       };
@@ -681,11 +952,15 @@ export class NpcAiRuntime {
       }
     }
 
-    if (object.placeId !== perception.locationId) {
+    const effectiveObjectPlaceId = this.objectState.getEffectivePlaceId(object.id) ?? object.placeId;
+    if (effectiveObjectPlaceId !== perception.locationId) {
       return rejected(
         'object-not-nearby',
-        `Camila is at "${perception.locationId}" but "${object.name}" (${object.id}) is at "${object.placeId}". She must move_to_place there first; the runtime never moves her automatically.`
+        `Camila is at "${perception.locationId}" but "${object.name}" (${object.id}) is at "${effectiveObjectPlaceId}". She must move_to_place there first; the runtime never moves her automatically.`
       );
+    }
+    if (this.objectState.getHeldObjectId(agentId) === object.id) {
+      return rejected('object-is-held', `Camila is currently holding "${object.id}"; drop it first to push it.`);
     }
     if (!object.affordances.some((a) => NpcAiRuntime.PUSHABLE_AFFORDANCES.includes(a))) {
       return rejected(
@@ -695,7 +970,13 @@ export class NpcAiRuntime {
     }
 
     let towardsAnchor: UnityPosition | undefined;
-    if (proposal.pushTowardsPlaceId !== undefined) {
+    if (proposal.pushTowardsObjectId !== undefined) {
+      const targetObj = findProbeObjectById(proposal.pushTowardsObjectId);
+      if (!targetObj) {
+        return invalid(`pushTowardsObjectId "${proposal.pushTowardsObjectId}" is not a known probe object`);
+      }
+      towardsAnchor = this.objectState.getPosition(targetObj.id) ?? targetObj.unityPosition;
+    } else if (proposal.pushTowardsPlaceId !== undefined) {
       const knownPlace = (perception.nearbyPlaces ?? []).some(
         (p) => p.id === proposal.pushTowardsPlaceId
       );
@@ -718,10 +999,12 @@ export class NpcAiRuntime {
 
     this.pendingPushByAgent.set(agentId, {
       agentId,
+      interactionType: 'push',
       targetObjectId: object.id,
       fromPosition,
       expectedPosition,
       pushTowardsPlaceId: proposal.pushTowardsPlaceId,
+      pushTowardsObjectId: proposal.pushTowardsObjectId,
       hypothesis: proposal.hypothesis,
       worldTime,
       startedWallMs: Date.now(),
@@ -736,8 +1019,743 @@ export class NpcAiRuntime {
           fromPosition,
           expectedPosition,
           pushTowardsPlaceId: proposal.pushTowardsPlaceId ?? null,
+          pushTowardsObjectId: proposal.pushTowardsObjectId ?? null,
           pushDistanceMetres: NpcAiRuntime.PUSH_DISTANCE_METRES,
         },
+        success: true,
+      },
+    };
+  }
+
+  /**
+   * Milestone 94 Phase 2b ("Manos Libres"): executes a validated pick_up_object proposal.
+   */
+  private executePickUpObject(
+    agentId: string,
+    perception: NpcPerception,
+    proposal: NpcActionProposal,
+    worldTime: string
+  ): {
+    status: NpcAiCycleStatus;
+    commandDispatched?: NpcAiCycleResult['commandDispatched'];
+    error?: { code: string; message: string };
+  } {
+    const invalid = (message: string) => ({
+      status: 'invalid_proposal' as NpcAiCycleStatus,
+      error: { code: 'invalid-proposal-shape', message },
+    });
+    const rejected = (code: string, message: string) => ({
+      status: 'rejected' as NpcAiCycleStatus,
+      error: { code, message },
+    });
+
+    if (agentId !== CAMILA_AGENT_ID) {
+      return rejected('action-not-for-agent', `Only ${CAMILA_AGENT_ID} can pick up objects.`);
+    }
+    const objectId = proposal.targetObjectId;
+    if (!objectId) return invalid('pick_up_object requires targetObjectId');
+    const object = findProbeObjectById(objectId);
+    if (!object) return invalid(`pick_up_object requires a known probe object id, got "${objectId}"`);
+
+    const currentlyHeld = this.objectState.getHeldObjectId(agentId);
+    if (currentlyHeld) {
+      return rejected(
+        'already-holding-object',
+        `Camila is already holding "${currentlyHeld}". She must drop_object before picking up another object.`
+      );
+    }
+
+    const pending = this.pendingPushByAgent.get(agentId);
+    if (pending) {
+      if (Date.now() - pending.startedWallMs > NpcAiRuntime.MAX_STALE_PUSH_WALL_MS) {
+        this.pendingPushByAgent.delete(agentId);
+      } else {
+        return rejected(
+          'interaction-pending',
+          `An interaction with "${pending.targetObjectId}" is still waiting for Unity to report back.`
+        );
+      }
+    }
+
+    const effectiveObjectPlaceId = this.objectState.getEffectivePlaceId(object.id) ?? object.placeId;
+    if (effectiveObjectPlaceId !== perception.locationId) {
+      return rejected(
+        'object-not-nearby',
+        `Camila is at "${perception.locationId}" but "${object.name}" (${object.id}) is at "${effectiveObjectPlaceId}".`
+      );
+    }
+
+    if (
+      object.affordances.includes('stationary') ||
+      !object.affordances.some((a) => NpcAiRuntime.CARRIABLE_AFFORDANCES.includes(a))
+    ) {
+      return rejected(
+        'object-not-carriable',
+        `"${object.name}" (${object.id}) cannot be picked up (affordances: ${object.affordances.join(', ')}).`
+      );
+    }
+
+    const fromPosition = this.objectState.getPosition(object.id) ?? object.unityPosition;
+    this.pendingPushByAgent.set(agentId, {
+      agentId,
+      interactionType: 'pick_up',
+      targetObjectId: object.id,
+      fromPosition,
+      expectedPosition: fromPosition,
+      hypothesis: proposal.hypothesis,
+      worldTime,
+      startedWallMs: Date.now(),
+    });
+
+    return {
+      status: 'executed',
+      commandDispatched: {
+        commandName: 'pick-up-object',
+        payload: {
+          targetObjectId: object.id,
+          fromPosition,
+        },
+        success: true,
+      },
+    };
+  }
+
+  /**
+   * Milestone 94 Phase 2b ("Manos Libres"): executes a validated drop_object proposal.
+   */
+  private executeDropObject(
+    agentId: string,
+    perception: NpcPerception,
+    proposal: NpcActionProposal,
+    worldTime: string
+  ): {
+    status: NpcAiCycleStatus;
+    commandDispatched?: NpcAiCycleResult['commandDispatched'];
+    error?: { code: string; message: string };
+  } {
+    const invalid = (message: string) => ({
+      status: 'invalid_proposal' as NpcAiCycleStatus,
+      error: { code: 'invalid-proposal-shape', message },
+    });
+    const rejected = (code: string, message: string) => ({
+      status: 'rejected' as NpcAiCycleStatus,
+      error: { code, message },
+    });
+
+    if (agentId !== CAMILA_AGENT_ID) {
+      return rejected('action-not-for-agent', `Only ${CAMILA_AGENT_ID} can drop objects.`);
+    }
+
+    const heldId = this.objectState.getHeldObjectId(agentId);
+    if (!heldId) {
+      return rejected('not-holding-object', 'Camila is not holding any object to drop.');
+    }
+    const heldObj = findProbeObjectById(heldId);
+    if (!heldObj) {
+      this.objectState.clearHeldObject(agentId);
+      return rejected('not-holding-object', `Unknown held object "${heldId}".`);
+    }
+
+    const pending = this.pendingPushByAgent.get(agentId);
+    if (pending) {
+      if (Date.now() - pending.startedWallMs > NpcAiRuntime.MAX_STALE_PUSH_WALL_MS) {
+        this.pendingPushByAgent.delete(agentId);
+      } else {
+        return rejected(
+          'interaction-pending',
+          `An interaction with "${pending.targetObjectId}" is still waiting for Unity to report back.`
+        );
+      }
+    }
+
+    let dropTargetPos = CAMILA_UNITY_ANCHORS[perception.locationId] ?? heldObj.unityPosition;
+    if (proposal.nearObjectId !== undefined) {
+      const nearObj = findProbeObjectById(proposal.nearObjectId);
+      if (!nearObj) {
+        return invalid(`nearObjectId "${proposal.nearObjectId}" is not a known probe object`);
+      }
+      const nearEffectivePlace = this.objectState.getEffectivePlaceId(nearObj.id) ?? nearObj.placeId;
+      if (nearEffectivePlace !== perception.locationId) {
+        return rejected(
+          'near-object-not-here',
+          `"${nearObj.name}" (${nearObj.id}) is at "${nearEffectivePlace}", not at "${perception.locationId}".`
+        );
+      }
+      dropTargetPos = this.objectState.getPosition(nearObj.id) ?? nearObj.unityPosition;
+    }
+
+    const fromPosition = this.objectState.getPosition(heldObj.id) ?? heldObj.unityPosition;
+    this.pendingPushByAgent.set(agentId, {
+      agentId,
+      interactionType: 'drop',
+      targetObjectId: heldObj.id,
+      fromPosition,
+      expectedPosition: dropTargetPos,
+      nearObjectId: proposal.nearObjectId,
+      hypothesis: proposal.hypothesis,
+      worldTime,
+      startedWallMs: Date.now(),
+    });
+
+    return {
+      status: 'executed',
+      commandDispatched: {
+        commandName: 'drop-object',
+        payload: {
+          targetObjectId: heldObj.id,
+          nearObjectId: proposal.nearObjectId ?? null,
+          expectedPosition: dropTargetPos,
+        },
+        success: true,
+      },
+    };
+  }
+
+  /**
+   * General physical verb: scoop loose substance (water or sand/earth) from a
+   * source object into Camila's currently held container or tool.
+   */
+  private executeScoop(
+    agentId: string,
+    perception: NpcPerception,
+    proposal: NpcActionProposal,
+    worldTime: string
+  ): {
+    status: NpcAiCycleStatus;
+    commandDispatched?: NpcAiCycleResult['commandDispatched'];
+    error?: { code: string; message: string };
+  } {
+    const invalid = (message: string) => ({
+      status: 'invalid_proposal' as NpcAiCycleStatus,
+      error: { code: 'invalid-proposal-shape', message },
+    });
+    const rejected = (code: string, message: string) => ({
+      status: 'rejected' as NpcAiCycleStatus,
+      error: { code, message },
+    });
+
+    if (agentId !== CAMILA_AGENT_ID) {
+      return rejected('action-not-for-agent', `Only ${CAMILA_AGENT_ID} can scoop.`);
+    }
+    const sourceId = proposal.targetObjectId;
+    if (!sourceId) return invalid('scoop requires targetObjectId');
+    const sourceObj = findProbeObjectById(sourceId);
+    if (!sourceObj) return invalid(`scoop requires a known probe object id, got "${sourceId}"`);
+
+    const heldId = this.objectState.getHeldObjectId(agentId);
+    if (!heldId) {
+      return rejected('not-holding-container', 'Camila must pick up a container or tool before scooping.');
+    }
+    const heldObj = findProbeObjectById(heldId);
+    if (!heldObj) {
+      return rejected('not-holding-container', `Unknown held object "${heldId}".`);
+    }
+
+    const sourcePlace = this.objectState.getEffectivePlaceId(sourceObj.id) ?? sourceObj.placeId;
+    if (sourcePlace !== perception.locationId) {
+      return rejected(
+        'object-not-nearby',
+        `"${sourceObj.name}" (${sourceObj.id}) is at "${sourcePlace}", not at "${perception.locationId}".`
+      );
+    }
+
+    // Auto-stand if seated
+    if (this.objectState.getSittingState(agentId)) {
+      this.objectState.clearSittingState(agentId);
+    }
+
+    const sourceState = this.objectState.getPhysicalState(sourceObj.id) ?? {};
+    const canHoldWater = heldObj.affordances.some((a) =>
+      a === 'holds-water' || a === 'pours-water' || a === 'holds-liquid'
+    );
+    const canHoldSand = heldObj.affordances.some((a) =>
+      a === 'scoops-sand' || a === 'holds-sand'
+    );
+
+    const isWaterSource =
+      sourceObj.affordances.includes('water-source') ||
+      sourceObj.affordances.includes('water') ||
+      sourceState.contents === 'water';
+    const isSandSource =
+      sourceObj.affordances.includes('loose-sand') ||
+      sourceObj.affordances.includes('scoopable') ||
+      sourceState.contents === 'sand';
+
+    let material: 'water' | 'sand' | null = null;
+    let summary = '';
+
+    if (isSandSource && canHoldSand) {
+      material = 'sand';
+      this.objectState.setPhysicalState(heldObj.id, { contents: 'sand', waterLevel: 0 });
+      if (sourceState.contents === 'sand') {
+        this.objectState.setPhysicalState(sourceObj.id, { contents: 'empty' });
+      }
+      summary = `Recogí tierra y arena de "${sourceObj.name}" con ${heldObj.name} (${heldObj.id}).`;
+    } else if (isWaterSource && canHoldWater) {
+      const currentWater = sourceState.waterLevel ?? 1.0;
+      const currentSand = sourceState.sandFillLevel ?? 0.0;
+      if (currentWater <= 0.05 || currentSand >= 0.95) {
+        return rejected(
+          'source-empty',
+          `"${sourceObj.name}" ya no tiene agua suficiente para recoger.`
+        );
+      }
+      material = 'water';
+      this.objectState.setPhysicalState(heldObj.id, { contents: 'water', waterLevel: 1.0 });
+      if (sourceObj.id === 'probe:puddle') {
+        const nextWater = Math.max(0, Number((currentWater - 0.25).toFixed(2)));
+        this.objectState.setPhysicalState(sourceObj.id, { waterLevel: nextWater });
+      } else if (sourceState.contents === 'water') {
+        this.objectState.setPhysicalState(sourceObj.id, { contents: 'empty', waterLevel: 0 });
+      }
+      summary = `Llené ${heldObj.name} (${heldObj.id}) con agua de "${sourceObj.name}".`;
+    } else {
+      return rejected(
+        'cannot-scoop-material',
+        `No puedo recoger material de "${sourceObj.name}" usando "${heldObj.name}".`
+      );
+    }
+
+    try {
+      this.objectState.save();
+    } catch {
+      // Best-effort save
+    }
+
+    this.objectState.recordWorldChange({
+      timestamp: worldTime,
+      kind: 'camila_scooped',
+      objectId: heldObj.id,
+      summary,
+    });
+    this.memoryStore.addMemory({
+      type: 'discovery',
+      summary,
+      timestamp: worldTime,
+      placeId: perception.locationId,
+    });
+    if (this.notebook) {
+      try {
+        this.notebook.addDiaryEntry(summary, worldTime, perception.locationId);
+        if (proposal.hypothesis?.trim()) {
+          this.notebook.addHypothesis(proposal.hypothesis.trim().slice(0, 200), worldTime);
+        }
+        this.notebook.resolveMatchingHypotheses(
+          material === 'water' ? ['agua', 'charco'] : ['tierra', 'arena', 'bache'],
+          'confirmed',
+          worldTime
+        );
+        this.notebook.save();
+      } catch {
+        // Best-effort notebook
+      }
+    }
+
+    const updatedSource = this.objectState.getPhysicalState(sourceObj.id) ?? {};
+    return {
+      status: 'executed',
+      commandDispatched: {
+        commandName: 'scoop',
+        payload: {
+          heldObjectId: heldObj.id,
+          targetObjectId: sourceObj.id,
+          material,
+          targetWaterLevel: updatedSource.waterLevel ?? null,
+          targetSandFillLevel: updatedSource.sandFillLevel ?? null,
+        },
+        success: true,
+      },
+    };
+  }
+
+  /**
+   * General physical verb: pour held water, dump held sand/earth, draw with
+   * chalk on a drawable wall, dispose trash into a bin, or sweep with a broom.
+   */
+  private executePourOrApply(
+    agentId: string,
+    perception: NpcPerception,
+    proposal: NpcActionProposal,
+    worldTime: string
+  ): {
+    status: NpcAiCycleStatus;
+    commandDispatched?: NpcAiCycleResult['commandDispatched'];
+    error?: { code: string; message: string };
+  } {
+    const invalid = (message: string) => ({
+      status: 'invalid_proposal' as NpcAiCycleStatus,
+      error: { code: 'invalid-proposal-shape', message },
+    });
+    const rejected = (code: string, message: string) => ({
+      status: 'rejected' as NpcAiCycleStatus,
+      error: { code, message },
+    });
+
+    if (agentId !== CAMILA_AGENT_ID) {
+      return rejected('action-not-for-agent', `Only ${CAMILA_AGENT_ID} can pour_or_apply.`);
+    }
+
+    const heldId = this.objectState.getHeldObjectId(agentId);
+    if (!heldId) {
+      return rejected('not-holding-object', 'Camila must hold an object before using pour_or_apply.');
+    }
+    const heldObj = findProbeObjectById(heldId);
+    if (!heldObj) {
+      return rejected('not-holding-object', `Unknown held object "${heldId}".`);
+    }
+
+    let targetObj = null;
+    if (proposal.targetObjectId) {
+      targetObj = findProbeObjectById(proposal.targetObjectId);
+      if (!targetObj) {
+        return invalid(`pour_or_apply targetObjectId "${proposal.targetObjectId}" is unknown`);
+      }
+      const targetPlace = this.objectState.getEffectivePlaceId(targetObj.id) ?? targetObj.placeId;
+      if (targetPlace !== perception.locationId) {
+        return rejected(
+          'object-not-nearby',
+          `"${targetObj.name}" (${targetObj.id}) is at "${targetPlace}", not at "${perception.locationId}".`
+        );
+      }
+    }
+
+    // Auto-stand if seated
+    if (this.objectState.getSittingState(agentId)) {
+      this.objectState.clearSittingState(agentId);
+    }
+
+    const heldState = this.objectState.getPhysicalState(heldObj.id) ?? {};
+    let effectKind = '';
+    let summary = '';
+    let resolveKeywords: string[] = [];
+
+    if (heldState.contents === 'water') {
+      this.objectState.setPhysicalState(heldObj.id, { contents: 'empty', waterLevel: 0 });
+      if (
+        targetObj &&
+        targetObj.affordances.some((a) => a === 'holds-water' || a === 'pours-water' || a === 'holds-liquid')
+      ) {
+        this.objectState.setPhysicalState(targetObj.id, { contents: 'water', waterLevel: 1.0 });
+        effectKind = 'pour-water-into-container';
+        summary = `Vacié agua de ${heldObj.name} dentro de "${targetObj.name}" (${targetObj.id}), que quedó lleno.`;
+        resolveKeywords = ['agua', targetObj.name.split(' ')[0]];
+      } else if (targetObj && targetObj.id === 'probe:puddle') {
+        const curW = this.objectState.getPhysicalState(targetObj.id)?.waterLevel ?? 0;
+        this.objectState.setPhysicalState(targetObj.id, { waterLevel: Math.min(1.0, Number((curW + 0.25).toFixed(2))) });
+        effectKind = 'pour-water-into-puddle';
+        summary = `Vacié agua de ${heldObj.name} de regreso al "${targetObj.name}".`;
+        resolveKeywords = ['agua', 'charco'];
+      } else {
+        effectKind = 'pour-water-on-ground';
+        summary = `Vacié el agua de ${heldObj.name} sobre el suelo en ${perception.locationId}.`;
+        resolveKeywords = ['agua'];
+      }
+    } else if (heldState.contents === 'sand') {
+      this.objectState.setPhysicalState(heldObj.id, { contents: 'empty', waterLevel: 0 });
+      if (targetObj && targetObj.affordances.includes('fillable-with-sand')) {
+        const prev = this.objectState.getPhysicalState(targetObj.id) ?? {};
+        const nextSand = Math.min(1.0, Number(((prev.sandFillLevel ?? 0) + 0.34).toFixed(2)));
+        const nextWater = Math.max(0, Number(((prev.waterLevel ?? 0) - 0.35).toFixed(2)));
+        this.objectState.setPhysicalState(targetObj.id, { sandFillLevel: nextSand, waterLevel: nextWater });
+        effectKind = 'fill-pothole-with-sand';
+        summary =
+          nextSand >= 0.99
+            ? `Eché tierra y arena con ${heldObj.name} en "${targetObj.name}": el bache quedó completamente tapado.`
+            : `Eché tierra y arena con ${heldObj.name} en "${targetObj.name}" (relleno al ${Math.round(nextSand * 100)}%).`;
+        resolveKeywords = ['bache', 'tierra', 'arena'];
+      } else if (targetObj && targetObj.affordances.includes('holds-sand')) {
+        this.objectState.setPhysicalState(targetObj.id, { contents: 'sand', waterLevel: 0 });
+        effectKind = 'transfer-sand-to-container';
+        summary = `Pasé tierra y arena de ${heldObj.name} a "${targetObj.name}".`;
+        resolveKeywords = ['arena', 'cubeta'];
+      } else {
+        effectKind = 'dump-sand-on-ground';
+        summary = `Vacié tierra y arena de ${heldObj.name} sobre el suelo en ${perception.locationId}.`;
+        resolveKeywords = ['tierra', 'arena'];
+      }
+    } else if (heldObj.affordances.includes('draws-on-surfaces')) {
+      if (targetObj && targetObj.affordances.includes('drawable-on')) {
+        const prevMarks = this.objectState.getPhysicalState(targetObj.id)?.chalkMarks ?? 0;
+        this.objectState.setPhysicalState(targetObj.id, { chalkMarks: prevMarks + 1 });
+        effectKind = 'draw-on-wall';
+        summary = `Dibujé con ${heldObj.name} sobre "${targetObj.name}" (${prevMarks + 1} trazo(s)).`;
+        resolveKeywords = ['gis', 'muro'];
+      } else if (
+        targetObj &&
+        targetObj.affordances.some((a) => a === 'flat-surface' || a === 'flat' || a === 'sittable' || a === 'ceramic')
+      ) {
+        const prevMarks = this.objectState.getPhysicalState(targetObj.id)?.chalkMarks ?? 0;
+        this.objectState.setPhysicalState(targetObj.id, { chalkMarks: prevMarks + 1 });
+        effectKind = 'draw-on-surface';
+        summary = `Hice una marca de color con ${heldObj.name} sobre "${targetObj.name}" (${prevMarks + 1} marca(s)).`;
+        resolveKeywords = ['gis', targetObj.name.split(' ')[0]];
+      } else if (!targetObj) {
+        effectKind = 'draw-on-ground';
+        summary = `Dibujé con ${heldObj.name} sobre la banqueta en ${perception.locationId}.`;
+        resolveKeywords = ['gis', 'banqueta'];
+      } else {
+        return rejected(
+          'cannot-draw-on-target',
+          `No pude rayar "${targetObj.name}" con ${heldObj.name}; necesito una superficie plana, un muro o el suelo.`
+        );
+      }
+    } else if (
+      heldObj.affordances.includes('contains-refuse') &&
+      targetObj &&
+      targetObj.affordances.includes('receives-refuse')
+    ) {
+      const binPos = this.objectState.getPosition(targetObj.id) ?? targetObj.unityPosition;
+      this.objectState.setPhysicalState(heldObj.id, { disposedInBin: true });
+      this.objectState.setPosition(heldObj.id, binPos);
+      this.objectState.clearHeldObject(agentId);
+      this.heldCyclesByAgent.delete(agentId);
+      this.heldOriginPlaceByAgent.delete(agentId);
+      effectKind = 'dispose-in-bin';
+      summary = `Metí "${heldObj.name}" dentro de "${targetObj.name}" (${targetObj.id}).`;
+      resolveKeywords = ['bolsa', 'bote'];
+    } else if (heldObj.affordances.includes('sweeps')) {
+      effectKind = 'sweep-area';
+      summary = targetObj
+        ? `Barrí alrededor de "${targetObj.name}" con ${heldObj.name}.`
+        : `Barrí un poco el suelo con ${heldObj.name} en ${perception.locationId}.`;
+      resolveKeywords = ['escoba'];
+    } else {
+      return rejected(
+        'nothing-to-pour-or-apply',
+        `"${heldObj.name}" está vacío o no tiene una acción física directa sobre ${targetObj ? `"${targetObj.name}"` : 'el suelo'}.`
+      );
+    }
+
+    try {
+      this.objectState.save();
+    } catch {
+      // Best-effort save
+    }
+
+    this.objectState.recordWorldChange({
+      timestamp: worldTime,
+      kind: 'camila_applied',
+      objectId: targetObj?.id ?? heldObj.id,
+      summary,
+    });
+    this.memoryStore.addMemory({
+      type: 'discovery',
+      summary,
+      timestamp: worldTime,
+      placeId: perception.locationId,
+    });
+    if (this.notebook) {
+      try {
+        this.notebook.addDiaryEntry(summary, worldTime, perception.locationId);
+        if (proposal.hypothesis?.trim()) {
+          this.notebook.addHypothesis(proposal.hypothesis.trim().slice(0, 200), worldTime);
+        }
+        if (resolveKeywords.length > 0) {
+          this.notebook.resolveMatchingHypotheses(resolveKeywords, 'confirmed', worldTime);
+        }
+        this.notebook.save();
+      } catch {
+        // Best-effort notebook
+      }
+    }
+
+    const updatedTarget = targetObj ? (this.objectState.getPhysicalState(targetObj.id) ?? {}) : {};
+    return {
+      status: 'executed',
+      commandDispatched: {
+        commandName: 'pour-or-apply',
+        payload: {
+          heldObjectId: heldObj.id,
+          targetObjectId: targetObj?.id ?? null,
+          effectKind,
+          targetWaterLevel: updatedTarget.waterLevel ?? null,
+          targetSandFillLevel: updatedTarget.sandFillLevel ?? null,
+          targetChalkMarks: updatedTarget.chalkMarks ?? null,
+        },
+        success: true,
+      },
+    };
+  }
+
+  /**
+   * General physical verb: sit on a sittable object (e.g. bench) or right on
+   * the sidewalk / floor wherever Camila is.
+   */
+  private executeSit(
+    agentId: string,
+    perception: NpcPerception,
+    proposal: NpcActionProposal,
+    worldTime: string
+  ): {
+    status: NpcAiCycleStatus;
+    commandDispatched?: NpcAiCycleResult['commandDispatched'];
+    error?: { code: string; message: string };
+  } {
+    const invalid = (message: string) => ({
+      status: 'invalid_proposal' as NpcAiCycleStatus,
+      error: { code: 'invalid-proposal-shape', message },
+    });
+    const rejected = (code: string, message: string) => ({
+      status: 'rejected' as NpcAiCycleStatus,
+      error: { code, message },
+    });
+
+    if (agentId !== CAMILA_AGENT_ID) {
+      return rejected('action-not-for-agent', `Only ${CAMILA_AGENT_ID} can sit.`);
+    }
+
+    let surface = 'banqueta / suelo';
+    let targetObjId: string | undefined;
+    if (proposal.targetObjectId) {
+      const targetObj = findProbeObjectById(proposal.targetObjectId);
+      if (!targetObj) {
+        return invalid(`sit targetObjectId "${proposal.targetObjectId}" is unknown`);
+      }
+      const targetPlace = this.objectState.getEffectivePlaceId(targetObj.id) ?? targetObj.placeId;
+      if (targetPlace !== perception.locationId) {
+        return rejected(
+          'object-not-nearby',
+          `"${targetObj.name}" (${targetObj.id}) is at "${targetPlace}", not at "${perception.locationId}".`
+        );
+      }
+      if (!targetObj.affordances.includes('sittable')) {
+        return rejected(
+          'object-not-sittable',
+          `"${targetObj.name}" (${targetObj.id}) no es un asiento.`
+        );
+      }
+      surface = targetObj.name;
+      targetObjId = targetObj.id;
+    }
+
+    this.objectState.setSittingState(agentId, {
+      placeId: perception.locationId,
+      surface,
+      targetObjectId: targetObjId,
+    });
+    try {
+      this.objectState.save();
+    } catch {
+      // Best-effort save
+    }
+
+    const summary = targetObjId
+      ? `Me senté en ${surface} (${targetObjId}) en ${perception.locationId}.`
+      : `Me senté en el suelo / banqueta en ${perception.locationId}.`;
+
+    this.objectState.recordWorldChange({
+      timestamp: worldTime,
+      kind: 'camila_sat',
+      objectId: targetObjId ?? perception.locationId,
+      summary,
+    });
+    if (this.notebook) {
+      try {
+        this.notebook.addDiaryEntry(summary, worldTime, perception.locationId);
+        this.notebook.save();
+      } catch {
+        // Best-effort notebook
+      }
+    }
+
+    return {
+      status: 'executed',
+      commandDispatched: {
+        commandName: 'sit',
+        payload: {
+          targetObjectId: targetObjId ?? null,
+          surface,
+        },
+        success: true,
+      },
+    };
+  }
+
+  /**
+   * General physical verb: stand up from sitting.
+   */
+  /**
+   * Feeds physical rejection feedback back into Camila's recentWorldChanges,
+   * memory, and notebook so she immediately learns why an attempt did not work
+   * and NEVER loops silently repeating the same rejected action.
+   */
+  private recordCamilaRejectionFeedback(
+    agentId: string,
+    worldTime: string,
+    perception: NpcPerception,
+    proposal: NpcActionProposal,
+    error?: { code: string; message: string }
+  ): void {
+    if (agentId !== CAMILA_AGENT_ID || !error) return;
+    if (error.code === 'action-gated' || error.code === 'push-pending' || error.code === 'interaction-pending') {
+      return;
+    }
+    const targetHint = proposal.targetObjectId ? ` sobre ${proposal.targetObjectId}` : '';
+    const feedback = `Intenté ${proposal.actionType}${targetHint} pero no funcionó (${error.code}): ${error.message}`;
+    this.objectState.recordWorldChange({
+      timestamp: worldTime,
+      kind: 'camila_applied',
+      objectId: proposal.targetObjectId ?? perception.locationId,
+      summary: feedback,
+    });
+    this.memoryStore.addMemory({
+      type: 'discovery',
+      summary: feedback,
+      timestamp: worldTime,
+      placeId: perception.locationId,
+    });
+    if (this.notebook) {
+      try {
+        this.notebook.addDiaryEntry(feedback, worldTime, perception.locationId);
+        if (proposal.targetObjectId) {
+          const obj = findProbeObjectById(proposal.targetObjectId);
+          if (obj) {
+            this.notebook.resolveMatchingHypotheses([obj.name.split(' ')[0]], 'refuted', worldTime);
+          }
+        }
+        this.notebook.save();
+      } catch {
+        // Best-effort notebook
+      }
+    }
+  }
+
+  private executeStandUp(
+    agentId: string,
+    perception: NpcPerception,
+    _proposal: NpcActionProposal,
+    worldTime: string
+  ): {
+    status: NpcAiCycleStatus;
+    commandDispatched?: NpcAiCycleResult['commandDispatched'];
+    error?: { code: string; message: string };
+  } {
+    if (agentId !== CAMILA_AGENT_ID) {
+      return {
+        status: 'rejected',
+        error: { code: 'action-not-for-agent', message: `Only ${CAMILA_AGENT_ID} can stand up.` },
+      };
+    }
+
+    this.objectState.clearSittingState(agentId);
+    try {
+      this.objectState.save();
+    } catch {
+      // Best-effort save
+    }
+
+    const summary = `Me puse de pie en ${perception.locationId}.`;
+    this.objectState.recordWorldChange({
+      timestamp: worldTime,
+      kind: 'camila_stood',
+      objectId: perception.locationId,
+      summary,
+    });
+    return {
+      status: 'executed',
+      commandDispatched: {
+        commandName: 'stand-up',
+        payload: {},
         success: true,
       },
     };
@@ -822,7 +1840,7 @@ export class NpcAiRuntime {
       return {
         success: true,
         code: 'push-failed-reported',
-        message: `Unity reported the push of "${targetObjectId}" failed; no position change committed.`,
+        message: `Unity reported the ${pending.interactionType} of "${targetObjectId}" failed; no state change committed.`,
         agentId,
         targetObjectId: targetObjectId ?? '',
         committed: false,
@@ -834,11 +1852,59 @@ export class NpcAiRuntime {
       this.pendingPushByAgent.delete(agentId);
       return fail('unknown-object', `Unknown probe object "${targetObjectId ?? ''}".`);
     }
+
+    // Phase 2b: pick_up commits heldObjectId without requiring a new resting ground position
+    if (pending.interactionType === 'pick_up') {
+      this.objectState.setHeldObject(agentId, object.id);
+      try {
+        this.objectState.save();
+      } catch (err) {
+        this.objectState.clearHeldObject(agentId);
+        this.pendingPushByAgent.delete(agentId);
+        return fail('object-position-persist-failed', `Failed to persist pick_up: ${(err as Error).message}`);
+      }
+      this.pendingPushByAgent.delete(agentId);
+
+      const currentPlace = this.objectState.getEffectivePlaceId(object.id) ?? object.placeId;
+      this.heldCyclesByAgent.set(agentId, 0);
+      this.heldOriginPlaceByAgent.set(agentId, currentPlace);
+      this.objectState.recordWorldChange({
+        timestamp: worldTime,
+        kind: 'camila_picked_up',
+        objectId: object.id,
+        summary: `Recogí "${object.name}" (${object.id}) en ${currentPlace} y ahora lo llevo en mis manos.`,
+      });
+      try {
+        this.memoryStore.addMemory({
+          type: 'object_noticed',
+          summary: `Recogí "${object.name}" (${object.id}) en ${currentPlace}.`,
+          timestamp: worldTime,
+          placeId: currentPlace,
+        });
+        if (this.notebook) {
+          this.notebook.addDiaryEntry(`Recogí ${object.name} en ${currentPlace}.`, worldTime, currentPlace);
+          const ownHypothesis = pending.hypothesis?.trim();
+          if (ownHypothesis) this.notebook.addHypothesis(ownHypothesis.slice(0, 200), worldTime);
+          this.notebook.save();
+        }
+      } catch {
+        // Best-effort notebook
+      }
+      return {
+        success: true,
+        code: 'pick-up-applied',
+        message: `Camila picked up "${object.id}".`,
+        agentId,
+        targetObjectId: object.id,
+        committed: true,
+      };
+    }
+
     if (!reportedPosition || !isValidObjectPosition(reportedPosition)) {
       this.pendingPushByAgent.delete(agentId);
       return fail(
         'invalid-reported-position',
-        'An applied push report must carry a finite, in-bounds newPosition {x, y, z}.'
+        'An applied push/drop report must carry a finite, in-bounds newPosition {x, y, z}.'
       );
     }
 
@@ -847,10 +1913,18 @@ export class NpcAiRuntime {
       this.pendingPushByAgent.delete(agentId);
       return fail('invalid-reported-position', `Could not set a new position for "${object.id}".`);
     }
+    if (pending.interactionType === 'drop') {
+      this.objectState.clearHeldObject(agentId);
+      this.heldCyclesByAgent.delete(agentId);
+      this.heldOriginPlaceByAgent.delete(agentId);
+    }
     try {
       this.objectState.save();
     } catch (err) {
       this.objectState.setPosition(object.id, previous);
+      if (pending.interactionType === 'drop') {
+        this.objectState.setHeldObject(agentId, object.id);
+      }
       this.pendingPushByAgent.delete(agentId);
       return fail(
         'object-position-persist-failed',
@@ -859,33 +1933,53 @@ export class NpcAiRuntime {
     }
     this.pendingPushByAgent.delete(agentId);
 
-    // Memory + notebook (best effort — never fails the interaction).
+    // Objective cause-and-effect proximity feedback (distance moved + nearest neighbor object within 4m)
+    const effectivePlace = this.objectState.getEffectivePlaceId(object.id) ?? object.placeId;
+    const distMoved = Math.hypot(reportedPosition.x - previous.x, reportedPosition.z - previous.z);
+    let nearestPeerText = '';
+    let nearestPeerDist = 4.0;
+    for (const peer of CAMILA_PROBE_OBJECTS) {
+      if (peer.id === object.id) continue;
+      const peerPos = this.objectState.getPosition(peer.id) ?? peer.unityPosition;
+      const d = Math.hypot(peerPos.x - reportedPosition.x, peerPos.z - reportedPosition.z);
+      if (d < nearestPeerDist) {
+        nearestPeerDist = d;
+        nearestPeerText = ` Quedó a ${d.toFixed(1)}m de "${peer.name}" (${peer.id}).`;
+      }
+    }
+
+    // Memory + notebook + sensory delta feedback (best effort — never fails the interaction).
     try {
-      const towardsText = pending.pushTowardsPlaceId
-        ? `hacia ${pending.pushTowardsPlaceId}`
-        : 'lejos de mí';
+      const isDrop = pending.interactionType === 'drop';
+      const targetObjRef = pending.pushTowardsObjectId
+        ? findProbeObjectById(pending.pushTowardsObjectId)
+        : null;
+      const towardsText = targetObjRef
+        ? `hacia ${targetObjRef.name}`
+        : pending.pushTowardsPlaceId
+          ? `hacia ${pending.pushTowardsPlaceId}`
+          : 'lejos de mí';
+
+      const summaryText = isDrop
+        ? `Dejé ${object.name} (${object.id}) en ${effectivePlace}.${nearestPeerText}`
+        : `Empujé ${object.name} (${object.id}) ${towardsText}: rodó ${distMoved.toFixed(1)}m hasta (${reportedPosition.x.toFixed(1)}, ${reportedPosition.z.toFixed(1)}).${nearestPeerText}`;
+
+      this.objectState.recordWorldChange({
+        timestamp: worldTime,
+        kind: isDrop ? 'camila_dropped' : 'camila_pushed',
+        objectId: object.id,
+        summary: summaryText,
+      });
+
       this.memoryStore.addMemory({
         type: 'object_noticed',
-        summary: `Empujé "${object.name}" (${object.id}) en ${object.placeId}: rodó ${towardsText} desde (${previous.x}, ${previous.y}, ${previous.z}) hasta (${reportedPosition.x}, ${reportedPosition.y}, ${reportedPosition.z}).`,
+        summary: summaryText,
         timestamp: worldTime,
-        placeId: object.placeId,
+        placeId: effectivePlace,
       });
       if (this.notebook) {
-        this.notebook.addDiaryEntry(
-          `Empujé ${object.name} y rodó ${towardsText}. Ahora está en (${reportedPosition.x}, ${reportedPosition.y}, ${reportedPosition.z}).`,
-          worldTime,
-          object.placeId
-        );
-        this.notebook.addNoteToPlace(
-          object.placeId,
-          `Empujé ${object.name} hasta (${reportedPosition.x}, ${reportedPosition.y}, ${reportedPosition.z}).`,
-          worldTime
-        );
-        // Hypothesis layer (prompt v3): only Camila's own hypothesis, if she
-        // offered one in her decision. The runtime NEVER invents a pairing
-        // for her — no complement-distance computation, no ball→goal guess.
-        // A hypothesis is recorded verbatim (trimmed, capped at 200 chars);
-        // when she offered none, no hypothesis is recorded at all.
+        this.notebook.addDiaryEntry(summaryText, worldTime, effectivePlace);
+        this.notebook.addNoteToPlace(effectivePlace, summaryText, worldTime);
         const ownHypothesis = pending.hypothesis?.trim();
         if (ownHypothesis) {
           this.notebook.addHypothesis(ownHypothesis.slice(0, 200), worldTime);
@@ -893,13 +1987,13 @@ export class NpcAiRuntime {
         this.notebook.save();
       }
     } catch {
-      // Notebook/memory failures never fail a committed push.
+      // Notebook/memory failures never fail a committed push/drop.
     }
 
     return {
       success: true,
-      code: 'push-applied',
-      message: `Push of "${object.id}" committed at (${reportedPosition.x}, ${reportedPosition.y}, ${reportedPosition.z}).`,
+      code: pending.interactionType === 'drop' ? 'drop-applied' : 'push-applied',
+      message: `${pending.interactionType === 'drop' ? 'Drop' : 'Push'} of "${object.id}" committed at (${reportedPosition.x}, ${reportedPosition.y}, ${reportedPosition.z}).`,
       agentId,
       targetObjectId: object.id,
       committed: true,
@@ -916,10 +2010,38 @@ export class NpcAiRuntime {
     agentId: string,
     arrivedPlaceId: string | undefined,
     worldTime: string,
-    committed: boolean
+    committed: boolean,
+    interruptedDestinationId?: string,
+    interruptionMessage?: string
   ): void {
     this.activeTraversalStartedWallMs.delete(agentId);
-    if (!committed || !arrivedPlaceId) return;
+    if (!committed || !arrivedPlaceId) {
+      if (agentId === CAMILA_AGENT_ID && interruptedDestinationId) {
+        const reason = interruptionMessage?.trim() || 'acceso bloqueado o puerta cerrada';
+        const note = `No pude entrar a ${interruptedDestinationId}: ${reason}.`;
+        this.memoryStore.addMemory({
+          type: 'discovery',
+          summary: note,
+          timestamp: worldTime,
+          placeId: interruptedDestinationId,
+        });
+        this.objectState.recordWorldChange({
+          timestamp: worldTime,
+          kind: 'player_moved',
+          objectId: interruptedDestinationId,
+          summary: note,
+        });
+        if (this.notebook) {
+          try {
+            this.notebook.addDiaryEntry(note, worldTime, interruptedDestinationId);
+            this.notebook.save();
+          } catch {
+            // Best-effort notebook
+          }
+        }
+      }
+      return;
+    }
 
     this.memoryStore.addMemory({
       type: 'place_visited',
@@ -932,7 +2054,9 @@ export class NpcAiRuntime {
       this.lastLocationByAgent.set(agentId, arrivedPlaceId);
       if (this.notebook) {
         try {
-          const objectIds = findProbeObjectsByPlace(arrivedPlaceId).map((o) => o.id);
+          const objectIds = CAMILA_PROBE_OBJECTS.filter(
+            (o) => (this.objectState.getEffectivePlaceId(o.id) ?? o.placeId) === arrivedPlaceId
+          ).map((o) => o.id);
           this.notebook.recordVisit(arrivedPlaceId, worldTime, objectIds);
           this.notebook.addDiaryEntry(
             `Llegué a ${arrivedPlaceId}.`,

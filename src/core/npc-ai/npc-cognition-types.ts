@@ -15,6 +15,7 @@
 
 import type { ActivityState } from '../entities/agent.js';
 import type { RestaurantOperationalState } from '../entities/restaurant.js';
+import type { ProbeObjectPhysicalState } from '../camila-probe-object-state.js';
 
 /**
  * Valid action types an NPC can propose.
@@ -22,9 +23,8 @@ import type { RestaurantOperationalState } from '../entities/restaurant.js';
  *
  * Milestone 94 (Camila): 'move_to_place' and 'look_at' are the Phase 1
  * explore-only actions. 'push_object' / 'pick_up_object' / 'carry_object' /
- * 'drop_object' are Phase 2 interact actions, gated off by default behind
- * CAMILA_ACTIONS_ENABLED (see camila-config.ts isCamilaActionEnabled) and
- * rejected by the runtime while the gate is off.
+ * 'drop_object' / 'scoop' / 'pour_or_apply' / 'sit' / 'stand_up' are Phase 2
+ * interact actions, gated off by default behind CAMILA_ACTIONS_ENABLED.
  */
 export type NpcActionType =
   | 'observe'
@@ -36,7 +36,11 @@ export type NpcActionType =
   | 'push_object'
   | 'pick_up_object'
   | 'carry_object'
-  | 'drop_object';
+  | 'drop_object'
+  | 'scoop'
+  | 'pour_or_apply'
+  | 'sit'
+  | 'stand_up';
 
 /**
  * Memory types an NPC can retain across runtime cycles.
@@ -111,6 +115,28 @@ export interface PerceivedProbeObjectSummary {
   readonly placeId: string;
   readonly cluster: string;
   readonly affordances: readonly string[];
+  /** Live Unity coordinates (metres) when available. */
+  readonly currentPosition?: { readonly x: number; readonly y: number; readonly z: number };
+  /** Other visible objects nearby at the same place (objective distances, no instructions). */
+  readonly nearbyPeers?: readonly string[];
+  /** Number of AI cycles Camila has been carrying this object (when held). */
+  readonly carriedCycles?: number;
+  /** Place where Camila picked up this object (when held). */
+  readonly pickedUpAtPlaceId?: string;
+  /** Objective live physical state (contents, waterLevel, sandFillLevel, chalkMarks, disposedInBin). */
+  readonly physicalState?: ProbeObjectPhysicalState;
+}
+
+/**
+ * Read-only perception projection of another agent (Player or NPC) nearby.
+ */
+export interface PerceivedNearbyAgentSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly role: 'player' | 'npc';
+  readonly locationId: string;
+  readonly distanceMeters?: number;
+  readonly holdingObjectId?: string | null;
 }
 
 /**
@@ -120,6 +146,11 @@ export interface PerceivedPlaceSummary {
   readonly id: string;
   readonly name: string;
   readonly type: string;
+  /** Operational state when this building hosts a scheduled business (open / closing-soon / closed). */
+  readonly operationalState?: RestaurantOperationalState;
+  /** True when this place currently has objects Camila has not seen/recorded yet. */
+  readonly hasUnseenObjects?: boolean;
+  readonly unseenObjectCount?: number;
 }
 
 /**
@@ -127,8 +158,9 @@ export interface PerceivedPlaceSummary {
  * Contains only what the NPC is legitimately allowed to perceive.
  *
  * Milestone 94: the optional Camila fields (nearbyPlaces, nearbyObjects,
- * visitedPlaceIds, unvisitedPlaceIds) are populated for the explorer; they
- * are left undefined for other NPCs.
+ * visibleObjectsHere, rememberedObjectsElsewhere, heldObject, recentWorldChanges,
+ * nearbyAgents, visitedPlaceIds, unvisitedPlaceIds) are populated for the explorer;
+ * they are left undefined for other NPCs.
  */
 export interface NpcPerception {
   readonly agentId: string;
@@ -155,6 +187,20 @@ export interface NpcPerception {
   readonly recentMemories: readonly NpcMemory[];
   readonly nearbyPlaces?: readonly PerceivedPlaceSummary[];
   readonly nearbyObjects?: readonly PerceivedProbeObjectSummary[];
+  /** Objects physically present at Camila's current place right now. */
+  readonly visibleObjectsHere?: readonly PerceivedProbeObjectSummary[];
+  /** Objects in other places Camila has already visited and remembers. */
+  readonly rememberedObjectsElsewhere?: readonly PerceivedProbeObjectSummary[];
+  /** Object Camila is currently carrying in her hands (Phase 2b). */
+  readonly heldObject?: PerceivedProbeObjectSummary | null;
+  /** Objective recent changes in the world (e.g. player moved an object, action feedback). */
+  readonly recentWorldChanges?: readonly string[];
+  /** Nearby agents (Player or Elena) currently visible / close to Camila. */
+  readonly nearbyAgents?: readonly PerceivedNearbyAgentSummary[];
+  /** True when Camila is currently seated (on a bench, sidewalk, or floor). */
+  readonly isSitting?: boolean;
+  /** Surface or object Camila is currently seated on, if any. */
+  readonly sittingOn?: string | null;
   readonly visitedPlaceIds?: readonly string[];
   readonly unvisitedPlaceIds?: readonly string[];
 }
@@ -173,8 +219,12 @@ export interface NpcActionProposal {
   readonly targetObjectId?: string;
   /** Milestone 94 Phase 2a: place id a pushed object should roll toward ('push_object'). */
   readonly pushTowardsPlaceId?: string;
+  /** Milestone 94 Phase 2b: another object id a pushed object should roll toward ('push_object'). */
+  readonly pushTowardsObjectId?: string;
+  /** Milestone 94 Phase 2b: optional object id to place a dropped object beside ('drop_object'). */
+  readonly nearObjectId?: string;
   /**
-   * Milestone 94 Phase 2a (prompt v3): Camila's own hypothesis, only if one
+   * Milestone 94 Phase 2a/2b: Camila's own hypothesis, only if one
    * occurred to her. Passed through verbatim; the runtime never invents one.
    */
   readonly hypothesis?: string;

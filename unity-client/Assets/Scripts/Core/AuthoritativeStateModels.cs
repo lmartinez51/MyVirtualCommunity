@@ -172,6 +172,14 @@ namespace MyVirtualCommunity.Core
     }
 
     [Serializable]
+    public class PerceivedProbeObjectInfo
+    {
+        public string id;
+        public string name;
+        public string placeId;
+    }
+
+    [Serializable]
     public class NpcPerceptionData
     {
         public string agentId;
@@ -183,6 +191,7 @@ namespace MyVirtualCommunity.Core
         public EstablishmentPerception establishment;
         public PerceivedPlayerInfo perceivedPlayer;
         public CivilTimeDto civilTime;
+        public PerceivedProbeObjectInfo heldObject;
     }
 
     [Serializable]
@@ -201,8 +210,10 @@ namespace MyVirtualCommunity.Core
         // Milestone 94 (Camila): move_to_place destination / look_at target.
         public string destinationPlaceId;
         public string targetObjectId;
-        // Milestone 94 Phase 2a: place a pushed object should roll toward.
+        // Milestone 94 Phase 2a/2b: push direction (place or object) & drop target.
         public string pushTowardsPlaceId;
+        public string pushTowardsObjectId;
+        public string nearObjectId;
         public string requestedAt;
         public string reasoningContext;
     }

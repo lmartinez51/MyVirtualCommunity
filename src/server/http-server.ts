@@ -569,6 +569,66 @@ export class WorldHttpServer {
         return;
       }
 
+      // Living World: GET /api/world/props & POST /api/world/props/sync
+      if (method === 'GET' && pathname === '/api/world/props') {
+        this.sendJson(res, 200, {
+          success: true,
+          result: this.controller.getCamilaObjectPositions(),
+        });
+        return;
+      }
+
+      if (method === 'POST' && pathname === '/api/world/props/sync') {
+        try {
+          const body = (await this.readJsonBody(req)) ?? {};
+          const objectId = typeof body.objectId === 'string' ? body.objectId.trim() : '';
+          const rawPos = body.position as { x?: unknown; y?: unknown; z?: unknown } | null;
+          if (
+            !objectId ||
+            !rawPos ||
+            typeof rawPos !== 'object' ||
+            typeof rawPos.x !== 'number' ||
+            typeof rawPos.y !== 'number' ||
+            typeof rawPos.z !== 'number'
+          ) {
+            this.sendJson(res, 400, {
+              success: false,
+              error: {
+                code: 'invalid-prop-sync',
+                message: 'Requires objectId and position {x, y, z}.',
+              },
+            });
+            return;
+          }
+          const rawState =
+            typeof body.physicalState === 'object' && body.physicalState !== null
+              ? (body.physicalState as Record<string, unknown>)
+              : undefined;
+          const syncRes = await this.controller.syncWorldPropPosition(
+            objectId,
+            {
+              x: rawPos.x,
+              y: rawPos.y,
+              z: rawPos.z,
+            },
+            rawState
+          );
+          this.sendJson(res, syncRes.success ? 200 : 400, {
+            success: syncRes.success,
+            result: syncRes,
+          });
+        } catch (err) {
+          this.sendJson(res, 500, {
+            success: false,
+            error: {
+              code: 'prop-sync-error',
+              message: (err as Error).message,
+            },
+          });
+        }
+        return;
+      }
+
       // Milestone 92: AI NPC Cognition & Perception Endpoints
       if (pathname.startsWith('/api/npc/')) {
         const subpath = pathname.slice('/api/npc/'.length);
@@ -652,7 +712,33 @@ export class WorldHttpServer {
           // POST /api/npc/:agentId/cycle
           if (method === 'POST' && action === 'cycle') {
             try {
-              const cycleResult = await this.controller.runNpcAiCycle(agentId);
+              const body = (await this.readJsonBody(req)) ?? {};
+              const parseVec = (raw: unknown) => {
+                if (raw === null || typeof raw !== 'object') return undefined;
+                const v = raw as { x?: unknown; y?: unknown; z?: unknown };
+                if (typeof v.x === 'number' && typeof v.y === 'number' && typeof v.z === 'number') {
+                  return { x: v.x, y: v.y, z: v.z };
+                }
+                return undefined;
+              };
+              const liveContext = {
+                playerPosition: parseVec(body.playerPosition),
+                playerHeldObjectId:
+                  typeof body.playerHeldObjectId === 'string' && body.playerHeldObjectId.trim() !== ''
+                    ? body.playerHeldObjectId.trim()
+                    : body.playerHeldObjectId === null
+                      ? null
+                      : undefined,
+                camilaPosition: parseVec(body.camilaPosition),
+              };
+              const hasLive =
+                liveContext.playerPosition !== undefined ||
+                liveContext.playerHeldObjectId !== undefined ||
+                liveContext.camilaPosition !== undefined;
+              const cycleResult = await this.controller.runNpcAiCycle(
+                agentId,
+                hasLive ? liveContext : undefined
+              );
               this.sendJson(res, 200, {
                 success:
                   cycleResult.status !== 'provider_failed' &&

@@ -105,7 +105,11 @@ export class CamilaCognitionProvider implements NpcCognitionProvider {
 
     const worldSummary = this.resolveWorldSummary(context);
     const notebook = this.resolveNotebookExcerpt(context);
-    const perceptionJson = JSON.stringify(perception, null, 2);
+    // Strip the legacy full-catalog `nearbyObjects` spoiler list from the LLM
+    // prompt so Camila experiences genuine local discovery via `visibleObjectsHere`
+    // and `rememberedObjectsElsewhere`, plus `heldObject`, `recentWorldChanges`, and `nearbyAgents`.
+    const { nearbyObjects: _legacyFullCatalog, ...livingPerception } = perception;
+    const perceptionJson = JSON.stringify(livingPerception, null, 2);
     const { systemPrompt } = buildCamilaPrompt({
       worldStateSummary: worldSummary,
       notebookExcerpt: notebook,
@@ -117,8 +121,9 @@ export class CamilaCognitionProvider implements NpcCognitionProvider {
       worldStateSummary: worldSummary,
       notebookExcerpt: notebook,
       perceptionJson,
-      temperature: 0.7,
-      reasoningEffort: 'minimal',
+      temperature: 0.85,
+      frequencyPenalty: 0.4,
+      reasoningEffort: 'medium',
     });
 
     const { decision, error } = parseCamilaExplorerDecision(
@@ -164,6 +169,33 @@ export class CamilaCognitionProvider implements NpcCognitionProvider {
           );
         }
       }
+      if (decision.pushTowardsObjectId !== undefined) {
+        if (!findProbeObjectById(decision.pushTowardsObjectId)) {
+          throw new Error(
+            `Camila chose unknown push target object "${decision.pushTowardsObjectId}"`
+          );
+        }
+      }
+    }
+    if (decision.actionType === 'pick_up_object') {
+      if (!findProbeObjectById(decision.targetObjectId ?? '')) {
+        throw new Error(`Camila chose unknown object to pick up "${decision.targetObjectId}"`);
+      }
+    }
+    if (decision.actionType === 'drop_object') {
+      if (decision.nearObjectId !== undefined && !findProbeObjectById(decision.nearObjectId)) {
+        throw new Error(`Camila chose unknown object to drop near "${decision.nearObjectId}"`);
+      }
+    }
+    if (decision.actionType === 'scoop') {
+      if (!findProbeObjectById(decision.targetObjectId ?? '')) {
+        throw new Error(`Camila chose unknown source object to scoop "${decision.targetObjectId}"`);
+      }
+    }
+    if (decision.actionType === 'pour_or_apply' || decision.actionType === 'sit') {
+      if (decision.targetObjectId !== undefined && !findProbeObjectById(decision.targetObjectId)) {
+        throw new Error(`Camila chose unknown target object "${decision.targetObjectId}" for ${decision.actionType}`);
+      }
     }
 
     const proposal: NpcActionProposal = {
@@ -171,6 +203,8 @@ export class CamilaCognitionProvider implements NpcCognitionProvider {
       destinationPlaceId: decision.destinationPlaceId,
       targetObjectId: decision.targetObjectId,
       pushTowardsPlaceId: decision.pushTowardsPlaceId,
+      pushTowardsObjectId: decision.pushTowardsObjectId,
+      nearObjectId: decision.nearObjectId,
       hypothesis: decision.hypothesis,
       reasoningContext: decision.reasoningContext,
       requestedAt: perception.worldTime,

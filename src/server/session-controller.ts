@@ -266,22 +266,29 @@ export class WorldSessionController {
     this.camilaNotebook = notebook;
     const objectState = new CamilaProbeObjectState(options.camilaObjectPositionsPath);
     this.camilaObjectState = objectState;
-    const worldSummary = JSON.stringify(buildCamilaWorldState(), null, 2);
+    // Strip probeObjects from the static geography summary so Camila does not
+    // have X-ray omniscience of objects in unvisited places: she discovers
+    // objects live via perception.visibleObjectsHere & rememberedObjectsElsewhere.
+    const { probeObjects: _staticObjectsOmitted, ...worldGeography } = buildCamilaWorldState();
+    const worldSummary = JSON.stringify(worldGeography, null, 2);
     const camilaProvider =
       options.camilaProvider ??
       new CamilaCognitionProvider({
         worldStateSummary: worldSummary,
         notebookExcerpt: () => notebook.toExcerpt(),
       });
-    // Startup line so the operator can confirm live Muse vs local mock.
-    // Never logs the key (or its length): only the mode and model name.
+    // Startup line so the operator can confirm live Muse vs local mock and Phase 2 gate.
+    // Never logs the key (or its length): only the mode, model name, and gate flag.
     // Skipped when silent (tests / programmatic use).
     if (options.silent !== true) {
       const metaConfig = loadMetaModelConfig();
+      const actionsFlag = camilaProvider instanceof CamilaCognitionProvider
+        ? camilaProvider.getActionsEnabled()
+        : process.env.CAMILA_ACTIONS_ENABLED === 'true';
       if (metaConfig.apiKey) {
-        console.log(`[Camila] provider: live-api (${metaConfig.model})`);
+        console.log(`[Camila] provider: live-api (${metaConfig.model}) | actionsEnabled: ${actionsFlag}`);
       } else {
-        console.log('[Camila] provider: local-mock (sin MODEL_API_KEY, decisiones de prueba)');
+        console.log(`[Camila] provider: local-mock (sin MODEL_API_KEY, decisiones de prueba) | actionsEnabled: ${actionsFlag}`);
       }
     }
     return new NpcAiRuntime({
@@ -451,8 +458,45 @@ export class WorldSessionController {
   /**
    * Executes a single AI cognition cycle for the target NPC.
    */
-  public runNpcAiCycle(agentId: string): Promise<NpcAiCycleResult> {
-    return this.getNpcAiRuntime().runCycle(agentId);
+  public runNpcAiCycle(
+    agentId: string,
+    liveContext?: {
+      playerPosition?: UnityPosition;
+      playerHeldObjectId?: string | null;
+      camilaPosition?: UnityPosition;
+    }
+  ): Promise<NpcAiCycleResult> {
+    return this.getNpcAiRuntime().runCycle(agentId, liveContext);
+  }
+
+  /**
+   * Living World: records a prop moved by the human Player in Unity so Camila
+   * perceives the object in its real new position and notices the delta.
+   */
+  public syncWorldPropPosition(
+    objectId: string,
+    newPosition: UnityPosition,
+    physicalStatePatch?: Partial<import('../core/camila-probe-object-state.js').ProbeObjectPhysicalState>
+  ): Promise<{ success: boolean; changed: boolean; placeId?: string; message: string }> {
+    if (this.isShuttingDown || this.isStopped) {
+      return Promise.resolve({
+        success: false,
+        changed: false,
+        message: 'Server is shutting down or stopped',
+      });
+    }
+    const task = async () => {
+      const worldTime = this.clock.getTime();
+      return this.getNpcAiRuntime().syncPlayerMovedObject(
+        objectId,
+        newPosition,
+        worldTime,
+        physicalStatePatch
+      );
+    };
+    const nextPromise = this.commandQueue.then(task, task);
+    this.commandQueue = nextPromise.then(() => {}, () => {});
+    return nextPromise;
   }
 
   /**
@@ -528,7 +572,9 @@ export class WorldSessionController {
         agentId,
         completion.success ? completion.currentLocationId : undefined,
         worldTime,
-        completion.success
+        completion.success,
+        completion.success ? undefined : destinationPlaceId,
+        completion.success ? undefined : message
       );
 
       return completion;

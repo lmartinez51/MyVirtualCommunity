@@ -34,7 +34,7 @@ export interface CamilaProbeObject {
   /** Nearest seed place id (logical location, for perception + routing). */
   readonly placeId: string;
   /** Cluster the object belongs to (its complement lives elsewhere). */
-  readonly cluster: 'futbol' | 'basura' | 'agua' | 'descanso' | 'arte';
+  readonly cluster: 'futbol' | 'basura' | 'agua' | 'descanso' | 'arte' | 'terreno';
   readonly unityPosition: UnityPosition;
   /** Properties / affordances only. Never an instruction. */
   readonly affordances: readonly string[];
@@ -42,52 +42,52 @@ export interface CamilaProbeObject {
 }
 
 export const CAMILA_PROBE_OBJECTS: readonly CamilaProbeObject[] = Object.freeze([
-  // --- Cluster: fútbol (ball <-> small goal <-> cones) ---
+  // --- Cluster: fútbol (ball <-> small goal <-> cones in open east lot of Dollar 2 Go) ---
   {
     id: 'probe:ball',
     name: 'Pelota',
     placeId: 'building:dollar-2-go-building',
     cluster: 'futbol',
-    unityPosition: { x: 45, y: 0.345, z: 14 },
+    unityPosition: { x: 68, y: 0.345, z: 11.5 },
     affordances: ['round', 'rollable', 'kickable', 'movable', 'light'],
-    description: 'Una pelota en el estacionamiento de Dollar 2 Go.',
+    description: 'Una pelota en la zona abierta del estacionamiento de Dollar 2 Go.',
   },
   {
     id: 'probe:small-goal',
     name: 'Portería pequeña',
     placeId: 'building:dollar-2-go-building',
     cluster: 'futbol',
-    unityPosition: { x: 45, y: 0.5, z: 32 },
+    unityPosition: { x: 68, y: 0.12, z: 18 },
     affordances: ['frame', 'open', 'stationary', 'receives-rolling-objects'],
-    description: 'Una portería pequeña en el terreno vacío al norte del estacionamiento.',
+    description: 'Una portería pequeña en la zona libre del estacionamiento de Dollar 2 Go.',
   },
   {
     id: 'probe:cone-west',
     name: 'Cono oeste',
     placeId: 'building:dollar-2-go-building',
     cluster: 'futbol',
-    unityPosition: { x: 42, y: 0.5, z: 28 },
+    unityPosition: { x: 65, y: 0.4, z: 14.5 },
     affordances: ['conical', 'movable', 'light', 'marks-a-line'],
-    description: 'Un cono naranja en el terreno vacío.',
+    description: 'Un cono naranja en la zona abierta del estacionamiento de Dollar 2 Go.',
   },
   {
     id: 'probe:cone-east',
     name: 'Cono este',
     placeId: 'building:dollar-2-go-building',
     cluster: 'futbol',
-    unityPosition: { x: 48, y: 0.5, z: 28 },
+    unityPosition: { x: 71, y: 0.4, z: 14.5 },
     affordances: ['conical', 'movable', 'light', 'marks-a-line'],
-    description: 'Un cono naranja en el terreno vacío.',
+    description: 'Un cono naranja en la zona abierta del estacionamiento de Dollar 2 Go.',
   },
   // --- Cluster: basura (bag <-> distant bin <-> broom) ---
   {
     id: 'probe:trash-bag',
     name: 'Bolsa de basura',
-    placeId: 'restaurant:wing-spot',
+    placeId: 'street:blvd-gomez-morin',
     cluster: 'basura',
-    unityPosition: { x: -4, y: 0.4, z: 3.5 },
+    unityPosition: { x: 19.78, y: 0.24, z: 1.25 },
     affordances: ['movable', 'carriable', 'soft', 'contains-refuse'],
-    description: 'Una bolsa de basura en la banqueta frente a Wing Spot.',
+    description: 'Una bolsa de basura amarrada en la esquina de la banqueta este de Calle Del Porvenir y Blvd. Gómez Morín, junto al poste.',
   },
   {
     id: 'probe:trash-bin',
@@ -110,12 +110,12 @@ export const CAMILA_PROBE_OBJECTS: readonly CamilaProbeObject[] = Object.freeze(
   // --- Cluster: agua (puddle <-> bucket + watering can <-> umbrella) ---
   {
     id: 'probe:puddle',
-    name: 'Charco',
+    name: 'Charco en bache',
     placeId: 'street:calle-del-porvenir',
     cluster: 'agua',
     unityPosition: { x: 13.5, y: 0.005, z: 25 },
-    affordances: ['water', 'wets', 'splashes', 'reflective', 'stationary'],
-    description: 'Un charco de agua sobre Calle Del Porvenir.',
+    affordances: ['water', 'water-source', 'recessed-hole', 'fillable-with-sand', 'wets', 'splashes', 'reflective', 'stationary'],
+    description: 'Un bache hundido en el asfalto con agua acumulada sobre Calle Del Porvenir.',
   },
   {
     id: 'probe:bucket',
@@ -123,8 +123,8 @@ export const CAMILA_PROBE_OBJECTS: readonly CamilaProbeObject[] = Object.freeze(
     placeId: 'building:del-porvenir-residence',
     cluster: 'agua',
     unityPosition: { x: 7.15, y: 0.24, z: 33.1 },
-    affordances: ['container', 'carriable', 'holds-water'],
-    description: 'Una cubeta vacía en la banqueta junto a la Residencia Del Porvenir.',
+    affordances: ['container', 'carriable', 'holds-water', 'holds-sand', 'scoops-sand'],
+    description: 'Una cubeta en la banqueta junto a la Residencia Del Porvenir.',
   },
   {
     id: 'probe:watering-can',
@@ -190,6 +190,53 @@ export const CAMILA_PROBE_OBJECTS: readonly CamilaProbeObject[] = Object.freeze(
     unityPosition: { x: -2.5, y: 1.2, z: 8 },
     affordances: ['flat', 'vertical', 'stationary', 'drawable-on'],
     description: 'Un muro en blanco en el costado este de Wing Spot.',
+  },
+  // --- East corridor landmarks & neutral probes (Corporativo Arboleda, Acabados HRC, CatZoo) ---
+  {
+    id: 'probe:orange-sculpture',
+    name: 'Escultura metálica naranja',
+    placeId: 'building:corporativo-arboleda-building',
+    cluster: 'arte',
+    unityPosition: { x: 113, y: 0.24, z: 5.4 },
+    affordances: ['tall', 'geometric', 'hollow', 'orange-metal', 'stationary', 'sculptural'],
+    description: 'Una escultura monumental de acero naranja formada por cinco módulos geométricos huecos apilados en la esquina del Corporativo Arboleda.',
+  },
+  {
+    id: 'probe:tile-sample',
+    name: 'Muestra de loseta',
+    placeId: 'building:acabados-hbc-building',
+    cluster: 'arte',
+    unityPosition: { x: 82.8, y: 0.265, z: 3.15 },
+    affordances: ['flat', 'ceramic', 'textured', 'movable', 'carriable'],
+    description: 'Una muestra de loseta cerámica decorativa junto a la banqueta de Acabados HRC.',
+  },
+  {
+    id: 'probe:cat-bowl',
+    name: 'Plato de agua para gato',
+    placeId: 'building:catzoo-building',
+    cluster: 'agua',
+    unityPosition: { x: 74.6, y: 0.24, z: 25.0 },
+    affordances: ['container', 'holds-water', 'movable', 'carriable', 'small'],
+    description: 'Un pequeño plato turquesa junto a la entrada de la clínica felina CatZoo.',
+  },
+  // --- Cluster: terreno (loose sand/earth mound + shovel in open west lot of Dollar 2 Go) ---
+  {
+    id: 'probe:sand-pile',
+    name: 'Montículo de tierra y arena',
+    placeId: 'building:dollar-2-go-building',
+    cluster: 'terreno',
+    unityPosition: { x: 27.5, y: 0.12, z: 11.2 },
+    affordances: ['loose-sand', 'earth', 'scoopable', 'fills-holes', 'stationary'],
+    description: 'Un montículo de tierra y arena suelta en la esquina oeste abierta del terreno de Dollar 2 Go.',
+  },
+  {
+    id: 'probe:shovel',
+    name: 'Pala',
+    placeId: 'building:dollar-2-go-building',
+    cluster: 'terreno',
+    unityPosition: { x: 29.0, y: 0.12, z: 11.0 },
+    affordances: ['long-handle', 'tool', 'scoops-sand', 'holds-sand', 'movable', 'carriable'],
+    description: 'Una pala metálica con mango de madera apoyada junto al montículo de tierra en Dollar 2 Go.',
   },
 ]);
 

@@ -332,20 +332,82 @@ namespace MyVirtualCommunity.Core
         }
 
         /// <summary>
+        /// Fetches read-only bounded perception for an NPC (used on startup to hydrate
+        /// Camila's physical spawn location and held object from World Core truth).
+        /// </summary>
+        public IEnumerator FetchNpcPerception(string agentId, Action<NpcPerceptionData> onComplete)
+        {
+            string url = $"{serverBaseUrl}/api/npc/{agentId}/perception";
+            NpcPerceptionData resultData = null;
+
+            using (UnityWebRequest req = UnityWebRequest.Get(url))
+            {
+                req.timeout = 8;
+                yield return req.SendWebRequest();
+
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    try
+                    {
+                        var res = JsonUtility.FromJson<NpcPerceptionResponse>(req.downloadHandler.text);
+                        if (res != null && res.success && res.result != null)
+                        {
+                            resultData = res.result;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"[WorldCoreClient] Error parsing NPC perception for {agentId}: {ex.Message}");
+                    }
+                }
+            }
+
+            onComplete?.Invoke(resultData);
+        }
+
+        /// <summary>
+        /// Living World: notifies World Core when the human Player moves/drops/kicks
+        /// a tangible world prop so Camila perceives the new location & delta.
+        /// </summary>
+        public IEnumerator SyncWorldPropPosition(string objectId, Vector3 position)
+        {
+            if (string.IsNullOrEmpty(objectId) || !IsConnected) yield break;
+
+            string url = $"{serverBaseUrl}/api/world/props/sync";
+            string safeId = objectId.Replace("\"", "");
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            string payload = $"{{\"objectId\":\"{safeId}\",\"position\":{{\"x\":{position.x.ToString(inv)},\"y\":{position.y.ToString(inv)},\"z\":{position.z.ToString(inv)}}}}}";
+
+            using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
+            {
+                byte[] bodyRaw = Encoding.UTF8.GetBytes(payload);
+                req.uploadHandler = new UploadHandlerRaw(bodyRaw);
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/json");
+                req.timeout = 6;
+                yield return req.SendWebRequest();
+            }
+        }
+
+        /// <summary>
         /// Triggers an authoritative AI cognition cycle for an NPC.
         /// Always invokes onComplete (with null on failure) so callers never deadlock.
         /// </summary>
-        public IEnumerator TriggerNpcAiCycle(string agentId, Action<NpcAiCycleData> onComplete)
+        public IEnumerator TriggerNpcAiCycle(string agentId, Action<NpcAiCycleData> onComplete, string liveContextJson = null)
         {
             string url = $"{serverBaseUrl}/api/npc/{agentId}/cycle";
             NpcAiCycleData cycleResult = null;
 
             using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
             {
-                req.uploadHandler = new UploadHandlerRaw(new byte[0]);
+                byte[] bodyRaw = string.IsNullOrEmpty(liveContextJson)
+                    ? new byte[0]
+                    : Encoding.UTF8.GetBytes(liveContextJson);
+                req.uploadHandler = new UploadHandlerRaw(bodyRaw);
                 req.downloadHandler = new DownloadHandlerBuffer();
                 req.SetRequestHeader("Content-Type", "application/json");
-                req.timeout = 15;
+                // Muse Spark 1.3 with reasoningEffort='medium' can take 8-22s
+                req.timeout = 35;
 
                 yield return req.SendWebRequest();
 
@@ -472,6 +534,43 @@ namespace MyVirtualCommunity.Core
         /// Parses the authoritative simulation world time received from World Core.
         /// Returns null if not yet connected or hydrated.
         /// </summary>
+        /// <summary>
+        /// Living World: notifies World Core when the human Player moves a prop or
+        /// changes its physical substance state (water/sand/pothole fill) so Camila perceives it.
+        /// </summary>
+        public IEnumerator SyncWorldPropState(
+            string objectId,
+            Vector3 position,
+            string contents = null,
+            float waterLevel = -1f,
+            float sandFillLevel = -1f,
+            int chalkMarks = -1)
+        {
+            if (string.IsNullOrEmpty(objectId)) yield break;
+            string url = $"{serverBaseUrl}/api/world/props/sync";
+            string safeId = objectId.Replace("\"", "");
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+
+            var stateParts = new System.Collections.Generic.List<string>();
+            if (!string.IsNullOrEmpty(contents)) stateParts.Add($"\"contents\":\"{contents.Replace("\"", "")}\"");
+            if (waterLevel >= 0f) stateParts.Add($"\"waterLevel\":{waterLevel.ToString("F2", inv)}");
+            if (sandFillLevel >= 0f) stateParts.Add($"\"sandFillLevel\":{sandFillLevel.ToString("F2", inv)}");
+            if (chalkMarks >= 0) stateParts.Add($"\"chalkMarks\":{chalkMarks}");
+
+            string stateJson = stateParts.Count > 0 ? $",\"physicalState\":{{{string.Join(",", stateParts)}}}" : "";
+            string payload = $"{{\"objectId\":\"{safeId}\",\"position\":{{\"x\":{position.x.ToString(inv)},\"y\":{position.y.ToString(inv)},\"z\":{position.z.ToString(inv)}}}{stateJson}}}";
+
+            using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
+            {
+                byte[] bodyRaw = Encoding.UTF8.GetBytes(payload);
+                req.uploadHandler = new UploadHandlerRaw(bodyRaw);
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/json");
+                req.timeout = 8;
+                yield return req.SendWebRequest();
+            }
+        }
+
         public DateTime? AuthoritativeWorldTimeUtc
         {
             get

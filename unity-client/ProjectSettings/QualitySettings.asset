@@ -4,7 +4,7 @@
 QualitySettings:
   m_ObjectHideFlags: 0
   serializedVersion: 15
-  m_CurrentQuality: 2
+  m_CurrentQuality: 0
   m_QualitySettings:
   - name: High Fidelity
     pixelLightCount: 2

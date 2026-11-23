@@ -53,6 +53,7 @@ export interface ExplorerDecisionContext {
   readonly notebookExcerpt: string;
   readonly perceptionJson: string;
   readonly temperature?: number;
+  readonly frequencyPenalty?: number;
   readonly reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
 }
 
