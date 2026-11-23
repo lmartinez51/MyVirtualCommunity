@@ -201,6 +201,8 @@ namespace MyVirtualCommunity.Core
         // Milestone 94 (Camila): move_to_place destination / look_at target.
         public string destinationPlaceId;
         public string targetObjectId;
+        // Milestone 94 Phase 2a: place a pushed object should roll toward.
+        public string pushTowardsPlaceId;
         public string requestedAt;
         public string reasoningContext;
     }

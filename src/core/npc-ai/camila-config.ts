@@ -11,8 +11,10 @@
  * Hybrid mode (Lorenzo-approved 2026-11-21):
  * - Phase 1 (default): explore-only — actions move_to_place / look_at /
  *   observe only. Interact actions exist as types but are GATED OFF.
- * - Phase 2: unlock one action at a time by setting
- *   CAMILA_ACTIONS_ENABLED=true (env) or flipping isCamilaActionEnabled.
+ * - Phase 2a: push_object unlocked by CAMILA_ACTIONS_ENABLED=true (the
+ *   runtime executes it; Unity kicks / pushes the prop and reports back).
+ * - Phase 2b (not built yet): pick_up / carry / drop still return
+ *   'action-not-implemented-yet' even with the gate on.
  *   The gate lives in exactly one place: isCamilaActionEnabled() below,
  *   enforced again in NpcAiRuntime.
  */
@@ -23,7 +25,7 @@ export const CAMILA_AGENT_ID = 'agent:camila-npc';
 export const CAMILA_NAME = 'Camila';
 
 /** Version of the fixed system prompt. Bump when the prompt text changes. */
-export const CAMILA_PROMPT_VERSION = 'camila-prompt-v1';
+export const CAMILA_PROMPT_VERSION = 'camila-prompt-v3';
 
 export const CAMILA_GOAL: NpcGoal = {
   goalId: 'camila-explore-gomez-morin',
@@ -52,14 +54,18 @@ CÓMO RESPONDES:
 - Responde SIEMPRE en español.
 - Devuelve SIEMPRE un único objeto JSON válido, sin texto fuera del JSON, con esta forma:
 {
-  "actionType": "move_to_place" | "look_at" | "observe",
+  "actionType": "move_to_place" | "look_at" | "observe" | "push_object",
   "destinationPlaceId": "id de lugar (solo para move_to_place)",
-  "targetObjectId": "id de objeto (solo para look_at)",
-  "reasoningContext": "una frase corta: qué te llamó la atención y por qué"
+  "targetObjectId": "id de objeto (solo para look_at y push_object)",
+  "pushTowardsPlaceId": "id de lugar hacia donde empujar (solo para push_object, opcional)",
+  "reasoningContext": "una frase corta: qué te llamó la atención y por qué",
+  "hypothesis": "una hipótesis tuya, solo si se te ocurrió una (por ejemplo, que dos cosas van juntas); si no se te ocurrió ninguna, no la pongas (opcional)"
 }
 - "move_to_place" solo a un lugar que exista en el JSON del mundo y distinto de donde estás.
 - "look_at" solo a un objeto que esté en tu percepción actual.
 - "observe" cuando no haya nada nuevo que valga la pena o quieras quedarte mirando un momento.
+- "push_object" solo cuando las acciones estén activadas (Fase 2), solo a un objeto que esté en tu lugar actual y que puedas ver, y solo si sus propiedades dicen que se puede mover, patear o rodar (movable, kickable, rollable). Nunca empujes a una persona ni a un objeto fijo (stationary): la banca, el bote, la portería y el muro no se empujan.
+- Cuando empujes, TÚ decides hacia dónde quieres que ruede: si sabes hacia dónde, indica pushTowardsPlaceId con el lugar; si no lo sabes, se empuja alejándose de ti. Nadie te dice qué empujar ni hacia dónde: decide tú.
 - Máximo 2-3 frases de razonamiento, en tono conversacional y curioso.`;
 
 /**
@@ -100,7 +106,15 @@ export interface CamilaExplorerDecision {
   readonly actionType: CamilaActionType;
   readonly destinationPlaceId?: string;
   readonly targetObjectId?: string;
+  /** Phase 2a: place id the model wants the pushed object to roll toward. */
+  readonly pushTowardsPlaceId?: string;
   readonly reasoningContext?: string;
+  /**
+   * Camila's own hypothesis, only if one occurred to her (e.g. two things
+   * belong together). Never computed for her by the runtime: the prompt
+   * offers this field, she fills it or leaves it out.
+   */
+  readonly hypothesis?: string;
 }
 
 const EXPLORER_ACTIONS: readonly string[] = ['move_to_place', 'look_at', 'observe'];
@@ -179,6 +193,16 @@ export function parseCamilaExplorerDecision(
       return { decision: null, error: 'look_at requires targetObjectId' };
     }
   }
+  if (actionType === 'push_object') {
+    const target = (parsed as { targetObjectId?: unknown }).targetObjectId;
+    if (typeof target !== 'string' || target.trim() === '') {
+      return { decision: null, error: 'push_object requires targetObjectId' };
+    }
+    const towards = (parsed as { pushTowardsPlaceId?: unknown }).pushTowardsPlaceId;
+    if (towards !== undefined && (typeof towards !== 'string' || towards.trim() === '')) {
+      return { decision: null, error: 'pushTowardsPlaceId must be a non-empty place id when present' };
+    }
+  }
   const decision: CamilaExplorerDecision = {
     actionType: actionType as CamilaActionType,
     destinationPlaceId:
@@ -189,9 +213,19 @@ export function parseCamilaExplorerDecision(
       typeof (parsed as { targetObjectId?: unknown }).targetObjectId === 'string'
         ? ((parsed as { targetObjectId: string }).targetObjectId as string)
         : undefined,
+    pushTowardsPlaceId:
+      typeof (parsed as { pushTowardsPlaceId?: unknown }).pushTowardsPlaceId === 'string'
+        ? ((parsed as { pushTowardsPlaceId: string }).pushTowardsPlaceId as string)
+        : undefined,
     reasoningContext:
       typeof (parsed as { reasoningContext?: unknown }).reasoningContext === 'string'
         ? ((parsed as { reasoningContext: string }).reasoningContext as string)
+        : undefined,
+    // Camila's own hypothesis, verbatim: present only when she offered one.
+    hypothesis:
+      typeof (parsed as { hypothesis?: unknown }).hypothesis === 'string' &&
+      ((parsed as { hypothesis: string }).hypothesis as string).trim() !== ''
+        ? ((parsed as { hypothesis: string }).hypothesis as string).trim()
         : undefined,
   };
   return { decision };

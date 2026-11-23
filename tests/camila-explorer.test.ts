@@ -13,6 +13,13 @@
  *    agent (in-flight immutability), look_at records a memory, gated
  *    actions are rejected, Elena's behaviour is unchanged.
  * 8. HTTP: GET /api/npc/agent:camila-npc/notebook works; other agents 404.
+ * 9. Persisted world migration & HTTP arrival completion (fixes Camila stall).
+ * 10. Phase 2a push_object: object-position store, prompt v3 (never tells
+ *    Camila what to do — no ball→goal preference; hypotheses are hers
+ *    only), gate + validation (not-nearby / not-pushable / unknown
+ *    direction place), push dispatch + Unity report commit (notebook +
+ *    persistence), failed-report no-commit, and pick_up / carry / drop
+ *    still not implemented.
  */
 
 import assert from 'node:assert/strict';
@@ -57,6 +64,7 @@ import {
   CamilaNotebook,
   createEmptyCamilaNotebook,
 } from '../src/persistence/camila-notebook.js';
+import { CamilaProbeObjectState } from '../src/core/camila-probe-object-state.js';
 import { MockMetaModelAdapter } from '../src/adapters/mock-meta-model-adapter.js';
 import {
   NpcAiRuntime,
@@ -103,7 +111,48 @@ function makeController(tempDir: string, initialWorldTime = ON_DUTY_WORLD_TIME) 
     initialWorldTime,
     silent: true,
     camilaNotebookPath: join(tempDir, 'camila-notebook.json'),
+    camilaObjectPositionsPath: join(tempDir, 'camila-object-positions.json'),
   });
+}
+
+/** Drives Camila to a place through the authoritative move + arrival pipeline. */
+async function moveCamilaTo(
+  controller: ReturnType<typeof makeController>,
+  destinationPlaceId: string
+): Promise<void> {
+  const runtime = controller.getNpcAiRuntime();
+  runtime.setProviderForAgent(
+    CAMILA_AGENT_ID,
+    new DeterministicNpcCognitionProvider({
+      cannedProposal: {
+        actionType: 'move_to_place',
+        destinationPlaceId,
+        reasoningContext: 'Yendo a empujar algo.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal,
+    })
+  );
+  const cycle = await runtime.runCycle(CAMILA_AGENT_ID);
+  assert.equal(cycle.status, 'executed', `move to ${destinationPlaceId} must dispatch`);
+  const arrival = await controller.completeNpcTraversal(
+    CAMILA_AGENT_ID,
+    destinationPlaceId,
+    'arrived'
+  );
+  assert.equal(arrival.success, true, `arrival at ${destinationPlaceId} must commit`);
+  assert.equal(runtime.getPerception(CAMILA_AGENT_ID).locationId, destinationPlaceId);
+}
+
+function setPushProvider(
+  controller: ReturnType<typeof makeController>,
+  proposal: NpcActionProposal
+): void {
+  controller
+    .getNpcAiRuntime()
+    .setProviderForAgent(
+      CAMILA_AGENT_ID,
+      new DeterministicNpcCognitionProvider({ cannedProposal: proposal })
+    );
 }
 
 describe('Milestone 94: Camila explorer NPC', () => {
@@ -244,7 +293,7 @@ describe('Milestone 94: Camila explorer NPC', () => {
   // 5. Fixed prompt + decision parsing + explore-only gate
   // =========================================================================
   it('fixed system prompt names Camila and sets curiosity / boredom rules', () => {
-    assert.equal(CAMILA_PROMPT_VERSION, 'camila-prompt-v1');
+    assert.equal(CAMILA_PROMPT_VERSION, 'camila-prompt-v3');
     assert.match(CAMILA_SYSTEM_PROMPT, /Eres Camila/);
     assert.match(CAMILA_SYSTEM_PROMPT, /curiosa/);
     assert.match(CAMILA_SYSTEM_PROMPT, /aburres fácilmente/);
@@ -643,6 +692,395 @@ describe('Milestone 94: Camila explorer NPC', () => {
       assert.equal(controller.getNpcPerception(CAMILA_AGENT_ID).locationId, firstDest);
     } finally {
       await server.stop();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // =========================================================================
+  // 10. Phase 2a: push_object
+  // =========================================================================
+  it('object positions store: seed defaults, persist + reload, corrupt file fails safe', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-objstate-'));
+    try {
+      const filePath = join(tempDir, 'camila-object-positions.json');
+      const store = new CamilaProbeObjectState(filePath);
+      assert.deepEqual(store.getPosition('probe:ball'), { x: 45, y: 0.345, z: 14 });
+      assert.equal(store.getPosition('probe:nope'), null);
+
+      assert.equal(store.setPosition('probe:ball', { x: 45, y: 0.345, z: 15.5 }), true);
+      assert.equal(store.setPosition('probe:nope', { x: 0, y: 0, z: 0 }), false);
+      assert.equal(store.setPosition('probe:ball', { x: 999, y: 0.345, z: 15.5 }), false);
+      assert.equal(store.setPosition('probe:ball', { x: Number.NaN, y: 0, z: 0 }), false);
+      store.save();
+      assert.ok(existsSync(filePath));
+
+      const reloaded = new CamilaProbeObjectState(filePath);
+      assert.deepEqual(reloaded.getPosition('probe:ball'), { x: 45, y: 0.345, z: 15.5 });
+      assert.equal(reloaded.loadError, null);
+
+      writeFileSync(filePath, '{ not json', 'utf-8');
+      const corrupt = new CamilaProbeObjectState(filePath);
+      assert.deepEqual(corrupt.getPosition('probe:ball'), { x: 45, y: 0.345, z: 14 });
+      assert.ok(corrupt.loadError);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('prompt v3 offers push_object; parse accepts it with the gate on, rejects it off', () => {
+    assert.equal(CAMILA_PROMPT_VERSION, 'camila-prompt-v3');
+    assert.match(CAMILA_SYSTEM_PROMPT, /push_object/);
+    assert.match(CAMILA_SYSTEM_PROMPT, /pushTowardsPlaceId/);
+    assert.match(CAMILA_SYSTEM_PROMPT, /stationary/);
+    // Prompt v3 (Lorenzo's correction): Camila is NEVER told what to do.
+    // No ball→goal preference, no ball→goal example: she decides the
+    // direction herself, and any hypothesis is her own.
+    assert.doesNotMatch(CAMILA_SYSTEM_PROMPT, /Prefiere empujar la pelota/);
+    assert.doesNotMatch(CAMILA_SYSTEM_PROMPT, /hacia el lugar de la portería/);
+    assert.doesNotMatch(CAMILA_SYSTEM_PROMPT, /pelota hacia la portería/);
+    assert.match(CAMILA_SYSTEM_PROMPT, /TÚ decides hacia dónde/);
+    assert.match(CAMILA_SYSTEM_PROMPT, /hypothesis/);
+
+    const raw = JSON.stringify({
+      actionType: 'push_object',
+      targetObjectId: 'probe:ball',
+      pushTowardsPlaceId: 'building:dollar-2-go-building',
+      reasoningContext: 'La pelota quiere ir a la portería.',
+      hypothesis: 'Creo que la pelota y la portería van juntas.',
+    });
+    const allowed = parseCamilaExplorerDecision(raw, true);
+    assert.ok(allowed.decision);
+    assert.equal(allowed.decision.actionType, 'push_object');
+    assert.equal(allowed.decision.pushTowardsPlaceId, 'building:dollar-2-go-building');
+    assert.equal(allowed.decision.hypothesis, 'Creo que la pelota y la portería van juntas.');
+
+    // A decision without a hypothesis parses fine and carries none.
+    const noHyp = parseCamilaExplorerDecision(
+      JSON.stringify({
+        actionType: 'push_object',
+        targetObjectId: 'probe:ball',
+        reasoningContext: 'Solo quiero ver qué pasa si la empujo.',
+      }),
+      true
+    );
+    assert.ok(noHyp.decision);
+    assert.equal(noHyp.decision.hypothesis, undefined);
+
+    const gated = parseCamilaExplorerDecision(raw, false);
+    assert.equal(gated.decision, null);
+    assert.match(gated.error ?? '', /gated off/);
+
+    const missingTarget = parseCamilaExplorerDecision(
+      JSON.stringify({ actionType: 'push_object' }),
+      true
+    );
+    assert.equal(missingTarget.decision, null);
+    assert.match(missingTarget.error ?? '', /targetObjectId/);
+  });
+
+  it('gate off: push_object is rejected as action-gated', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-push-gate-'));
+    try {
+      const controller = makeController(tempDir);
+      const runtime = controller.getNpcAiRuntime();
+      setPushProvider(controller, {
+        actionType: 'push_object',
+        targetObjectId: 'probe:ball',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const result = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(result.status, 'rejected');
+      assert.equal(result.error?.code, 'action-gated');
+      assert.equal(runtime.getPendingPush(CAMILA_AGENT_ID), undefined);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('gate on: pushing an object in another place is rejected object-not-nearby', async () => {
+    process.env.CAMILA_ACTIONS_ENABLED = 'true';
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-push-far-'));
+    try {
+      const controller = makeController(tempDir);
+      const runtime = controller.getNpcAiRuntime();
+      // Camila starts at restaurant:wing-spot; the ball is at Dollar 2 Go.
+      assert.equal(runtime.getPerception(CAMILA_AGENT_ID).locationId, 'restaurant:wing-spot');
+      setPushProvider(controller, {
+        actionType: 'push_object',
+        targetObjectId: 'probe:ball',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const result = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(result.status, 'rejected');
+      assert.equal(result.error?.code, 'object-not-nearby');
+      assert.equal(runtime.getPendingPush(CAMILA_AGENT_ID), undefined);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('gate on: pushing the stationary bench is rejected object-not-pushable', async () => {
+    process.env.CAMILA_ACTIONS_ENABLED = 'true';
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-push-bench-'));
+    try {
+      const controller = makeController(tempDir);
+      const runtime = controller.getNpcAiRuntime();
+      await moveCamilaTo(controller, 'street:blvd-gomez-morin');
+      setPushProvider(controller, {
+        actionType: 'push_object',
+        targetObjectId: 'probe:bench',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const result = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(result.status, 'rejected');
+      assert.equal(result.error?.code, 'object-not-pushable');
+      assert.equal(runtime.getPendingPush(CAMILA_AGENT_ID), undefined);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('gate on: pushing the ball toward the goal executes, commits on Unity report, notebook + persistence', async () => {
+    process.env.CAMILA_ACTIONS_ENABLED = 'true';
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-push-ball-'));
+    const controller = makeController(tempDir);
+    const server = createWorldServer({ controller, silent: true });
+    const info = await server.start(0, '127.0.0.1');
+    try {
+      const runtime = controller.getNpcAiRuntime();
+      await moveCamilaTo(controller, 'building:dollar-2-go-building');
+
+      // Unknown push direction place is invalid, not a push.
+      setPushProvider(controller, {
+        actionType: 'push_object',
+        targetObjectId: 'probe:ball',
+        pushTowardsPlaceId: 'place:nope',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const invalid = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(invalid.status, 'invalid_proposal');
+      assert.equal(runtime.getPendingPush(CAMILA_AGENT_ID), undefined);
+
+      // The real push: ball (45, 0.345, 14) toward the goal's place anchor
+      // (45, 0.24, 15) -> deterministic 1.5 m step to (45, 0.345, 15.5).
+      // The hypothesis below is Camila's OWN (prompt v3): the runtime only
+      // records what she offered, verbatim — it never invents a pairing.
+      setPushProvider(controller, {
+        actionType: 'push_object',
+        targetObjectId: 'probe:ball',
+        pushTowardsPlaceId: 'building:dollar-2-go-building',
+        reasoningContext: 'La pelota tiene que ir a la portería.',
+        hypothesis: 'Creo que la pelota y la portería van juntas.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const result = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(result.status, 'executed');
+      assert.equal(result.commandDispatched?.commandName, 'push-object');
+      assert.equal(result.commandDispatched?.success, true);
+      const payload = result.commandDispatched?.payload as {
+        targetObjectId: string;
+        fromPosition: { x: number; y: number; z: number };
+        expectedPosition: { x: number; y: number; z: number };
+      };
+      assert.equal(payload.targetObjectId, 'probe:ball');
+      assert.deepEqual(payload.fromPosition, { x: 45, y: 0.345, z: 14 });
+      assert.deepEqual(payload.expectedPosition, { x: 45, y: 0.345, z: 15.5 });
+
+      // A second push while one is pending is rejected, not stacked.
+      const pending = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(pending.status, 'rejected');
+      assert.equal(pending.error?.code, 'push-pending');
+      assert.ok(runtime.getPendingPush(CAMILA_AGENT_ID));
+
+      // Unity reports the physical result (it rolled a little further: z 16).
+      const reportRes = await fetch(`${info.url}/api/npc/agent:camila-npc/object-interaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetObjectId: 'probe:ball',
+          status: 'applied',
+          newPosition: { x: 45, y: 0.345, z: 16 },
+        }),
+      });
+      assert.equal(reportRes.status, 200);
+      const reportBody = (await reportRes.json()) as {
+        success: boolean;
+        result: { code: string; committed: boolean; newPosition: { x: number; y: number; z: number } };
+      };
+      assert.equal(reportBody.success, true);
+      assert.equal(reportBody.result.code, 'push-applied');
+      assert.equal(reportBody.result.committed, true);
+      assert.deepEqual(reportBody.result.newPosition, { x: 45, y: 0.345, z: 16 });
+      assert.equal(runtime.getPendingPush(CAMILA_AGENT_ID), undefined);
+
+      // Position committed + persisted + reloadable.
+      assert.deepEqual(
+        controller.getCamilaObjectPositions().positions['probe:ball'],
+        { x: 45, y: 0.345, z: 16 }
+      );
+      const positionsPath = join(tempDir, 'camila-object-positions.json');
+      assert.ok(existsSync(positionsPath));
+      const reloaded = new CamilaProbeObjectState(positionsPath);
+      assert.deepEqual(reloaded.getPosition('probe:ball'), { x: 45, y: 0.345, z: 16 });
+
+      // Notebook: diary entry + Camila's OWN hypothesis, recorded verbatim.
+      const notebook = JSON.parse(readFileSync(join(tempDir, 'camila-notebook.json'), 'utf-8')) as {
+        diary: { text: string }[];
+        hypotheses: { text: string; status: string }[];
+      };
+      assert.ok(notebook.diary.some((d) => /Empujé Pelota/.test(d.text)));
+      assert.equal(notebook.hypotheses.length, 1);
+      assert.equal(
+        notebook.hypotheses[0].text,
+        'Creo que la pelota y la portería van juntas.'
+      );
+      assert.equal(notebook.hypotheses[0].status, 'open');
+
+      // A second push WITHOUT a hypothesis records NO new hypothesis.
+      setPushProvider(controller, {
+        actionType: 'push_object',
+        targetObjectId: 'probe:ball',
+        pushTowardsPlaceId: 'building:dollar-2-go-building',
+        reasoningContext: 'Solo quiero ver qué pasa si la empujo otra vez.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const second = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(second.status, 'executed');
+      const secondReport = await fetch(`${info.url}/api/npc/agent:camila-npc/object-interaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetObjectId: 'probe:ball',
+          status: 'applied',
+          newPosition: { x: 45, y: 0.345, z: 17.5 },
+        }),
+      });
+      assert.equal(secondReport.status, 200);
+      const notebookAfter = JSON.parse(readFileSync(join(tempDir, 'camila-notebook.json'), 'utf-8')) as {
+        diary: { text: string }[];
+        hypotheses: { text: string; status: string }[];
+      };
+      assert.equal(notebookAfter.hypotheses.length, 1);
+      assert.equal(
+        notebookAfter.hypotheses[0].text,
+        'Creo que la pelota y la portería van juntas.'
+      );
+      const memories = runtime.getMemoryStore().getMemories();
+      assert.ok(memories.some((m) => m.type === 'object_noticed' && /Empujé/.test(m.summary)));
+    } finally {
+      await server.stop();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('gate on: a failed push report clears the pending push without committing', async () => {
+    process.env.CAMILA_ACTIONS_ENABLED = 'true';
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-push-fail-'));
+    const controller = makeController(tempDir);
+    const server = createWorldServer({ controller, silent: true });
+    const info = await server.start(0, '127.0.0.1');
+    try {
+      const runtime = controller.getNpcAiRuntime();
+      await moveCamilaTo(controller, 'building:dollar-2-go-building');
+      setPushProvider(controller, {
+        actionType: 'push_object',
+        targetObjectId: 'probe:ball',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const result = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(result.status, 'executed');
+      assert.ok(runtime.getPendingPush(CAMILA_AGENT_ID));
+
+      const reportRes = await fetch(`${info.url}/api/npc/agent:camila-npc/object-interaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetObjectId: 'probe:ball', status: 'failed', message: 'No alcancé la pelota.' }),
+      });
+      assert.equal(reportRes.status, 200);
+      const reportBody = (await reportRes.json()) as {
+        success: boolean;
+        result: { code: string; committed: boolean };
+      };
+      assert.equal(reportBody.success, true);
+      assert.equal(reportBody.result.code, 'push-failed-reported');
+      assert.equal(reportBody.result.committed, false);
+      assert.equal(runtime.getPendingPush(CAMILA_AGENT_ID), undefined);
+
+      // Nothing moved, and a fresh push works again (no stuck pending state).
+      assert.deepEqual(
+        controller.getCamilaObjectPositions().positions['probe:ball'],
+        { x: 45, y: 0.345, z: 14 }
+      );
+      const retry = await runtime.runCycle(CAMILA_AGENT_ID);
+      assert.equal(retry.status, 'executed');
+    } finally {
+      await server.stop();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('gate on: pick_up / carry / drop still return action-not-implemented-yet', async () => {
+    process.env.CAMILA_ACTIONS_ENABLED = 'true';
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-push-p2b-'));
+    try {
+      const controller = makeController(tempDir);
+      const runtime = controller.getNpcAiRuntime();
+      for (const actionType of ['pick_up_object', 'carry_object', 'drop_object'] as const) {
+        setPushProvider(controller, {
+          actionType,
+          targetObjectId: 'probe:ball',
+          requestedAt: ON_DUTY_WORLD_TIME,
+        } as NpcActionProposal);
+        const result = await runtime.runCycle(CAMILA_AGENT_ID);
+        assert.equal(result.status, 'rejected', `${actionType} must be rejected`);
+        assert.equal(result.error?.code, 'action-not-implemented-yet');
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('Camila provider passes a push decision with direction through to the proposal', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-push-provider-'));
+    try {
+      const controller = makeController(tempDir);
+      const perception = controller.getNpcPerception(CAMILA_AGENT_ID);
+      const provider = new CamilaCognitionProvider({
+        metaModel: new MockMetaModelAdapter({
+          cannedDecision: JSON.stringify({
+            actionType: 'push_object',
+            targetObjectId: 'probe:ball',
+            pushTowardsPlaceId: 'building:dollar-2-go-building',
+            reasoningContext: 'La pelota tiene que ir a la portería.',
+          }),
+        }),
+        actionsEnabled: true,
+      });
+      const result = await provider.decideAction({
+        perception,
+        goal: CAMILA_GOAL,
+        memories: [],
+      });
+      assert.equal(result.proposal.actionType, 'push_object');
+      assert.equal(result.proposal.targetObjectId, 'probe:ball');
+      assert.equal(result.proposal.pushTowardsPlaceId, 'building:dollar-2-go-building');
+
+      // Unknown direction place is rejected by the provider, not passed through.
+      const badProvider = new CamilaCognitionProvider({
+        metaModel: new MockMetaModelAdapter({
+          cannedDecision: JSON.stringify({
+            actionType: 'push_object',
+            targetObjectId: 'probe:ball',
+            pushTowardsPlaceId: 'place:nope',
+          }),
+        }),
+        actionsEnabled: true,
+      });
+      await assert.rejects(
+        badProvider.decideAction({ perception, goal: CAMILA_GOAL, memories: [] }),
+        /unknown push direction place/
+      );
+    } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });

@@ -45,6 +45,7 @@ import { RealTimeSource } from './time-source.js';
 import { DEFAULT_DEVELOPMENT_PLAYER_ID } from './config.js';
 import {
   NpcAiRuntime,
+  type CamilaObjectPushResult,
   type NpcCognitionProvider,
   type NpcPerception,
   type NpcAiCycleResult,
@@ -60,10 +61,16 @@ import {
   CAMILA_GOAL,
 } from '../core/npc-ai/camila-config.js';
 import { CamilaCognitionProvider } from '../core/npc-ai/providers/camila-cognition-provider.js';
+import { loadMetaModelConfig } from '../ports/meta-model-port.js';
 import {
   CamilaNotebook,
   type CamilaNotebookData,
 } from '../persistence/camila-notebook.js';
+import {
+  CamilaProbeObjectState,
+  type CamilaObjectPositionsData,
+  type UnityPosition,
+} from '../core/camila-probe-object-state.js';
 import { buildCamilaWorldState } from '../core/camila-world-state.js';
 
 export interface SessionControllerOptions extends BootstrapOptions {
@@ -74,6 +81,8 @@ export interface SessionControllerOptions extends BootstrapOptions {
   camilaProvider?: NpcCognitionProvider;
   /** Override Camila's notebook path (tests). Defaults to data/camila-notebook.json. */
   camilaNotebookPath?: string;
+  /** Override Camila's probe-object positions path (tests). Defaults to data/camila-object-positions.json. */
+  camilaObjectPositionsPath?: string;
 }
 import {
   findBusinessSchedule,
@@ -226,6 +235,7 @@ export class WorldSessionController {
   private aiRuntime?: NpcAiRuntime;
   private readonly traversalCoordinator = new RuntimeTraversalCoordinator();
   private camilaNotebook?: CamilaNotebook;
+  private camilaObjectState?: CamilaProbeObjectState;
 
   constructor(options: SessionControllerOptions = {}) {
     const bootstrapResult = bootstrapWorld({
@@ -254,6 +264,8 @@ export class WorldSessionController {
   private createAiRuntime(options: SessionControllerOptions): NpcAiRuntime {
     const notebook = new CamilaNotebook(options.camilaNotebookPath);
     this.camilaNotebook = notebook;
+    const objectState = new CamilaProbeObjectState(options.camilaObjectPositionsPath);
+    this.camilaObjectState = objectState;
     const worldSummary = JSON.stringify(buildCamilaWorldState(), null, 2);
     const camilaProvider =
       options.camilaProvider ??
@@ -261,11 +273,23 @@ export class WorldSessionController {
         worldStateSummary: worldSummary,
         notebookExcerpt: () => notebook.toExcerpt(),
       });
+    // Startup line so the operator can confirm live Muse vs local mock.
+    // Never logs the key (or its length): only the mode and model name.
+    // Skipped when silent (tests / programmatic use).
+    if (options.silent !== true) {
+      const metaConfig = loadMetaModelConfig();
+      if (metaConfig.apiKey) {
+        console.log(`[Camila] provider: live-api (${metaConfig.model})`);
+      } else {
+        console.log('[Camila] provider: local-mock (sin MODEL_API_KEY, decisiones de prueba)');
+      }
+    }
     return new NpcAiRuntime({
       controller: this,
       provider: options.aiProvider,
       coordinator: this.traversalCoordinator,
       notebook,
+      objectState,
       agentProviders: { [CAMILA_AGENT_ID]: camilaProvider },
       agentGoals: { [CAMILA_AGENT_ID]: CAMILA_GOAL },
     });
@@ -516,6 +540,58 @@ export class WorldSessionController {
   }
 
   /**
+   * Milestone 94 Phase 2a: completes a dispatched Camila push from Unity's
+   * physical report (POST /api/npc/:agentId/object-interaction). Serialized
+   * through the command queue, like completeNpcTraversal, so the position
+   * commit never races with traversal completion or player commands.
+   * Only Camila can report object interactions; anything else is rejected
+   * without touching state.
+   */
+  public completeObjectInteraction(
+    agentId: string,
+    targetObjectId: string | undefined,
+    status: 'applied' | 'failed',
+    newPosition?: UnityPosition
+  ): Promise<CamilaObjectPushResult> {
+    if (this.isShuttingDown || this.isStopped) {
+      return Promise.resolve({
+        success: false,
+        code: 'object-interaction-interrupted',
+        message: 'Server is shutting down or stopped',
+        agentId,
+        targetObjectId: targetObjectId ?? '',
+        committed: false,
+      });
+    }
+    if (agentId !== CAMILA_AGENT_ID) {
+      return Promise.resolve({
+        success: false,
+        code: 'object-interaction-not-for-agent',
+        message: `Only ${CAMILA_AGENT_ID} reports object interactions, got "${agentId}".`,
+        agentId,
+        targetObjectId: targetObjectId ?? '',
+        committed: false,
+      });
+    }
+
+    const task = async (): Promise<CamilaObjectPushResult> => {
+      const worldTime = this.clock.getTime();
+      const result = this.getNpcAiRuntime().completeObjectPush(
+        agentId,
+        targetObjectId,
+        status,
+        newPosition,
+        worldTime
+      );
+      return result;
+    };
+
+    const nextPromise = this.commandQueue.then(task, task);
+    this.commandQueue = nextPromise.then(() => {}, () => {});
+    return nextPromise;
+  }
+
+  /**
    * Returns AI diagnostics for the target NPC.
    */
   public getNpcAiDiagnostics(agentId: string): NpcAiDiagnostics {
@@ -532,6 +608,18 @@ export class WorldSessionController {
       this.camilaNotebook = new CamilaNotebook();
     }
     return this.camilaNotebook.getData();
+  }
+
+  /**
+   * Milestone 94 Phase 2a: returns Camila's current probe-object positions
+   * (read-only snapshot). Positions live outside WorldState; this is the
+   * only server-side read path for them.
+   */
+  public getCamilaObjectPositions(): CamilaObjectPositionsData {
+    if (!this.camilaObjectState) {
+      this.camilaObjectState = new CamilaProbeObjectState();
+    }
+    return this.camilaObjectState.getData();
   }
 
   /**

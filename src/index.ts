@@ -1,3 +1,10 @@
+import { loadEnvFile } from './config/load-env.js';
+
+// Load .env first (if present): the real .env with MODEL_API_KEY lives on
+// the operator's machine and is never committed. Without this, `npm start`
+// would silently fall back to Camila's local mock even with a .env present.
+loadEnvFile();
+
 import { createWorldServer } from './server/http-server.js';
 import { DEFAULT_SERVER_PORT, DEFAULT_SERVER_HOST } from './server/config.js';
 

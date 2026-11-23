@@ -25,6 +25,11 @@ namespace MyVirtualCommunity.Npc
     ///   along her path (e.g. Wing Spot, Pastelería La Tía Lupe, Restroom, Residence gate),
     ///   waits for them to swing open before walking through, respects business operating
     ///   hours and staff-only rooms, and schedules auto-close behind her.
+    /// - Phase 2a (push_object): on an authoritative push cycle she walks to the object's
+    ///   place, approaches the prop, kicks it (ball) or body-pushes it (other movable
+    ///   props) via InteractiveWorldProp, waits for the physics to settle, and reports
+    ///   the new position to POST /api/npc/agent:camila-npc/object-interaction so World
+    ///   Core commits it. She never picks up, carries or drops anything (Phase 2b).
     /// </summary>
     public class CamilaNpcController : MonoBehaviour
     {
@@ -68,6 +73,13 @@ namespace MyVirtualCommunity.Npc
         private readonly Queue<Vector3> waypointQueue = new Queue<Vector3>();
         private Vector3? lookAtTargetPosition;
         private float lookAtHoldTimer;
+
+        // Phase 2a push state: a push cycle walks to the object's place first
+        // (authoritative arrival), then approaches the prop and kicks/pushes it.
+        private string pendingPushObjectId = "";
+        private string pendingPushTowardsPlaceId = "";
+        private bool walkingToPushObject;
+        private bool pushReportInFlight;
 
         // Autonomous door-opening state
         private InteractiveDoor activeDoorOpening;
@@ -117,6 +129,54 @@ namespace MyVirtualCommunity.Npc
                 { "probe:cup", new Vector3(60.48f, 0.75f, 2.4f) },
                 { "probe:chalk", new Vector3(-8f, 0.265f, 2.4f) },
                 { "probe:blank-wall", new Vector3(-2.5f, 1.24f, 8f) },
+            };
+
+        /// <summary>
+        /// Probe object id -> seed place id (mirror of CAMILA_PROBE_OBJECTS placeId).
+        /// A push first walks to the object's place via the authoritative arrival loop.
+        /// </summary>
+        public static readonly Dictionary<string, string> ProbeObjectPlaces =
+            new Dictionary<string, string>
+            {
+                { "probe:ball", "building:dollar-2-go-building" },
+                { "probe:small-goal", "building:dollar-2-go-building" },
+                { "probe:cone-west", "building:dollar-2-go-building" },
+                { "probe:cone-east", "building:dollar-2-go-building" },
+                { "probe:trash-bag", "restaurant:wing-spot" },
+                { "probe:trash-bin", "street:av-la-arboleda" },
+                { "probe:broom", "building:tia-lupe-building" },
+                { "probe:puddle", "street:calle-del-porvenir" },
+                { "probe:bucket", "building:del-porvenir-residence" },
+                { "probe:watering-can", "building:del-porvenir-residence" },
+                { "probe:umbrella", "street:blvd-gomez-morin" },
+                { "probe:bench", "street:blvd-gomez-morin" },
+                { "probe:book", "street:blvd-gomez-morin" },
+                { "probe:cup", "street:blvd-gomez-morin" },
+                { "probe:chalk", "street:blvd-gomez-morin" },
+                { "probe:blank-wall", "building:wing-spot-building" },
+            };
+
+        /// <summary>
+        /// Probe object id -> scene GameObject name (GomezMorinSceneBuilder).
+        /// Only props built as a single GameObject with an InteractiveWorldProp
+        /// are listed; the goal is three separate boxes, the puddle is a recessed
+        /// pothole group, and the bench/wall are fixed — none of those are pushable.
+        /// </summary>
+        public static readonly Dictionary<string, string> ProbeObjectGameObjectNames =
+            new Dictionary<string, string>
+            {
+                { "probe:ball", "Probe_Ball" },
+                { "probe:cone-west", "Probe_ConeWest" },
+                { "probe:cone-east", "Probe_ConeEast" },
+                { "probe:trash-bag", "Probe_TrashBag" },
+                { "probe:trash-bin", "Probe_TrashBin" },
+                { "probe:broom", "Probe_Broom" },
+                { "probe:bucket", "Probe_Bucket" },
+                { "probe:watering-can", "Probe_WateringCan" },
+                { "probe:umbrella", "Probe_Umbrella" },
+                { "probe:book", "Probe_Book" },
+                { "probe:cup", "Probe_Cup" },
+                { "probe:chalk", "Probe_Chalk" },
             };
 
         private void Awake()
@@ -198,7 +258,7 @@ namespace MyVirtualCommunity.Npc
                 return;
             }
 
-            if (IsWalking || arrivalReportInFlight)
+            if (IsWalking || arrivalReportInFlight || pushReportInFlight)
             {
                 return;
             }
@@ -497,7 +557,17 @@ namespace MyVirtualCommunity.Npc
 
         private void CompleteCurrentWalk(string status, string message)
         {
+            // Phase 2a: finishing the short approach walk to a prop means kick/push
+            // it now — this walk is NOT a place arrival and reports nothing about location.
+            if (walkingToPushObject)
+            {
+                walkingToPushObject = false;
+                ExecutePushObject();
+                return;
+            }
+
             string finishedPlace = currentDestinationPlaceId;
+            string walkStatus = status;
             currentDestinationPlaceId = "";
             waypointQueue.Clear();
 
@@ -514,7 +584,25 @@ namespace MyVirtualCommunity.Npc
                         arrivalReportInFlight = false;
                         // Wait a natural observation beat before choosing the next destination
                         cycleTimer = Mathf.Max(0f, aiCycleIntervalSeconds - 4.0f);
+                        // Phase 2a: arrived at the pushed object's place — approach the prop.
+                        // If the walk was interrupted (closed door), the push cannot proceed.
+                        if (!string.IsNullOrEmpty(pendingPushObjectId))
+                        {
+                            if (walkStatus == "arrived")
+                            {
+                                BeginWalkToPushObject();
+                            }
+                            else
+                            {
+                                ReportPushFailed(pendingPushObjectId, $"No pude llegar a {finishedPlace}: {message}");
+                            }
+                        }
                     }));
+            }
+            else if (!string.IsNullOrEmpty(pendingPushObjectId))
+            {
+                // No arrival to report (already there / disconnected): go straight to the prop.
+                BeginWalkToPushObject();
             }
         }
 
@@ -721,6 +809,195 @@ namespace MyVirtualCommunity.Npc
             return true;
         }
 
+        // =====================================================================
+        // Phase 2a: push_object — walk to the prop, kick / push it, report back.
+        // Presentation-only: the decision (what to push, toward where) came from
+        // an authoritative World Core cycle; Unity only performs it physically
+        // and reports the resulting position. A failed push commits nothing.
+        // =====================================================================
+
+        /// <summary>
+        /// Starts a push: walks to the object's place through the authoritative
+        /// arrival loop; the approach + kick happen once arrival is reported.
+        /// </summary>
+        public void StartPushObject(string objectId, string pushTowardsPlaceId)
+        {
+            if (string.IsNullOrEmpty(objectId))
+            {
+                Debug.LogWarning("[CamilaNpcController] push_object without targetObjectId — ignoring.");
+                return;
+            }
+            if (!ProbeObjectPlaces.TryGetValue(objectId, out string placeId))
+            {
+                Debug.LogWarning($"[CamilaNpcController] Unknown push target \"{objectId}\" — ignoring.");
+                return;
+            }
+
+            pendingPushObjectId = objectId;
+            pendingPushTowardsPlaceId = pushTowardsPlaceId ?? "";
+
+            if (!MoveToPlace(placeId))
+            {
+                ReportPushFailed(objectId, $"No sé cómo llegar a {placeId}.");
+            }
+        }
+
+        /// <summary>
+        /// After arriving at the object's place, walks the last metres to stand
+        /// next to the prop (stopping 0.7 m short so she does not collide with it).
+        /// </summary>
+        private void BeginWalkToPushObject()
+        {
+            string objectId = pendingPushObjectId;
+            if (string.IsNullOrEmpty(objectId)) return;
+
+            GameObject propObject = FindProbePropObject(objectId);
+            if (propObject == null)
+            {
+                ReportPushFailed(objectId, $"No encontré el objeto {objectId} en la escena.");
+                return;
+            }
+
+            Vector3 propPos = propObject.transform.position;
+            Vector3 toProp = new Vector3(propPos.x - transform.position.x, 0f, propPos.z - transform.position.z);
+            Vector3 approach = propPos;
+            if (toProp.sqrMagnitude > 0.04f)
+            {
+                Vector3 away = toProp.normalized;
+                approach = new Vector3(propPos.x - away.x * 0.7f, propPos.y, propPos.z - away.z * 0.7f);
+            }
+
+            walkingToPushObject = true;
+            waypointQueue.Clear();
+            EnqueueWaypoint(approach);
+            Debug.Log($"[CamilaNpcController] Acercándome a {objectId} para empujarlo.");
+        }
+
+        /// <summary>
+        /// Kicks (ball) or body-pushes (other movable props) the prop in the
+        /// cycle's push direction, then waits for the physics to settle before
+        /// reporting the real resting position to World Core.
+        /// </summary>
+        private void ExecutePushObject()
+        {
+            string objectId = pendingPushObjectId;
+            string towardsPlaceId = pendingPushTowardsPlaceId;
+            pendingPushObjectId = "";
+            pendingPushTowardsPlaceId = "";
+
+            if (string.IsNullOrEmpty(objectId)) return;
+
+            GameObject propObject = FindProbePropObject(objectId);
+            InteractiveWorldProp prop = propObject != null
+                ? propObject.GetComponent<InteractiveWorldProp>()
+                : null;
+            if (prop == null)
+            {
+                ReportPushFailed(objectId, $"El objeto {objectId} no tiene InteractiveWorldProp.");
+                return;
+            }
+
+            // Push direction: toward the cycle's target place anchor, else away from Camila.
+            Vector3 propPos = propObject.transform.position;
+            Vector3 dir;
+            if (!string.IsNullOrEmpty(towardsPlaceId) &&
+                PlaceAnchors.TryGetValue(towardsPlaceId, out Vector3 anchor))
+            {
+                dir = new Vector3(anchor.x - propPos.x, 0f, anchor.z - propPos.z);
+            }
+            else
+            {
+                dir = new Vector3(propPos.x - transform.position.x, 0f, propPos.z - transform.position.z);
+            }
+            if (dir.sqrMagnitude < 0.01f) dir = Vector3.forward;
+            dir.y = 0f;
+            dir.Normalize();
+
+            // Face the push direction, then kick or shove.
+            transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+            if (prop.CanKick)
+            {
+                prop.Kick(transform);
+                Debug.Log($"[CamilaNpcController] ¡Pateé {objectId} hacia {towardsPlaceId}!");
+            }
+            else
+            {
+                prop.ApplyBodyPush(dir, walkSpeed);
+                Debug.Log($"[CamilaNpcController] Empujé {objectId} hacia {towardsPlaceId}.");
+            }
+            TriggerDialogue("Camila", "¡Allá va! " + (string.IsNullOrEmpty(towardsPlaceId) ? "" : $"Hacia {towardsPlaceId}."));
+
+            pushReportInFlight = true;
+            StartCoroutine(PushSettleAndReport(prop, objectId));
+        }
+
+        /// <summary>
+        /// Lets the prop's physics settle, then reports its real resting position.
+        /// </summary>
+        private System.Collections.IEnumerator PushSettleAndReport(InteractiveWorldProp prop, string objectId)
+        {
+            yield return new WaitForSeconds(1.2f);
+
+            if (prop == null)
+            {
+                ReportPushFailed(objectId, "El objeto desapareció antes de reportar el empuje.");
+                pushReportInFlight = false;
+                yield break;
+            }
+
+            Vector3 restingPos = prop.transform.position;
+            if (WorldCoreClient.Instance != null && WorldCoreClient.Instance.IsConnected)
+            {
+                StartCoroutine(WorldCoreClient.Instance.ReportObjectInteraction(
+                    CamilaAgentId,
+                    objectId,
+                    "applied",
+                    restingPos,
+                    $"Camila empujó {objectId}; quedó en ({restingPos.x:F2}, {restingPos.y:F2}, {restingPos.z:F2}).",
+                    _ =>
+                    {
+                        pushReportInFlight = false;
+                        cycleTimer = Mathf.Max(0f, aiCycleIntervalSeconds - 4.0f);
+                    }));
+            }
+            else
+            {
+                pushReportInFlight = false;
+                Debug.LogWarning("[CamilaNpcController] Sin conexión: el empuje no se reportó a World Core.");
+            }
+        }
+
+        /// <summary>
+        /// Reports a failed push so World Core clears the pending push without
+        /// committing any position change. Safe to call when disconnected.
+        /// </summary>
+        private void ReportPushFailed(string objectId, string message)
+        {
+            pendingPushObjectId = "";
+            pendingPushTowardsPlaceId = "";
+            walkingToPushObject = false;
+
+            if (string.IsNullOrEmpty(objectId)) return;
+            if (WorldCoreClient.Instance != null && WorldCoreClient.Instance.IsConnected)
+            {
+                pushReportInFlight = true;
+                StartCoroutine(WorldCoreClient.Instance.ReportObjectInteraction(
+                    CamilaAgentId,
+                    objectId,
+                    "failed",
+                    Vector3.zero,
+                    message,
+                    _ => { pushReportInFlight = false; }));
+            }
+            Debug.LogWarning($"[CamilaNpcController] Empuje fallido ({objectId}): {message}");
+        }
+
+        private GameObject FindProbePropObject(string objectId)
+        {
+            if (!ProbeObjectGameObjectNames.TryGetValue(objectId, out string goName)) return null;
+            return GameObject.Find(goName);
+        }
+
         /// <summary>
         /// Reacts to authoritative AI cycle execution (Elena + Camila share
         /// this event; Camila only acts on her own cycles).
@@ -739,6 +1016,10 @@ namespace MyVirtualCommunity.Npc
             {
                 LookAtObject(cycleData.proposal.targetObjectId);
                 TriggerDialogue("Camila", "¡Mira esto! " + (cycleData.proposal.reasoningContext ?? ""));
+            }
+            else if (cycleData.proposal.actionType == "push_object")
+            {
+                StartPushObject(cycleData.proposal.targetObjectId, cycleData.proposal.pushTowardsPlaceId);
             }
         }
 
