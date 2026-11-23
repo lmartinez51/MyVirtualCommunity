@@ -337,29 +337,43 @@ describe('Milestone 46: Deterministic NPC Decision & Behavior', () => {
       npc.activityState = 'active';
       introduceToAgent(state, player.id, npc.id);
 
-      // Create persistence with invalid path (to force save error)
-      const invalidPath = join('//invalid-host-name-xyz', 'bad', 'path.json');
-      const badPersistence = new LocalFilePersistence(invalidPath);
+      // Force a real disk failure in a cross-platform way: LocalFilePersistence
+      // creates the parent directory with mkdirSync({ recursive: true }), which
+      // throws ENOTDIR on Windows and Linux alike when a path component is a
+      // regular file. (The previous injection used a Windows UNC path with a
+      // nonexistent host, which is a valid writable absolute path on Linux, so
+      // save() succeeded there and this test failed.)
+      const blockerFile = join(tmpdir(), `test-m46-blocker-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+      writeFileSync(blockerFile, 'blocker', 'utf-8');
+      try {
+        // Create persistence with invalid path (to force save error)
+        const invalidPath = join(blockerFile, 'bad', 'path.json');
+        const badPersistence = new LocalFilePersistence(invalidPath);
 
-      // Simulate stepSimulation execution
-      const advanceDurationMs = 5000;
-      const nextTime = new Date(Date.parse(clock.getTime()) + advanceDurationMs).toISOString();
-      const candidateState = structuredClone(state);
-      const candidateClock = WorldClock.create(nextTime);
-      const candidateSim = new Simulation(candidateClock, candidateState, { silent: true });
+        // Simulate stepSimulation execution
+        const advanceDurationMs = 5000;
+        const nextTime = new Date(Date.parse(clock.getTime()) + advanceDurationMs).toISOString();
+        const candidateState = structuredClone(state);
+        const candidateClock = WorldClock.create(nextTime);
+        const candidateSim = new Simulation(candidateClock, candidateState, { silent: true });
 
-      // Tick executes on candidate
-      candidateSim.tick();
-      assert.equal(candidateState.knowledge.length, 1); // candidate has knowledge
+        // Tick executes on candidate
+        candidateSim.tick();
+        assert.equal(candidateState.knowledge.length, 1); // candidate has knowledge
 
-      // Save fails
-      assert.throws(() => badPersistence.save(candidateState));
+        // Save fails
+        assert.throws(() => badPersistence.save(candidateState));
 
-      // As per SessionController design, state and clock are NOT committed on failure:
-      // state remains original state (0 knowledge)
-      // clock remains at START_TIME
-      assert.equal(state.knowledge.length, 0);
-      assert.equal(clock.getTime(), START_TIME);
+        // As per SessionController design, state and clock are NOT committed on failure:
+        // state remains original state (0 knowledge)
+        // clock remains at START_TIME
+        assert.equal(state.knowledge.length, 0);
+        assert.equal(clock.getTime(), START_TIME);
+      } finally {
+        if (existsSync(blockerFile)) {
+          unlinkSync(blockerFile);
+        }
+      }
     });
   });
 

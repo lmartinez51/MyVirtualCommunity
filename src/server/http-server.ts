@@ -1,6 +1,20 @@
 import { createServer, IncomingMessage, ServerResponse, Server as NodeServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { resolve, extname } from 'node:path';
+import * as nodeModule from 'node:module';
+
+/**
+ * Node's built-in TypeScript type stripper (Node >= 22.6). Feature-detected
+ * so the server still starts on older runtimes (the README documents Node
+ * v20+): on runtimes without it the dev fallback that serves `.js` from a
+ * `.ts` source is simply unavailable and those requests fall through to 404,
+ * exactly as before.
+ */
+const stripTypeScriptTypes = (
+  nodeModule as unknown as {
+    stripTypeScriptTypes?: (code: string) => string;
+  }
+).stripTypeScriptTypes;
 import { WorldSessionController, SessionControllerOptions } from './session-controller.js';
 import { DEFAULT_SERVER_PORT, DEFAULT_SERVER_HOST } from './config.js';
 import { TemporalRuntimeAuthority } from './temporal-runtime-authority.js';
@@ -966,6 +980,20 @@ export class WorldHttpServer {
 
   /**
    * Serves static client assets (HTML, CSS, JS) from dist/client or src/client.
+   *
+   * Resolution order (Milestone 30):
+   * 1. dist/client — the production build (`npm run build`: tsc output plus
+   *    copied assets). Takes precedence whenever the built file exists.
+   * 2. src/client — dev fallback for runs without a build (tsx / `npm run dev`
+   *    / the test suite, which never builds). Serves source files whose
+   *    extension is allow-listed in STATIC_MIME_TYPES; raw `.ts` is never
+   *    served (no `.ts` entry in the map), so static-file isolation holds in
+   *    dev exactly as in production.
+   * 3. A `.js` request backed by a same-named `.ts` source in src/client is
+   *    served as JavaScript with its types stripped (Node built-in), which is
+   *    the dev equivalent of the tsc output in dist/client. If the runtime
+   *    cannot strip types, or the source uses non-erasable syntax, the
+   *    request falls through to 404 instead of serving invalid JavaScript.
    */
   private serveStaticFile(res: ServerResponse, pathname: string): boolean {
     // 3D Playable Blockout Client route (Milestone 79)
@@ -1001,7 +1029,24 @@ export class WorldHttpServer {
       relativePath = relativePath.slice(1);
     }
 
-    const baseDir = resolve(process.cwd(), 'dist', 'client');
+    // 1. Production build.
+    if (this.serveStaticFromDir(res, resolve(process.cwd(), 'dist', 'client'), relativePath)) {
+      return true;
+    }
+
+    // 2./3. Dev fallback from source.
+    if (this.serveStaticFromDir(res, resolve(process.cwd(), 'src', 'client'), relativePath)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Serves one static file from a base directory, or returns false when the
+   * file is absent, has no allow-listed MIME type, or escapes the directory.
+   */
+  private serveStaticFromDir(res: ServerResponse, baseDir: string, relativePath: string): boolean {
     const fullPath = resolve(baseDir, relativePath);
 
     // Path traversal check
@@ -1023,6 +1068,32 @@ export class WorldHttpServer {
       });
       res.end(content);
       return true;
+    }
+
+    // Dev fallback: a `.js` request backed by a same-named `.ts` source is
+    // served as JavaScript with its types stripped (the dev equivalent of the
+    // tsc output in dist/client). A direct `.ts` request never reaches here
+    // as servable content: it hits the check above, finds no MIME type for
+    // `.ts`, and falls through to 404.
+    if (extname(fullPath).toLowerCase() === '.js' && stripTypeScriptTypes) {
+      const tsPath = fullPath.slice(0, -'.js'.length) + '.ts';
+      if (existsSync(tsPath) && statSync(tsPath).isFile()) {
+        try {
+          const javaScript = stripTypeScriptTypes(readFileSync(tsPath, 'utf-8'));
+          const content = Buffer.from(javaScript, 'utf-8');
+          res.writeHead(200, {
+            'Content-Type': 'application/javascript; charset=utf-8',
+            'Content-Length': Buffer.byteLength(content),
+            'Cache-Control': 'no-cache',
+          });
+          res.end(content);
+          return true;
+        } catch {
+          // Non-erasable syntax or another strip failure: do not serve
+          // invalid JavaScript; fall through to 404.
+          return false;
+        }
+      }
     }
 
     return false;
