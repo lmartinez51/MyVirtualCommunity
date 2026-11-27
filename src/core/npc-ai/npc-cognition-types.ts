@@ -117,10 +117,16 @@ export interface PerceivedProbeObjectSummary {
   readonly affordances: readonly string[];
   /** Live Unity coordinates (metres) when available. */
   readonly currentPosition?: { readonly x: number; readonly y: number; readonly z: number };
+  /** Objective Euclidean XZ distance (metres) from Camila when live position is available. */
+  readonly distanceFromMeMetres?: number;
   /** Other visible objects nearby at the same place (objective distances, no instructions). */
   readonly nearbyPeers?: readonly string[];
   /** Number of AI cycles Camila has been carrying this object (when held). */
   readonly carriedCycles?: number;
+  /** Number of AI cycles Camila has carried this container/tool while empty. */
+  readonly heldEmptyCycles?: number;
+  /** Objective reminder that both hands are currently occupied holding this object. */
+  readonly handsOccupied?: boolean;
   /** Place where Camila picked up this object (when held). */
   readonly pickedUpAtPlaceId?: string;
   /** Objective live physical state (contents, waterLevel, sandFillLevel, chalkMarks, disposedInBin). */
@@ -201,6 +207,8 @@ export interface NpcPerception {
   readonly isSitting?: boolean;
   /** Surface or object Camila is currently seated on, if any. */
   readonly sittingOn?: string | null;
+  /** Number of place-to-place walks Camila has completed continuously without sitting down. */
+  readonly placesTraversedSinceRest?: number;
   readonly visitedPlaceIds?: readonly string[];
   readonly unvisitedPlaceIds?: readonly string[];
 }

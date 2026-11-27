@@ -33,7 +33,13 @@
 import type { WorldState } from '../world-state.js';
 import type { WorldSessionController, CommandDispatchResult } from '../../server/session-controller.js';
 import { NpcMemoryStore } from './npc-memory.js';
-import { deriveNpcPerception, type CamilaLiveSensorySnapshot } from './npc-perception.js';
+import {
+  deriveNpcPerception,
+  isCamilaLineOfSightOccluded,
+  CAMILA_MAX_OPEN_VISION_METRES,
+  CAMILA_MAX_DIRECT_INTERACTION_METRES,
+  type CamilaLiveSensorySnapshot,
+} from './npc-perception.js';
 import { DeterministicNpcCognitionProvider } from './providers/deterministic-cognition-provider.js';
 import { createMoveToPlaceIntent, dispatchAgentIntent } from '../agent-intent.js';
 import type { RuntimeTraversalCoordinator } from '../traversal-coordinator.js';
@@ -169,6 +175,7 @@ export class NpcAiRuntime {
   private pendingPushByAgent = new Map<string, PendingCamilaPush>();
   private heldCyclesByAgent = new Map<string, number>();
   private heldOriginPlaceByAgent = new Map<string, string>();
+  private placesTraversedSinceRestByAgent = new Map<string, number>();
   private latestLivePlayerContext?: {
     playerPosition?: UnityPosition;
     playerHeldObjectId?: string | null;
@@ -233,6 +240,7 @@ export class NpcAiRuntime {
       camilaPosition: this.latestLivePlayerContext?.camilaPosition,
       heldCycles: heldId ? (this.heldCyclesByAgent.get(id) ?? 0) : undefined,
       heldOriginPlaceId: heldId ? this.heldOriginPlaceByAgent.get(id) : undefined,
+      placesTraversedSinceRest: this.placesTraversedSinceRestByAgent.get(id) ?? 0,
     };
   }
 
@@ -490,6 +498,18 @@ export class NpcAiRuntime {
 
     // 3. Action Translation & World Core Command Dispatch
     if (proposal.actionType === 'observe') {
+      if (agentId === CAMILA_AGENT_ID && this.notebook) {
+        const localIds = (perception.visibleObjectsHere ?? []).map((o) => o.id);
+        try {
+          if (localIds.length > 0) {
+            this.notebook.recordObjectsSeen(perception.locationId, localIds, worldTime);
+          }
+          if (proposal.hypothesis?.trim()) {
+            this.notebook.addHypothesis(proposal.hypothesis.trim(), worldTime);
+          }
+          this.notebook.save();
+        } catch { /* best-effort */ }
+      }
       const result: NpcAiCycleResult = {
         cycleId,
         agentId,
@@ -540,6 +560,39 @@ export class NpcAiRuntime {
         this.lastCycleByAgent.set(agentId, result);
         return result;
       }
+      // Allow local repositioning along a large avenue (e.g. from X=-6.75 outside Wing Spot back to X=55 on Blvd. Gómez Morín)
+      const camilaLivePos = this.latestLivePlayerContext?.camilaPosition;
+      const destAnchor = CAMILA_UNITY_ANCHORS[destination];
+      if (
+        agentId === CAMILA_AGENT_ID &&
+        destination === perception.locationId &&
+        camilaLivePos &&
+        destAnchor &&
+        Math.hypot(destAnchor.x - camilaLivePos.x, destAnchor.z - camilaLivePos.z) > 12
+      ) {
+        if (this.objectState.getSittingState(agentId)) {
+          this.objectState.clearSittingState(agentId);
+          try { this.objectState.save(); } catch { /* best-effort */ }
+        }
+        this.appendCamilaDiary(agentId, worldTime, `Camino por ${destination} hacia otra parte de la calle. ${proposal.reasoningContext ?? ''}`);
+        const repositionResult: NpcAiCycleResult = {
+          cycleId,
+          agentId,
+          worldTime,
+          status: 'executed',
+          perception,
+          proposal,
+          commandDispatched: {
+            commandName: 'move-to-place',
+            payload: { destinationPlaceId: destination, localReposition: true },
+            success: true,
+          },
+          durationMs: Date.now() - startTime,
+        };
+        this.lastCycleByAgent.set(agentId, repositionResult);
+        return repositionResult;
+      }
+
       const intent = createMoveToPlaceIntent(agentId, destination, worldTime, proposal.reasoningContext);
       const dispatchResult = dispatchAgentIntent(state, intent, {
         coordinator: this.coordinator,
@@ -551,6 +604,19 @@ export class NpcAiRuntime {
         if (this.objectState.getSittingState(agentId)) {
           this.objectState.clearSittingState(agentId);
           try { this.objectState.save(); } catch { /* best-effort */ }
+        }
+        // Mark visible objects at the place she is choosing to leave as seen
+        if (agentId === CAMILA_AGENT_ID && this.notebook) {
+          const seenBeforeLeaving = (perception.visibleObjectsHere ?? []).map((o) => o.id);
+          try {
+            if (seenBeforeLeaving.length > 0) {
+              this.notebook.recordObjectsSeen(perception.locationId, seenBeforeLeaving, worldTime);
+            }
+            if (proposal.hypothesis?.trim()) {
+              this.notebook.addHypothesis(proposal.hypothesis.trim(), worldTime);
+            }
+            this.notebook.save();
+          } catch { /* best-effort */ }
         }
         this.activeTraversalStartedWallMs.set(agentId, Date.now());
         this.memoryStore.addMemory({
@@ -602,12 +668,44 @@ export class NpcAiRuntime {
         this.lastCycleByAgent.set(agentId, result);
         return result;
       }
+      const livePos = this.latestLivePlayerContext?.camilaPosition;
+      if (agentId === CAMILA_AGENT_ID && livePos) {
+        const objPos = this.objectState.getPosition(object.id) ?? object.unityPosition;
+        const dist = Math.hypot(objPos.x - livePos.x, objPos.z - livePos.z);
+        if (isCamilaLineOfSightOccluded(livePos, objPos) || dist > CAMILA_MAX_OPEN_VISION_METRES) {
+          const rejErr = {
+            code: 'object-occluded-or-out-of-sight',
+            message: `Desde mi posición actual no tengo vista despejada hacia "${object.name}" (${object.id}); hay muros o demasiada distancia (${dist.toFixed(1)}m).`,
+          };
+          this.recordCamilaRejectionFeedback(agentId, worldTime, perception, proposal, rejErr);
+          const result: NpcAiCycleResult = {
+            cycleId,
+            agentId,
+            worldTime,
+            status: 'rejected',
+            perception,
+            proposal,
+            error: rejErr,
+            durationMs: Date.now() - startTime,
+          };
+          this.lastCycleByAgent.set(agentId, result);
+          return result;
+        }
+      }
       this.memoryStore.addMemory({
         type: 'object_noticed',
         summary: `Noticed "${object.name}" (${object.id}) at ${object.placeId}: ${object.description}`,
         timestamp: worldTime,
         placeId: object.placeId,
       });
+      if (agentId === CAMILA_AGENT_ID && this.notebook) {
+        try {
+          this.notebook.recordObjectsSeen(perception.locationId, [object.id], worldTime);
+          if (proposal.hypothesis?.trim()) {
+            this.notebook.addHypothesis(proposal.hypothesis.trim(), worldTime);
+          }
+        } catch { /* best-effort */ }
+      }
       const result: NpcAiCycleResult = {
         cycleId,
         agentId,
@@ -994,6 +1092,13 @@ export class NpcAiRuntime {
 
     const fromPosition = this.objectState.getPosition(object.id);
     if (!fromPosition) return invalid(`No current position known for object "${object.id}"`);
+    const camilaLivePos = this.latestLivePlayerContext?.camilaPosition;
+    if (camilaLivePos && isCamilaLineOfSightOccluded(camilaLivePos, fromPosition)) {
+      return rejected(
+        'object-occluded-by-wall',
+        `Un muro bloquea el paso/vista hacia "${object.name}" (${object.id}) desde aquí.`
+      );
+    }
     const camilaAnchor = CAMILA_UNITY_ANCHORS[perception.locationId];
     const expectedPosition = this.computePushPosition(fromPosition, towardsAnchor, camilaAnchor);
 
@@ -1096,6 +1201,13 @@ export class NpcAiRuntime {
     }
 
     const fromPosition = this.objectState.getPosition(object.id) ?? object.unityPosition;
+    const camilaLivePos = this.latestLivePlayerContext?.camilaPosition;
+    if (camilaLivePos && isCamilaLineOfSightOccluded(camilaLivePos, fromPosition)) {
+      return rejected(
+        'object-occluded-by-wall',
+        `Un muro bloquea el paso/vista hacia "${object.name}" (${object.id}) desde aquí.`
+      );
+    }
     this.pendingPushByAgent.set(agentId, {
       agentId,
       interactionType: 'pick_up',
@@ -1258,6 +1370,17 @@ export class NpcAiRuntime {
         `"${sourceObj.name}" (${sourceObj.id}) is at "${sourcePlace}", not at "${perception.locationId}".`
       );
     }
+    const scoopCamilaPos = this.latestLivePlayerContext?.camilaPosition;
+    if (scoopCamilaPos) {
+      const srcPos = this.objectState.getPosition(sourceObj.id) ?? sourceObj.unityPosition;
+      const dist = Math.hypot(srcPos.x - scoopCamilaPos.x, srcPos.z - scoopCamilaPos.z);
+      if (isCamilaLineOfSightOccluded(scoopCamilaPos, srcPos) || dist > CAMILA_MAX_DIRECT_INTERACTION_METRES) {
+        return rejected(
+          'object-too-far-or-occluded',
+          `Estoy demasiado lejos (${dist.toFixed(1)}m) o con un muro de por medio respecto a "${sourceObj.name}".`
+        );
+      }
+    }
 
     // Auto-stand if seated
     if (this.objectState.getSittingState(agentId)) {
@@ -1301,9 +1424,10 @@ export class NpcAiRuntime {
         );
       }
       material = 'water';
+      const waterScoopAmount = heldObj.id === 'probe:bucket' ? 0.5 : 0.25;
       this.objectState.setPhysicalState(heldObj.id, { contents: 'water', waterLevel: 1.0 });
       if (sourceObj.id === 'probe:puddle') {
-        const nextWater = Math.max(0, Number((currentWater - 0.25).toFixed(2)));
+        const nextWater = Math.max(0, Number((currentWater - waterScoopAmount).toFixed(2)));
         this.objectState.setPhysicalState(sourceObj.id, { waterLevel: nextWater });
       } else if (sourceState.contents === 'water') {
         this.objectState.setPhysicalState(sourceObj.id, { contents: 'empty', waterLevel: 0 });
@@ -1336,15 +1460,16 @@ export class NpcAiRuntime {
     });
     if (this.notebook) {
       try {
+        this.notebook.recordObjectsSeen(perception.locationId, [heldObj.id, sourceObj.id], worldTime);
         this.notebook.addDiaryEntry(summary, worldTime, perception.locationId);
         if (proposal.hypothesis?.trim()) {
           this.notebook.addHypothesis(proposal.hypothesis.trim().slice(0, 200), worldTime);
         }
-        this.notebook.resolveMatchingHypotheses(
-          material === 'water' ? ['agua', 'charco'] : ['tierra', 'arena', 'bache'],
-          'confirmed',
-          worldTime
-        );
+        // Only auto-confirm single-step water-scoop hypotheses here; keep sand/destination
+        // hypotheses open while Camila carries the sand toward her intended target!
+        if (material === 'water') {
+          this.notebook.resolveMatchingHypotheses(['agua', 'charco'], 'confirmed', worldTime, 2);
+        }
         this.notebook.save();
       } catch {
         // Best-effort notebook
@@ -1417,6 +1542,17 @@ export class NpcAiRuntime {
           `"${targetObj.name}" (${targetObj.id}) is at "${targetPlace}", not at "${perception.locationId}".`
         );
       }
+      const pourCamilaPos = this.latestLivePlayerContext?.camilaPosition;
+      if (pourCamilaPos) {
+        const tgtPos = this.objectState.getPosition(targetObj.id) ?? targetObj.unityPosition;
+        const dist = Math.hypot(tgtPos.x - pourCamilaPos.x, tgtPos.z - pourCamilaPos.z);
+        if (isCamilaLineOfSightOccluded(pourCamilaPos, tgtPos) || dist > CAMILA_MAX_DIRECT_INTERACTION_METRES) {
+          return rejected(
+            'object-too-far-or-occluded',
+            `Estoy demasiado lejos (${dist.toFixed(1)}m) o con un muro de por medio respecto a "${targetObj.name}".`
+          );
+        }
+      }
     }
 
     // Auto-stand if seated
@@ -1440,8 +1576,9 @@ export class NpcAiRuntime {
         summary = `Vacié agua de ${heldObj.name} dentro de "${targetObj.name}" (${targetObj.id}), que quedó lleno.`;
         resolveKeywords = ['agua', targetObj.name.split(' ')[0]];
       } else if (targetObj && targetObj.id === 'probe:puddle') {
+        const addAmount = heldObj.id === 'probe:bucket' ? 0.5 : 0.25;
         const curW = this.objectState.getPhysicalState(targetObj.id)?.waterLevel ?? 0;
-        this.objectState.setPhysicalState(targetObj.id, { waterLevel: Math.min(1.0, Number((curW + 0.25).toFixed(2))) });
+        this.objectState.setPhysicalState(targetObj.id, { waterLevel: Math.min(1.0, Number((curW + addAmount).toFixed(2))) });
         effectKind = 'pour-water-into-puddle';
         summary = `Vacié agua de ${heldObj.name} de regreso al "${targetObj.name}".`;
         resolveKeywords = ['agua', 'charco'];
@@ -1453,16 +1590,19 @@ export class NpcAiRuntime {
     } else if (heldState.contents === 'sand') {
       this.objectState.setPhysicalState(heldObj.id, { contents: 'empty', waterLevel: 0 });
       if (targetObj && targetObj.affordances.includes('fillable-with-sand')) {
+        const sandDelta = heldObj.id === 'probe:bucket' ? 0.66 : 0.34;
+        const waterDisplaced = heldObj.id === 'probe:bucket' ? 0.65 : 0.35;
         const prev = this.objectState.getPhysicalState(targetObj.id) ?? {};
-        const nextSand = Math.min(1.0, Number(((prev.sandFillLevel ?? 0) + 0.34).toFixed(2)));
-        const nextWater = Math.max(0, Number(((prev.waterLevel ?? 0) - 0.35).toFixed(2)));
+        const nextSand = Math.min(1.0, Number(((prev.sandFillLevel ?? 0) + sandDelta).toFixed(2)));
+        const nextWater = Math.max(0, Number(((prev.waterLevel ?? 0) - waterDisplaced).toFixed(2)));
+        const remRatio = Number(Math.max(0, 1 - nextSand).toFixed(2));
         this.objectState.setPhysicalState(targetObj.id, { sandFillLevel: nextSand, waterLevel: nextWater });
         effectKind = 'fill-pothole-with-sand';
         summary =
           nextSand >= 0.99
-            ? `Eché tierra y arena con ${heldObj.name} en "${targetObj.name}": el bache quedó completamente tapado.`
-            : `Eché tierra y arena con ${heldObj.name} en "${targetObj.name}" (relleno al ${Math.round(nextSand * 100)}%).`;
-        resolveKeywords = ['bache', 'tierra', 'arena'];
+            ? `Eché tierra y arena con ${heldObj.name} en "${targetObj.name}": ¡el bache quedó 100% tapado al ras del asfalto!`
+            : `Eché tierra y arena con ${heldObj.name} en "${targetObj.name}" (relleno al ${Math.round(nextSand * 100)}%, falta ${Math.round(remRatio * 100)}% por tapar).`;
+        resolveKeywords = ['bache', 'charco', 'tierra', 'arena'];
       } else if (targetObj && targetObj.affordances.includes('holds-sand')) {
         this.objectState.setPhysicalState(targetObj.id, { contents: 'sand', waterLevel: 0 });
         effectKind = 'transfer-sand-to-container';
@@ -1546,12 +1686,19 @@ export class NpcAiRuntime {
     });
     if (this.notebook) {
       try {
+        const seenIds = targetObj ? [heldObj.id, targetObj.id] : [heldObj.id];
+        this.notebook.recordObjectsSeen(perception.locationId, seenIds, worldTime);
         this.notebook.addDiaryEntry(summary, worldTime, perception.locationId);
         if (proposal.hypothesis?.trim()) {
           this.notebook.addHypothesis(proposal.hypothesis.trim().slice(0, 200), worldTime);
         }
         if (resolveKeywords.length > 0) {
-          this.notebook.resolveMatchingHypotheses(resolveKeywords, 'confirmed', worldTime);
+          this.notebook.resolveMatchingHypotheses(
+            resolveKeywords,
+            'confirmed',
+            worldTime,
+            resolveKeywords.length >= 2 ? 2 : 1
+          );
         }
         this.notebook.save();
       } catch {
@@ -1624,10 +1771,22 @@ export class NpcAiRuntime {
           `"${targetObj.name}" (${targetObj.id}) no es un asiento.`
         );
       }
+      const sitCamilaPos = this.latestLivePlayerContext?.camilaPosition;
+      if (sitCamilaPos) {
+        const seatPos = this.objectState.getPosition(targetObj.id) ?? targetObj.unityPosition;
+        const dist = Math.hypot(seatPos.x - sitCamilaPos.x, seatPos.z - sitCamilaPos.z);
+        if (isCamilaLineOfSightOccluded(sitCamilaPos, seatPos) || dist > CAMILA_MAX_DIRECT_INTERACTION_METRES) {
+          return rejected(
+            'object-too-far-or-occluded',
+            `Estoy demasiado lejos (${dist.toFixed(1)}m) o con un muro de por medio respecto a "${targetObj.name}".`
+          );
+        }
+      }
       surface = targetObj.name;
       targetObjId = targetObj.id;
     }
 
+    this.placesTraversedSinceRestByAgent.set(agentId, 0);
     this.objectState.setSittingState(agentId, {
       placeId: perception.locationId,
       surface,
@@ -1651,6 +1810,9 @@ export class NpcAiRuntime {
     });
     if (this.notebook) {
       try {
+        if (targetObjId) {
+          this.notebook.recordObjectsSeen(perception.locationId, [targetObjId], worldTime);
+        }
         this.notebook.addDiaryEntry(summary, worldTime, perception.locationId);
         this.notebook.save();
       } catch {
@@ -1709,8 +1871,15 @@ export class NpcAiRuntime {
         this.notebook.addDiaryEntry(feedback, worldTime, perception.locationId);
         if (proposal.targetObjectId) {
           const obj = findProbeObjectById(proposal.targetObjectId);
-          if (obj) {
-            this.notebook.resolveMatchingHypotheses([obj.name.split(' ')[0]], 'refuted', worldTime);
+          const heldId = this.objectState.getHeldObjectId(agentId);
+          const heldObj = heldId ? findProbeObjectById(heldId) : null;
+          // Surgically refute ONLY open hypotheses that mention BOTH the held tool AND target AND action concept
+          if (obj && heldObj) {
+            const actionConcept = proposal.actionType === 'scoop' ? 'recoger' : 'rayar';
+            this.notebook.refuteSpecificHypotheses(
+              [heldObj.name.split(' ')[0], obj.name.split(' ')[0], actionConcept],
+              worldTime
+            );
           }
         }
         this.notebook.save();
@@ -1948,6 +2117,23 @@ export class NpcAiRuntime {
       }
     }
 
+    // Detect physical soccer goal when probe:ball enters Probe_SmallGoal frame (X in [66.45, 69.55], Z in [17.85, 19.15])
+    const scoredGoal =
+      pending.interactionType === 'push' &&
+      object.id === 'probe:ball' &&
+      reportedPosition.x >= 66.45 &&
+      reportedPosition.x <= 69.55 &&
+      reportedPosition.z >= 17.85 &&
+      reportedPosition.z <= 19.15;
+    if (scoredGoal) {
+      this.objectState.setPhysicalState('probe:small-goal', { goalScored: true });
+      try {
+        this.objectState.save();
+      } catch {
+        // Best-effort save
+      }
+    }
+
     // Memory + notebook + sensory delta feedback (best effort — never fails the interaction).
     try {
       const isDrop = pending.interactionType === 'drop';
@@ -1959,10 +2145,11 @@ export class NpcAiRuntime {
         : pending.pushTowardsPlaceId
           ? `hacia ${pending.pushTowardsPlaceId}`
           : 'lejos de mí';
+      const goalNote = scoredGoal ? ' ¡Entró directo en la Portería pequeña (gol)!' : '';
 
       const summaryText = isDrop
         ? `Dejé ${object.name} (${object.id}) en ${effectivePlace}.${nearestPeerText}`
-        : `Empujé ${object.name} (${object.id}) ${towardsText}: rodó ${distMoved.toFixed(1)}m hasta (${reportedPosition.x.toFixed(1)}, ${reportedPosition.z.toFixed(1)}).${nearestPeerText}`;
+        : `Empujé ${object.name} (${object.id}) ${towardsText}: rodó ${distMoved.toFixed(1)}m hasta (${reportedPosition.x.toFixed(1)}, ${reportedPosition.z.toFixed(1)}).${nearestPeerText}${goalNote}`;
 
       this.objectState.recordWorldChange({
         timestamp: worldTime,
@@ -1978,11 +2165,23 @@ export class NpcAiRuntime {
         placeId: effectivePlace,
       });
       if (this.notebook) {
+        const seenIds = [object.id];
+        if (pending.pushTowardsObjectId) seenIds.push(pending.pushTowardsObjectId);
+        if (pending.nearObjectId) seenIds.push(pending.nearObjectId);
+        this.notebook.recordObjectsSeen(effectivePlace, seenIds, worldTime);
         this.notebook.addDiaryEntry(summaryText, worldTime, effectivePlace);
         this.notebook.addNoteToPlace(effectivePlace, summaryText, worldTime);
         const ownHypothesis = pending.hypothesis?.trim();
         if (ownHypothesis) {
           this.notebook.addHypothesis(ownHypothesis.slice(0, 200), worldTime);
+        }
+        if (scoredGoal) {
+          this.notebook.resolveMatchingHypotheses(
+            ['pelota', 'porteria', 'conos', 'gol', 'anotar'],
+            'confirmed',
+            worldTime,
+            2
+          );
         }
         this.notebook.save();
       }
@@ -2052,12 +2251,22 @@ export class NpcAiRuntime {
 
     if (agentId === CAMILA_AGENT_ID) {
       this.lastLocationByAgent.set(agentId, arrivedPlaceId);
+      this.placesTraversedSinceRestByAgent.set(
+        agentId,
+        (this.placesTraversedSinceRestByAgent.get(agentId) ?? 0) + 1
+      );
+      // Keep any carried object's persisted position synced to Camila's arrived place
+      const heldId = this.objectState.getHeldObjectId(agentId);
+      const anchorPos = CAMILA_UNITY_ANCHORS[arrivedPlaceId];
+      if (heldId && anchorPos) {
+        this.objectState.setPosition(heldId, anchorPos);
+        try { this.objectState.save(); } catch { /* best-effort */ }
+      }
       if (this.notebook) {
         try {
-          const objectIds = CAMILA_PROBE_OBJECTS.filter(
-            (o) => (this.objectState.getEffectivePlaceId(o.id) ?? o.placeId) === arrivedPlaceId
-          ).map((o) => o.id);
-          this.notebook.recordVisit(arrivedPlaceId, worldTime, objectIds);
+          // Record the place visit WITHOUT marking its objects as seen yet so Camila
+          // first experiences and explores local objects before moving on!
+          this.notebook.recordVisit(arrivedPlaceId, worldTime, []);
           this.notebook.addDiaryEntry(
             `Llegué a ${arrivedPlaceId}.`,
             worldTime,

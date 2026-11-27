@@ -1104,7 +1104,7 @@ describe('Milestone 94: Camila explorer NPC', () => {
       assert.equal(scoopWater.status, 'executed');
       assert.equal(runtime.getPerception(CAMILA_AGENT_ID).heldObject?.physicalState?.contents, 'water');
       const puddleAfterScoop = runtime.getPerception(CAMILA_AGENT_ID).visibleObjectsHere?.find((o) => o.id === 'probe:puddle');
-      assert.equal(puddleAfterScoop?.physicalState?.waterLevel, 0.75);
+      assert.equal(puddleAfterScoop?.physicalState?.waterLevel, 0.5);
 
       // 3. Carry water to CatZoo and pour into cat bowl
       await moveCamilaTo(controller, 'building:catzoo-building');
@@ -1142,8 +1142,9 @@ describe('Milestone 94: Camila explorer NPC', () => {
       const dumpSand = await runtime.runCycle(CAMILA_AGENT_ID);
       assert.equal(dumpSand.status, 'executed');
       const puddleAfterSand = runtime.getPerception(CAMILA_AGENT_ID).visibleObjectsHere?.find((o) => o.id === 'probe:puddle');
-      assert.equal(puddleAfterSand?.physicalState?.sandFillLevel, 0.34);
-      assert.equal(puddleAfterSand?.physicalState?.waterLevel, 0.4);
+      assert.equal(puddleAfterSand?.physicalState?.sandFillLevel, 0.66);
+      assert.equal(puddleAfterSand?.physicalState?.waterLevel, 0);
+      assert.equal(puddleAfterSand?.physicalState?.remainingDepthRatio, 0.34);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
@@ -1189,6 +1190,185 @@ describe('Milestone 94: Camila explorer NPC', () => {
         (runtime.getPerception(CAMILA_AGENT_ID).recentWorldChanges ?? []).some((c) => c.includes('no funcionó')),
         'Rejected physical action must feed back into recentWorldChanges so Camila adapts instead of looping'
       );
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('confirms sand-in-charco hypotheses without collateral refutation, scores goals, defers objectIdsSeen, and tracks placesTraversedSinceRest', async () => {
+    process.env.CAMILA_ACTIONS_ENABLED = 'true';
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-six-improvements-'));
+    try {
+      const controller = makeController(tempDir);
+      const runtime = controller.getNpcAiRuntime();
+
+      // 1. Arrival at Dollar 2 Go increments placesTraversedSinceRest & keeps unseen objects until inspected/departed
+      await moveCamilaTo(controller, 'building:dollar-2-go-building');
+      const pArrive = runtime.getPerception(CAMILA_AGENT_ID);
+      assert.equal(pArrive.placesTraversedSinceRest, 1);
+      const nbOnArrive = JSON.parse(readFileSync(join(tempDir, 'camila-notebook.json'), 'utf-8')) as {
+        mentalMap: { placeId: string; objectIdsSeen: string[] }[];
+      };
+      const dollarMap = nbOnArrive.mentalMap.find((m) => m.placeId === 'building:dollar-2-go-building');
+      assert.ok(dollarMap);
+      assert.ok(!dollarMap.objectIdsSeen.includes('probe:shovel'));
+
+      // 2. Kick ball straight into small goal -> confirms soccer hypothesis & sets goalScored
+      setPushProvider(controller, {
+        actionType: 'push_object',
+        targetObjectId: 'probe:ball',
+        pushTowardsObjectId: 'probe:small-goal',
+        hypothesis: 'Si pateo la pelota hacia la portería pequeña anotaré gol.',
+        reasoningContext: 'Apunto la pelota hacia la portería.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      assert.equal((await runtime.runCycle(CAMILA_AGENT_ID)).status, 'executed');
+      await controller.completeObjectInteraction(CAMILA_AGENT_ID, 'probe:ball', 'applied', { x: 68.0, y: 0.345, z: 18.45 });
+      const goalObj = runtime.getPerception(CAMILA_AGENT_ID).visibleObjectsHere?.find((o) => o.id === 'probe:small-goal');
+      assert.equal(goalObj?.physicalState?.goalScored, true);
+      const nbAfterGoal = JSON.parse(readFileSync(join(tempDir, 'camila-notebook.json'), 'utf-8')) as {
+        hypotheses: { text: string; status: string }[];
+      };
+      assert.equal(nbAfterGoal.hypotheses[0]?.status, 'confirmed');
+
+      // 3. Pick up shovel, scoop sand with 'arena + charco' hypothesis -> stays open during scoop, confirms on pour!
+      setPushProvider(controller, {
+        actionType: 'pick_up_object',
+        targetObjectId: 'probe:shovel',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      assert.equal((await runtime.runCycle(CAMILA_AGENT_ID)).status, 'executed');
+      await controller.completeObjectInteraction(CAMILA_AGENT_ID, 'probe:shovel', 'applied', { x: 75.1, y: 0.3, z: 14.3 });
+
+      setPushProvider(controller, {
+        actionType: 'scoop',
+        targetObjectId: 'probe:sand-pile',
+        hypothesis: 'Si echo la arena al charco con la pala podré reducir el agua estancada.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      assert.equal((await runtime.runCycle(CAMILA_AGENT_ID)).status, 'executed');
+      const nbMidScoop = JSON.parse(readFileSync(join(tempDir, 'camila-notebook.json'), 'utf-8')) as {
+        hypotheses: { text: string; status: string }[];
+      };
+      const sandHypMid = nbMidScoop.hypotheses.find((h) => h.text.includes('arena al charco'));
+      assert.equal(sandHypMid?.status, 'open');
+
+      // Carry shovel to Calle Del Porvenir -> persisted shovel position syncs & placesTraversedSinceRest = 2
+      await moveCamilaTo(controller, 'street:calle-del-porvenir');
+      assert.equal(runtime.getPerception(CAMILA_AGENT_ID).placesTraversedSinceRest, 2);
+      assert.deepEqual(controller.getCamilaObjectPositions().positions['probe:shovel'], { x: 13.5, y: 0.24, z: 22.5 });
+
+      // Pour sand with shovel -> 0.34 sandFillLevel, confirms 'arena al charco' hypothesis!
+      setPushProvider(controller, {
+        actionType: 'pour_or_apply',
+        targetObjectId: 'probe:puddle',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      assert.equal((await runtime.runCycle(CAMILA_AGENT_ID)).status, 'executed');
+      const puddleAfterShovel = runtime.getPerception(CAMILA_AGENT_ID).visibleObjectsHere?.find((o) => o.id === 'probe:puddle');
+      assert.equal(puddleAfterShovel?.physicalState?.sandFillLevel, 0.34);
+
+      // Record two open hypotheses via look_at: one about bucket+charco (should stay open) and one about pala+recoger+charco (should be surgically refuted)
+      setPushProvider(controller, {
+        actionType: 'look_at',
+        targetObjectId: 'probe:puddle',
+        hypothesis: 'Quizá otro recipiente como la cubeta sirva para el charco más tarde.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      assert.equal((await runtime.runCycle(CAMILA_AGENT_ID)).status, 'executed');
+
+      setPushProvider(controller, {
+        actionType: 'look_at',
+        targetObjectId: 'probe:puddle',
+        hypothesis: 'Quizá pueda recoger agua del charco usando la pala.',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      assert.equal((await runtime.runCycle(CAMILA_AGENT_ID)).status, 'executed');
+
+      // Failed water scoop with shovel refutes ONLY the pala+charco+recoger hypothesis, leaving confirmed sand & bucket hypotheses intact!
+      setPushProvider(controller, {
+        actionType: 'scoop',
+        targetObjectId: 'probe:puddle',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      assert.equal((await runtime.runCycle(CAMILA_AGENT_ID)).status, 'rejected');
+
+      const nbAfterPour = JSON.parse(readFileSync(join(tempDir, 'camila-notebook.json'), 'utf-8')) as {
+        hypotheses: { text: string; status: string }[];
+      };
+      const sandHypFinal = nbAfterPour.hypotheses.find((h) => h.text.includes('arena al charco'));
+      const unrelatedCharcoHyp = nbAfterPour.hypotheses.find((h) => h.text.includes('otro recipiente'));
+      const badShovelWaterHyp = nbAfterPour.hypotheses.find((h) => h.text.includes('recoger agua del charco usando la pala'));
+      assert.equal(sandHypFinal?.status, 'confirmed');
+      assert.equal(unrelatedCharcoHyp?.status, 'open');
+      assert.equal(badShovelWaterHyp?.status, 'refuted');
+
+      // 4. Sitting resets placesTraversedSinceRest to 0
+      setPushProvider(controller, {
+        actionType: 'sit',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      assert.equal((await runtime.runCycle(CAMILA_AGENT_ID)).status, 'executed');
+      assert.equal(runtime.getPerception(CAMILA_AGENT_ID).placesTraversedSinceRest, 0);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('prevents X-ray vision & telekinetic interactions when Camila is inside the walled Wing Spot porch alcove', async () => {
+    process.env.CAMILA_ACTIONS_ENABLED = 'true';
+    const tempDir = mkdtempSync(join(tmpdir(), 'm94-alcove-occlusion-'));
+    try {
+      const controller = makeController(tempDir);
+      const runtime = controller.getNpcAiRuntime();
+
+      await moveCamilaTo(controller, 'street:blvd-gomez-morin');
+
+      // Simulate Camila trapped inside Wing Spot's recessed porch alcove (-5.82, 0.24, 4.78)
+      const alcoveLiveCtx = {
+        camilaPosition: { x: -5.82, y: 0.24, z: 4.78 },
+      };
+      runtime.updateLiveSensoryContext(alcoveLiveCtx);
+
+      const pInAlcove = runtime.getPerception(CAMILA_AGENT_ID);
+      const visibleIdsInAlcove = (pInAlcove.visibleObjectsHere ?? []).map((o) => o.id);
+      assert.ok(
+        !visibleIdsInAlcove.includes('probe:trash-bag') &&
+          !visibleIdsInAlcove.includes('probe:cup') &&
+          !visibleIdsInAlcove.includes('probe:bench'),
+        `Walls of Wing Spot alcove must occlude distant boulevard objects, got: ${visibleIdsInAlcove.join(', ')}`
+      );
+
+      // Attempting to pick up the cup (66m away behind Facade_Red_East_Wall) is rejected!
+      setPushProvider(controller, {
+        actionType: 'pick_up_object',
+        targetObjectId: 'probe:cup',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const rejPickUp = await runtime.runCycle(CAMILA_AGENT_ID, alcoveLiveCtx);
+      assert.equal(rejPickUp.status, 'rejected');
+      assert.equal(rejPickUp.error?.code, 'object-occluded-by-wall');
+
+      // Attempting look_at through the wall is also rejected!
+      setPushProvider(controller, {
+        actionType: 'look_at',
+        targetObjectId: 'probe:umbrella',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const rejLook = await runtime.runCycle(CAMILA_AGENT_ID, alcoveLiveCtx);
+      assert.equal(rejLook.status, 'rejected');
+
+      // Once she steps out onto the open sidewalk (-6.75, 0.24, 2.75), she can reposition along Blvd. Gómez Morín
+      const sidewalkCtx = {
+        camilaPosition: { x: -6.75, y: 0.24, z: 2.75 },
+      };
+      setPushProvider(controller, {
+        actionType: 'move_to_place',
+        destinationPlaceId: 'street:blvd-gomez-morin',
+        requestedAt: ON_DUTY_WORLD_TIME,
+      } as NpcActionProposal);
+      const repositionRes = await runtime.runCycle(CAMILA_AGENT_ID, sidewalkCtx);
+      assert.equal(repositionRes.status, 'executed');
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

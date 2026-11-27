@@ -160,7 +160,9 @@ namespace MyVirtualCommunity.Environment
             GameObject ballRoot = new GameObject("Probe_Ball");
             ballRoot.transform.SetParent(root.transform, false);
             ballRoot.transform.localPosition = new Vector3(68f, 0.345f, 11.5f);
-            CreateSphere(ballRoot.transform, "Ball_Body", Vector3.zero, new Vector3(0.45f, 0.45f, 0.45f), new Color(0.96f, 0.96f, 0.96f), false, 0.45f);
+            GameObject ballBody = CreateSphere(ballRoot.transform, "Ball_Body", Vector3.zero, new Vector3(0.45f, 0.45f, 0.45f), new Color(0.96f, 0.96f, 0.96f), false, 0.45f);
+            var ballBodyRend = ballBody.GetComponent<Renderer>();
+            if (ballBodyRend != null) ballBodyRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
             CreateSphere(ballRoot.transform, "Ball_Panel_Top", new Vector3(0f, 0.17f, 0f), new Vector3(0.18f, 0.12f, 0.18f), new Color(0.12f, 0.12f, 0.14f), false, 0.3f);
             CreateSphere(ballRoot.transform, "Ball_Panel_Front", new Vector3(0f, 0.02f, 0.17f), new Vector3(0.18f, 0.18f, 0.11f), new Color(0.12f, 0.12f, 0.14f), false, 0.3f);
             CreateSphere(ballRoot.transform, "Ball_Panel_Back", new Vector3(0f, 0.02f, -0.17f), new Vector3(0.18f, 0.18f, 0.11f), new Color(0.12f, 0.12f, 0.14f), false, 0.3f);
@@ -207,12 +209,13 @@ namespace MyVirtualCommunity.Environment
                 GameObject netV = CreateBox(root.transform, $"Probe_SmallGoal_NetV_{nx:F1}", new Vector3(goalX + nx, goalBaseY + 0.68f, goalZ + 0.72f), new Vector3(0.015f, 1.30f, 0.015f), goalNetColor, false);
                 netV.transform.localRotation = Quaternion.Euler(15f, 0f, 0f);
             }
-            // Invisible back net ball-catcher collider so kicked balls stay inside the goal
+            // Invisible back net ball-catcher collider sloped to match the visual net (no mid-air shelf behind the goal)
             GameObject netStopper = new GameObject("Probe_SmallGoal_NetBackCollider");
             netStopper.transform.SetParent(root.transform, false);
-            netStopper.transform.localPosition = new Vector3(goalX, goalBaseY + 0.68f, goalZ + 0.86f);
+            netStopper.transform.localPosition = new Vector3(goalX, goalBaseY + 0.68f, goalZ + 0.72f);
+            netStopper.transform.localRotation = Quaternion.Euler(15f, 0f, 0f);
             var netBox = netStopper.AddComponent<BoxCollider>();
-            netBox.size = new Vector3(3.0f, 1.32f, 0.08f);
+            netBox.size = new Vector3(3.0f, 1.32f, 0.06f);
 
             // Tangible movable traffic cones grounded on open east lot asphalt (Y = 0.12m, total height 0.56m)
             GameObject coneWest = CreateCylinder(root.transform, "Probe_ConeWest", new Vector3(65f, 0.40f, 14.5f), new Vector3(0.32f, 0.28f, 0.32f), new Color(0.95f, 0.45f, 0.10f), true);
@@ -7214,6 +7217,7 @@ namespace MyVirtualCommunity.Environment
         private void SafeDestroy(UnityEngine.Object obj)
         {
             if (obj == null) return;
+            if (obj is Collider col) col.enabled = false;
             if (Application.isPlaying) Destroy(obj);
             else DestroyImmediate(obj);
         }

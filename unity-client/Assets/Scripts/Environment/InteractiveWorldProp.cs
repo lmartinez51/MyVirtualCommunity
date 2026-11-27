@@ -53,6 +53,7 @@ namespace MyVirtualCommunity.Environment
         private bool isHeld = false;
         private float holdBlendTimer = 0f;
         private float pendingPlayerSyncTimer = -1f;
+        private float antiFloatCheckTimer = 0f;
         private Vector3 lastSyncedPosition;
         private PropContentType currentContent = PropContentType.None;
         private GameObject waterVisualObj;
@@ -173,7 +174,30 @@ namespace MyVirtualCommunity.Environment
         private void Awake()
         {
             rb = GetComponent<Rigidbody>();
-            propColliders = GetComponentsInChildren<Collider>(true);
+            RefreshActiveColliders();
+        }
+
+        private void Start()
+        {
+            RefreshActiveColliders();
+            if (!isHeld && rb != null && !rb.isKinematic)
+            {
+                EnsureGroundedIfFloating(snapDirectly: true);
+            }
+        }
+
+        private void RefreshActiveColliders()
+        {
+            var all = GetComponentsInChildren<Collider>(true);
+            var active = new List<Collider>(all.Length);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null && all[i].enabled)
+                {
+                    active.Add(all[i]);
+                }
+            }
+            propColliders = active.ToArray();
         }
 
         private void OnEnable()
@@ -241,7 +265,7 @@ namespace MyVirtualCommunity.Environment
                 ? (RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ)
                 : RigidbodyConstraints.None;
 
-            propColliders = GetComponentsInChildren<Collider>(true);
+            RefreshActiveColliders();
             if (bounciness > 0.05f && propColliders != null)
             {
                 var mat = new PhysicsMaterial($"{displayName}_PhysMat")
@@ -347,8 +371,8 @@ namespace MyVirtualCommunity.Environment
                 // pick a clean radial offset so objects never pile directly on top of each other.
                 candidatePos = FindUnoccupiedDropSpot(candidatePos, refTransform);
 
-                // Ground the dropped prop cleanly on floor/sidewalk/bench (ignoring other movable props!)
-                RaycastHit[] groundHits = Physics.RaycastAll(new Vector3(candidatePos.x, refTransform.position.y + 1.4f, candidatePos.z), Vector3.down, 4.0f, ~(1 << 2), QueryTriggerInteraction.Ignore);
+                // Ground the dropped prop cleanly on floor/sidewalk/bench (ignoring other movable props and net stoppers!)
+                RaycastHit[] groundHits = Physics.RaycastAll(new Vector3(candidatePos.x, refTransform.position.y + 0.90f, candidatePos.z), Vector3.down, 3.5f, ~(1 << 2), QueryTriggerInteraction.Ignore);
                 float bestGroundY = float.MinValue;
                 bool foundGround = false;
                 for (int gi = 0; gi < groundHits.Length; gi++)
@@ -356,6 +380,7 @@ namespace MyVirtualCommunity.Environment
                     var gh = groundHits[gi];
                     if (gh.collider == null) continue;
                     if (gh.collider.GetComponentInParent<InteractiveWorldProp>() != null) continue;
+                    if (gh.collider.name == "Probe_SmallGoal_NetBackCollider") continue;
                     if (gh.point.y > bestGroundY)
                     {
                         bestGroundY = gh.point.y;
@@ -456,6 +481,24 @@ namespace MyVirtualCommunity.Environment
             rb.AddTorque(Vector3.Cross(Vector3.up, kickDir) * 8f, ForceMode.VelocityChange);
         }
 
+        public void KickTowards(Vector3 worldTarget)
+        {
+            if (isHeld || !canKick || rb == null) return;
+
+            Vector3 toTarget = new Vector3(worldTarget.x - transform.position.x, 0f, worldTarget.z - transform.position.z);
+            float dist = toTarget.magnitude;
+            Vector3 kickDir = dist > 0.05f ? (toTarget / dist) : Vector3.forward;
+
+            // Controlled ground pass calibrated to target distance so shots enter the small goal cleanly
+            float speed = Mathf.Clamp(dist * 0.82f, 2.4f, 6.8f);
+            rb.isKinematic = false;
+            rb.WakeUp();
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.AddForce(kickDir * speed + Vector3.up * 0.12f, ForceMode.VelocityChange);
+            rb.AddTorque(Vector3.Cross(Vector3.up, kickDir) * 5.5f, ForceMode.VelocityChange);
+        }
+
         public void ApplyBodyPush(Vector3 moveDir, float playerSpeed)
         {
             if (isHeld || rb == null || rb.isKinematic) return;
@@ -476,6 +519,20 @@ namespace MyVirtualCommunity.Environment
             {
                 UpdateHeldPoseImmediate();
                 return;
+            }
+
+            // Anti-float guard: never let a sleeping non-held prop remain suspended in mid-air
+            if (rb != null && !rb.isKinematic)
+            {
+                antiFloatCheckTimer += Time.deltaTime;
+                if (antiFloatCheckTimer >= 0.45f)
+                {
+                    antiFloatCheckTimer = 0f;
+                    if (rb.IsSleeping())
+                    {
+                        EnsureGroundedIfFloating(snapDirectly: false);
+                    }
+                }
             }
 
             if (pendingPlayerSyncTimer > 0f)
@@ -601,6 +658,44 @@ namespace MyVirtualCommunity.Environment
                 if (distXZ < 0.48f) return true;
             }
             return false;
+        }
+
+        private void EnsureGroundedIfFloating(bool snapDirectly)
+        {
+            if (isHeld || rb == null || rb.isKinematic) return;
+
+            Vector3 origin = transform.position + Vector3.up * 0.05f;
+            RaycastHit[] hits = Physics.RaycastAll(origin, Vector3.down, 6.0f, ~(1 << 2), QueryTriggerInteraction.Ignore);
+            float bestGroundY = float.MinValue;
+            bool foundGround = false;
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var h = hits[i];
+                if (h.collider == null) continue;
+                if (h.collider.transform.IsChildOf(transform) || h.collider.transform == transform) continue;
+                if (h.collider.name == "Probe_SmallGoal_NetBackCollider") continue;
+                if (h.point.y > bestGroundY)
+                {
+                    bestGroundY = h.point.y;
+                    foundGround = true;
+                }
+            }
+
+            if (!foundGround) return;
+
+            float expectedY = bestGroundY + groundClearanceOffset;
+            float floatGap = transform.position.y - expectedY;
+            if (floatGap > 0.05f)
+            {
+                if (snapDirectly)
+                {
+                    transform.position = new Vector3(transform.position.x, expectedY + 0.005f, transform.position.z);
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+                rb.WakeUp();
+            }
         }
 
         private void SetCollidersEnabled(bool enabledState)

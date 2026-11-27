@@ -166,7 +166,7 @@ namespace MyVirtualCommunity.Character
             // Sitting lowers the pelvis and brings thighs forward (-X in Unity left-handed frame)
             // with knees bent back down (+X). On a bench knees bend ~84 deg; on sidewalk/floor
             // legs extend slightly forward and splayed so shoes rest naturally above ground.
-            float pelvisDropY = _sittingOnBench ? -0.05f : -0.37f;
+            float pelvisDropY = _sittingOnBench ? -0.05f : -0.415f;
             Vector3 sitPelvisPos = _initPelvisPos + new Vector3(0f, pelvisDropY, 0f);
             if (character.Pelvis != null)
             {

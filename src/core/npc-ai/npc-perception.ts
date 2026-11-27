@@ -39,7 +39,101 @@ export interface CamilaLiveSensorySnapshot {
   readonly camilaPosition?: UnityPosition;
   readonly heldCycles?: number;
   readonly heldOriginPlaceId?: string;
+  readonly placesTraversedSinceRest?: number;
 }
+
+interface SolidFootprintBox {
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minZ: number;
+  readonly maxZ: number;
+}
+
+/**
+ * Solid architectural wall footprints from GomezMorinSceneBuilder (XZ metres).
+ * Prevents X-ray / omniscient sight through building walls and recessed doorway alcoves.
+ */
+const SOLID_OCCLUDER_BOXES: readonly SolidFootprintBox[] = [
+  // Wing Spot main volume + recessed porch side walls (Pasillo_Wall_Red_West & Facade_Red_East_Wall)
+  { minX: -20.0, maxX: -7.85, minZ: 4.85, maxZ: 18.5 },
+  { minX: -7.85, maxX: -5.0, minZ: 5.82, maxZ: 18.5 },
+  { minX: -7.95, maxX: -7.75, minZ: 4.20, maxZ: 5.85 },
+  { minX: -5.60, maxX: -5.40, minZ: 4.20, maxZ: 5.85 },
+  // Pastelería La Tía Lupe
+  { minX: -5.45, maxX: 6.5, minZ: 4.35, maxZ: 18.5 },
+  // Residencia Two-Story (West of Calle Del Porvenir) & Residencia Del Porvenir (East)
+  { minX: -4.5, maxX: 6.6, minZ: 20.8, maxZ: 32.2 },
+  { minX: 20.5, maxX: 33.8, minZ: 28.0, maxZ: 44.0 },
+  // Dollar 2 Go main red building
+  { minX: 41.5, maxX: 56.5, minZ: 15.6, maxZ: 20.4 },
+  // Acabados HRC & CatZoo Clínica Felina
+  { minX: 76.0, maxX: 94.0, minZ: 4.5, maxZ: 21.0 },
+  { minX: 76.0, maxX: 94.0, minZ: 22.5, maxZ: 36.0 },
+  // Corporativo Arboleda main tower
+  { minX: 115.5, maxX: 138.0, minZ: 10.5, maxZ: 36.0 },
+];
+
+function pointStrictlyInsideBox(x: number, z: number, b: SolidFootprintBox): boolean {
+  return x > b.minX + 0.08 && x < b.maxX - 0.08 && z > b.minZ + 0.08 && z < b.maxZ - 0.08;
+}
+
+function segmentIntersectsBox(
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  box: SolidFootprintBox
+): boolean {
+  // Slab intersection in 2D XZ on t in (0.03, 0.97) so an object resting flush on a wall face isn't self-occluded
+  let tMin = 0.03;
+  let tMax = 0.97;
+  const dx = bx - ax;
+  const dz = bz - az;
+
+  if (Math.abs(dx) < 1e-6) {
+    if (ax < box.minX || ax > box.maxX) return false;
+  } else {
+    let t1 = (box.minX - ax) / dx;
+    let t2 = (box.maxX - ax) / dx;
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+    if (tMin > tMax) return false;
+  }
+
+  if (Math.abs(dz) < 1e-6) {
+    if (az < box.minZ || az > box.maxZ) return false;
+  } else {
+    let t1 = (box.minZ - az) / dz;
+    let t2 = (box.maxZ - az) / dz;
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+    if (tMin > tMax) return false;
+  }
+
+  return tMin <= tMax;
+}
+
+/**
+ * Returns true if a solid building wall or recessed porch wall blocks Camila's
+ * direct 2D line of sight between `from` and `to`.
+ */
+export function isCamilaLineOfSightOccluded(from: UnityPosition, to: UnityPosition): boolean {
+  for (const box of SOLID_OCCLUDER_BOXES) {
+    const fromInside = pointStrictlyInsideBox(from.x, from.z, box);
+    const toInside = pointStrictlyInsideBox(to.x, to.z, box);
+    // Co-located inside the same interior room (e.g. inside Wing Spot looking at blank wall) is not occluded
+    if (fromInside && toInside) continue;
+    if (segmentIntersectsBox(from.x, from.z, to.x, to.z, box)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export const CAMILA_MAX_OPEN_VISION_METRES = 68;
+export const CAMILA_MAX_DIRECT_INTERACTION_METRES = 18;
 
 export function deriveNpcPerception(
   state: WorldState,
@@ -134,6 +228,7 @@ export function deriveNpcPerception(
   let nearbyAgents: PerceivedNearbyAgentSummary[] | undefined;
   let isSitting: boolean | undefined;
   let sittingOn: string | null | undefined;
+  let placesTraversedSinceRest: number | undefined;
   let visitedPlaceIds: string[] | undefined;
   let unvisitedPlaceIds: string[] | undefined;
   if (isCamila) {
@@ -143,6 +238,7 @@ export function deriveNpcPerception(
     const sittingState = objState?.getSittingState(agent.id) ?? null;
     isSitting = sittingState !== null;
     sittingOn = sittingState ? (sittingState.targetObjectId ?? sittingState.surface) : null;
+    placesTraversedSinceRest = liveSensory?.placesTraversedSinceRest ?? 0;
 
     const visited = new Set<string>();
     const seenObjectIds = new Set<string>();
@@ -160,7 +256,14 @@ export function deriveNpcPerception(
     const enrichedAll = CAMILA_PROBE_OBJECTS.map((o) => {
       const livePos = objState?.getPosition(o.id) ?? o.unityPosition;
       const effectivePlaceId = objState?.getEffectivePlaceId(o.id) ?? o.placeId;
-      const physicalState = objState?.getPhysicalState(o.id);
+      const rawPhys = objState?.getPhysicalState(o.id);
+      const physicalState =
+        o.id === 'probe:puddle' && rawPhys
+          ? {
+              ...rawPhys,
+              remainingDepthRatio: Number(Math.max(0, 1 - (rawPhys.sandFillLevel ?? 0)).toFixed(2)),
+            }
+          : rawPhys;
       return {
         id: o.id,
         name: o.name,
@@ -215,10 +318,16 @@ export function deriveNpcPerception(
     // Legacy compatibility list with updated live places
     nearbyObjects = enrichedAll;
 
-    // Objects physically here right now (excluding the one currently held in Camila's hands)
-    const hereRaw = enrichedAll.filter(
-      (o) => o.placeId === agent.locationId && o.id !== heldId
-    );
+    // Objects physically here AND genuinely within unobstructed line of sight right now
+    const camilaPos = liveSensory?.camilaPosition;
+    const hereRaw = enrichedAll.filter((o) => {
+      if (o.placeId !== agent.locationId || o.id === heldId) return false;
+      if (!camilaPos) return true;
+      const dist = Math.hypot(o.currentPosition.x - camilaPos.x, o.currentPosition.z - camilaPos.z);
+      if (dist > CAMILA_MAX_OPEN_VISION_METRES) return false;
+      if (isCamilaLineOfSightOccluded(camilaPos, o.currentPosition)) return false;
+      return true;
+    });
     visibleObjectsHere = hereRaw.map((o) => {
       const peers: string[] = [];
       for (const other of hereRaw) {
@@ -231,20 +340,38 @@ export function deriveNpcPerception(
           peers.push(`${other.id} (${d.toFixed(1)}m)`);
         }
       }
-      return peers.length > 0 ? { ...o, nearbyPeers: peers } : o;
+      const distFromMe = camilaPos
+        ? Number(Math.hypot(o.currentPosition.x - camilaPos.x, o.currentPosition.z - camilaPos.z).toFixed(1))
+        : undefined;
+      return {
+        ...o,
+        ...(distFromMe !== undefined ? { distanceFromMeMetres: distFromMe } : {}),
+        ...(peers.length > 0 ? { nearbyPeers: peers } : {}),
+      };
     });
 
-    // Remembered objects elsewhere: only places Camila has actually visited before
+    // Remembered objects elsewhere: visited places OR objects in current place currently out of sight/occluded that she already saw before
+    const visibleIdsNow = new Set(hereRaw.map((o) => o.id));
     rememberedObjectsElsewhere = enrichedAll.filter(
-      (o) => o.placeId !== agent.locationId && o.id !== heldId && visited.has(o.placeId)
+      (o) =>
+        o.id !== heldId &&
+        !visibleIdsNow.has(o.id) &&
+        ((o.placeId !== agent.locationId && visited.has(o.placeId)) ||
+          (o.placeId === agent.locationId && seenObjectIds.has(o.id)))
     );
 
-    // Held object in Camila's hands (if any), with neutral carry-duration metadata
+    // Held object in Camila's hands (if any), with neutral carry-duration & empty-tool metadata
     const rawHeldObj = heldId ? enrichedAll.find((o) => o.id === heldId) ?? null : null;
+    const isHeldEmpty =
+      !rawHeldObj?.physicalState?.contents || rawHeldObj.physicalState.contents === 'empty';
     heldObject = rawHeldObj
       ? {
           ...rawHeldObj,
+          handsOccupied: true,
           ...(liveSensory?.heldCycles !== undefined ? { carriedCycles: liveSensory.heldCycles } : {}),
+          ...(liveSensory?.heldCycles !== undefined && liveSensory.heldCycles >= 2 && isHeldEmpty
+            ? { heldEmptyCycles: liveSensory.heldCycles }
+            : {}),
           ...(liveSensory?.heldOriginPlaceId ? { pickedUpAtPlaceId: liveSensory.heldOriginPlaceId } : {}),
         }
       : null;
@@ -315,6 +442,7 @@ export function deriveNpcPerception(
     nearbyAgents,
     isSitting,
     sittingOn,
+    placesTraversedSinceRest,
     visitedPlaceIds,
     unvisitedPlaceIds,
   };

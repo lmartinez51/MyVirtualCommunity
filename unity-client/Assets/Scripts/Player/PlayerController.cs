@@ -297,6 +297,13 @@ namespace MyVirtualCommunity.Player
                 moveMotion = moveDir.normalized * currentSpeed;
             }
 
+            if (isPlayerSeatedOnBench && direction.magnitude < 0.1f)
+            {
+                verticalVelocity = 0f;
+                bobbleheadAnimator?.UpdateLocomotionState(0f, true);
+                return;
+            }
+
             // Maintain firm ground stick force when grounded; apply gravity when airborne
             if (characterController.isGrounded)
             {
@@ -638,9 +645,12 @@ namespace MyVirtualCommunity.Player
                 isPlayerSeatedOnBench = true;
                 Vector3 bPos = benchObj.transform.position;
                 bool prevEnabled = characterController != null && characterController.enabled;
+                float skinOffset = characterController != null ? characterController.skinWidth : 0f;
                 if (characterController != null) characterController.enabled = false;
-                transform.position = new Vector3(bPos.x + 0.15f, bPos.y + 0.25f, bPos.z - 0.08f);
+                // Bench seat top = bPos.y + 0.445m; VisualRoot is offset by -skinOffset, seated pelvis bottom = VisualRoot.y + 0.368m
+                transform.position = new Vector3(bPos.x + 0.22f, bPos.y + 0.074f + skinOffset, bPos.z - 0.01f);
                 transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+                verticalVelocity = 0f;
                 if (characterController != null) characterController.enabled = prevEnabled;
                 bobbleheadAnimator?.SetSitting(true, onBench: true);
             }
@@ -778,7 +788,7 @@ namespace MyVirtualCommunity.Player
 
                 case "scoop_water":
                     heldProp.SetContents(PropContentType.Water);
-                    sc?.ScoopWaterFromPothole(0.25f);
+                    sc?.ScoopWaterFromPothole(heldProp.ProbeObjectId == "probe:bucket" ? 0.50f : 0.25f);
                     if (client != null && client.IsConnected)
                     {
                         client.StartCoroutine(client.SyncWorldPropState(heldProp.ProbeObjectId, heldProp.transform.position, contents: "water", waterLevel: 1.0f));
@@ -789,7 +799,7 @@ namespace MyVirtualCommunity.Player
 
                 case "fill_pothole":
                     heldProp.SetContents(PropContentType.None);
-                    sc?.AddSandToPothole(0.34f);
+                    sc?.AddSandToPothole(heldProp.ProbeObjectId == "probe:bucket" ? 0.66f : 0.34f);
                     if (client != null && client.IsConnected)
                     {
                         client.StartCoroutine(client.SyncWorldPropState(heldProp.ProbeObjectId, heldProp.transform.position, contents: "empty"));
@@ -818,7 +828,7 @@ namespace MyVirtualCommunity.Player
 
                 case "pour_puddle":
                     heldProp.SetContents(PropContentType.None);
-                    sc?.AddWaterToPothole(0.25f);
+                    sc?.AddWaterToPothole(heldProp.ProbeObjectId == "probe:bucket" ? 0.50f : 0.25f);
                     if (client != null && client.IsConnected)
                     {
                         client.StartCoroutine(client.SyncWorldPropState(heldProp.ProbeObjectId, heldProp.transform.position, contents: "empty", waterLevel: 0f));

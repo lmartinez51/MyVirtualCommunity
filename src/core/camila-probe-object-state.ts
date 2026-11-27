@@ -44,8 +44,10 @@ export interface ProbeObjectPhysicalState {
   contents?: 'empty' | 'water' | 'sand';
   waterLevel?: number;
   sandFillLevel?: number;
+  remainingDepthRatio?: number;
   chalkMarks?: number;
   disposedInBin?: boolean;
+  goalScored?: boolean;
 }
 
 export interface AgentSittingState {

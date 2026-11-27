@@ -92,6 +92,7 @@ namespace MyVirtualCommunity.Npc
         private bool walkingToDropObject;
         private bool walkingToSitTarget;
         private bool walkingToSubstanceTarget;
+        private bool retreatingFromClosedDoor;
         private bool isSeatedOnBench;
         private bool pushReportInFlight;
         private InteractiveWorldProp heldProp;
@@ -478,6 +479,51 @@ namespace MyVirtualCommunity.Npc
             return p.x >= -5.15f && p.x <= 6.50f && p.z >= 5.30f && p.z <= 12.25f;
         }
 
+        private bool IsInWingSpotPorchAlcove(Vector3 p)
+        {
+            return !IsInsideWingSpot() && p.x >= -8.15f && p.x <= -5.30f && p.z > 3.55f && p.z < 5.95f;
+        }
+
+        private bool IsInTiaLupePorchAlcove(Vector3 p)
+        {
+            return !IsInsideTiaLupe() && p.x >= -4.25f && p.x <= -1.15f && p.z > 3.55f && p.z < 6.05f;
+        }
+
+        /// <summary>
+        /// Routes Camila safely from her current spot to an object/seat target,
+        /// stepping south out of any recessed doorway alcove onto the open sidewalk
+        /// first so she never walks sideways into porch return walls or columns.
+        /// </summary>
+        private void EnqueueCorridorSafeApproach(Vector3 destination)
+        {
+            waypointQueue.Clear();
+            Vector3 pos = transform.position;
+
+            if (IsInWingSpotPorchAlcove(pos))
+            {
+                EnqueueWaypoint(new Vector3(WingSpotDoorOutside.x, 0.24f, NorthSidewalkZ));
+                if (Mathf.Abs(destination.x - WingSpotDoorOutside.x) > 1.5f)
+                {
+                    EnqueueWaypoint(new Vector3(destination.x, 0.24f, NorthSidewalkZ));
+                }
+            }
+            else if (IsInTiaLupePorchAlcove(pos))
+            {
+                EnqueueWaypoint(new Vector3(TiaLupeDoorOutside.x, 0.24f, NorthSidewalkZ));
+                if (Mathf.Abs(destination.x - TiaLupeDoorOutside.x) > 1.5f)
+                {
+                    EnqueueWaypoint(new Vector3(destination.x, 0.24f, NorthSidewalkZ));
+                }
+            }
+            else if (!IsInsideWingSpot() && !IsInsideTiaLupe() && pos.z > 3.85f && Mathf.Abs(destination.x - pos.x) > 8.0f)
+            {
+                EnqueueWaypoint(new Vector3(pos.x, 0.24f, NorthSidewalkZ));
+                EnqueueWaypoint(new Vector3(destination.x, 0.24f, NorthSidewalkZ));
+            }
+
+            EnqueueWaypoint(destination);
+        }
+
         /// <summary>
         /// Used by InteractiveDoor.CanInteract so Camila can always exit an interior business
         /// she is already inside, while respecting operating hours when entering from outside.
@@ -606,9 +652,28 @@ namespace MyVirtualCommunity.Npc
                     if (obstacleBlockedTimer >= 1.2f)
                     {
                         obstacleBlockedTimer = 0f;
-                        Debug.Log($"[CamilaNpcController] Blocked by solid obstacle '{obstacleHit.collider.name}'; interrupting walk.");
-                        ShowThoughtBubble("Hmm, hay una cerca o muro aquí... mejor rodeo por otro lado.", "Camila piensa...");
+                        Debug.Log($"[CamilaNpcController] Blocked by solid obstacle '{obstacleHit.collider.name}'; turning back and interrupting walk.");
+                        ShowThoughtBubble("Hmm, hay una cerca o muro aquí... mejor me doy la vuelta.", "Camila piensa...");
+                        // Physically turn away and step clear of the wall/alcove so Camila never remains wedged
+                        Vector3 escapeNormal = new Vector3(obstacleHit.normal.x, 0f, obstacleHit.normal.z);
+                        if (escapeNormal.sqrMagnitude > 0.04f)
+                        {
+                            escapeNormal.Normalize();
+                            transform.rotation = Quaternion.LookRotation(escapeNormal, Vector3.up);
+                            transform.position += escapeNormal * 0.55f;
+                            SnapToGround();
+                        }
                         CompleteCurrentWalk("traversal-interrupted", $"Obstáculo físico en el camino ({obstacleHit.collider.name}).");
+                        if (IsInWingSpotPorchAlcove(transform.position))
+                        {
+                            retreatingFromClosedDoor = true;
+                            EnqueueWaypoint(new Vector3(WingSpotDoorOutside.x, 0.24f, NorthSidewalkZ));
+                        }
+                        else if (IsInTiaLupePorchAlcove(transform.position))
+                        {
+                            retreatingFromClosedDoor = true;
+                            EnqueueWaypoint(new Vector3(TiaLupeDoorOutside.x, 0.24f, NorthSidewalkZ));
+                        }
                     }
                     return;
                 }
@@ -765,15 +830,27 @@ namespace MyVirtualCommunity.Npc
             }
             else
             {
-                // Business is closed or admission denied: Camila respects the rule and picks another place
-                Debug.Log($"[CamilaNpcController] '{blockingDoor.DoorName}' denied access ({rejectionReason}); interrupting traversal.");
-                TriggerDialogue("Camila", $"Parece que {blockingDoor.DoorName} está cerrado ahorita... mejor exploro otro lugar.");
+                // Business is closed or admission denied: Camila respects the rule, turns around, and exits the porch onto the sidewalk
+                Debug.Log($"[CamilaNpcController] '{blockingDoor.DoorName}' denied access ({rejectionReason}); interrupting traversal and stepping out to sidewalk.");
+                TriggerDialogue("Camila", $"Parece que {blockingDoor.DoorName} está cerrado ahorita... mejor salgo a la banqueta.");
                 waypointQueue.Clear();
                 if (navAgent != null && navAgent.isActiveAndEnabled && navAgent.isOnNavMesh)
                 {
                     navAgent.ResetPath();
                 }
                 CompleteCurrentWalk("traversal-interrupted", $"Puerta cerrada o negocio fuera de horario: {rejectionReason}");
+                if (IsInWingSpotPorchAlcove(transform.position))
+                {
+                    transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+                    retreatingFromClosedDoor = true;
+                    EnqueueWaypoint(new Vector3(WingSpotDoorOutside.x, 0.24f, NorthSidewalkZ));
+                }
+                else if (IsInTiaLupePorchAlcove(transform.position))
+                {
+                    transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+                    retreatingFromClosedDoor = true;
+                    EnqueueWaypoint(new Vector3(TiaLupeDoorOutside.x, 0.24f, NorthSidewalkZ));
+                }
                 return true;
             }
         }
@@ -789,35 +866,88 @@ namespace MyVirtualCommunity.Npc
 
         private void CompleteCurrentWalk(string status, string message)
         {
-            // Phase 2a/2b: finishing the short approach walk to a prop executes push / pick_up / drop now
+            if (retreatingFromClosedDoor)
+            {
+                retreatingFromClosedDoor = false;
+                return;
+            }
+
+            // Phase 2a/2b: ONLY execute object interaction if Camila genuinely arrived at the target!
+            // Never telekinetically execute pickup/push/drop/sit/substance if blocked by a wall or interrupted.
             if (walkingToPushObject)
             {
                 walkingToPushObject = false;
-                ExecutePushObject();
+                if (status == "arrived")
+                {
+                    ExecutePushObject();
+                }
+                else
+                {
+                    string failedId = pendingPushObjectId;
+                    pendingPushObjectId = "";
+                    pendingPushTowardsPlaceId = "";
+                    pendingPushTowardsObjectId = "";
+                    ReportPushFailed(failedId, message);
+                }
                 return;
             }
             if (walkingToPickUpObject)
             {
                 walkingToPickUpObject = false;
-                ExecutePickUpObject();
+                if (status == "arrived")
+                {
+                    ExecutePickUpObject();
+                }
+                else
+                {
+                    string failedId = pendingPickUpObjectId;
+                    pendingPickUpObjectId = "";
+                    ReportPushFailed(failedId, message);
+                }
                 return;
             }
             if (walkingToDropObject)
             {
                 walkingToDropObject = false;
-                ExecuteDropObject();
+                if (status == "arrived")
+                {
+                    ExecuteDropObject();
+                }
+                else
+                {
+                    pendingDropNearObjectId = "";
+                    if (heldProp != null)
+                    {
+                        ReportPushFailed(heldProp.ProbeObjectId, message);
+                    }
+                }
                 return;
             }
             if (walkingToSitTarget)
             {
                 walkingToSitTarget = false;
-                ExecuteSitNow();
+                if (status == "arrived")
+                {
+                    ExecuteSitNow();
+                }
+                else
+                {
+                    pendingSitTargetId = "";
+                }
                 return;
             }
             if (walkingToSubstanceTarget)
             {
                 walkingToSubstanceTarget = false;
-                ExecuteSubstanceActionNow();
+                if (status == "arrived")
+                {
+                    ExecuteSubstanceActionNow();
+                }
+                else
+                {
+                    pendingSubstanceMode = "";
+                    pendingSubstanceTargetId = "";
+                }
                 return;
             }
 
@@ -955,8 +1085,60 @@ namespace MyVirtualCommunity.Npc
 
             bool targetIsWingSpot = destinationPlaceId == "restaurant:wing-spot" || destinationPlaceId == "building:wing-spot-building";
             bool targetIsTiaLupe = destinationPlaceId == "restaurant:pasteleria-tia-lupe" || destinationPlaceId == "building:tia-lupe-building";
+            bool targetIsDelPorvenir = destinationPlaceId == "street:calle-del-porvenir" || destinationPlaceId == "building:del-porvenir-residence";
+            bool targetIsCatZoo = destinationPlaceId == "building:catzoo-building";
+            bool targetIsArboleda = destinationPlaceId == "street:av-la-arboleda";
 
-            // 1. Exit current interior through its real doorway first
+            bool insideBuilding = IsInsideWingSpot() || IsInsideTiaLupe();
+            bool inDelPorvenirCorridor = !insideBuilding && pos.x >= 6.2f && pos.x <= 19.6f && pos.z >= 3.2f;
+            bool inWestDollarLot = !insideBuilding && pos.x >= 19.5f && pos.x <= 38.0f && pos.z >= 7.0f && pos.z <= 24.0f;
+            bool inEastPlazaCorridor = !insideBuilding && pos.x >= 57.0f && pos.x <= 75.5f && pos.z >= 3.5f;
+            bool inArboledaCorridor = !insideBuilding && pos.x >= 93.5f && pos.x <= 108.5f && pos.z >= 3.2f;
+
+            // Direct corridor fast-paths so Camila never detours all the way to Blvd. Gómez Morín
+            // when she is already on the same street or adjacent open plaza corridor.
+            if (inDelPorvenirCorridor && targetIsDelPorvenir)
+            {
+                EnqueueWaypoint(target);
+                return;
+            }
+
+            if (inWestDollarLot && targetIsDelPorvenir)
+            {
+                // Cross directly via the open Dollar 2 Go -> Calle Del Porvenir driveway ramp (X=19.5, Z=16.0)
+                EnqueueWaypoint(new Vector3(20.5f, 0.12f, 16.0f));
+                EnqueueWaypoint(new Vector3(15.5f, 0.0f, 16.0f));
+                EnqueueWaypoint(target);
+                return;
+            }
+
+            if (inEastPlazaCorridor && targetIsCatZoo)
+            {
+                if (pos.x < 71.0f && pos.z < 19.5f)
+                {
+                    EnqueueWaypoint(new Vector3(CatZooPlazaCorridorX, 0.12f, Mathf.Min(pos.z, 16.0f)));
+                }
+                EnqueueWaypoint(target);
+                return;
+            }
+
+            if (inEastPlazaCorridor && destinationPlaceId == "building:dollar-2-go-building")
+            {
+                if (pos.z > 19.0f)
+                {
+                    EnqueueWaypoint(new Vector3(CatZooPlazaCorridorX, 0.12f, 10.0f));
+                }
+                EnqueueWaypoint(target);
+                return;
+            }
+
+            if (inArboledaCorridor && targetIsArboleda)
+            {
+                EnqueueWaypoint(target);
+                return;
+            }
+
+            // 1. Exit current interior or recessed doorway porch alcove through its real opening first
             if (IsInsideWingSpot() && !targetIsWingSpot)
             {
                 EnqueueWaypoint(WingSpotDoorInside);
@@ -969,7 +1151,15 @@ namespace MyVirtualCommunity.Npc
                 EnqueueWaypoint(TiaLupeDoorOutside);
                 EnqueueWaypoint(new Vector3(TiaLupeDoorOutside.x, 0.24f, NorthSidewalkZ));
             }
-            else if (!IsInsideWingSpot() && !IsInsideTiaLupe() && pos.z > 5.2f && Mathf.Abs(target.x - pos.x) > 8.0f)
+            else if (IsInWingSpotPorchAlcove(pos) && !targetIsWingSpot)
+            {
+                EnqueueWaypoint(new Vector3(WingSpotDoorOutside.x, 0.24f, NorthSidewalkZ));
+            }
+            else if (IsInTiaLupePorchAlcove(pos) && !targetIsTiaLupe)
+            {
+                EnqueueWaypoint(new Vector3(TiaLupeDoorOutside.x, 0.24f, NorthSidewalkZ));
+            }
+            else if (!IsInsideWingSpot() && !IsInsideTiaLupe() && pos.z > 3.85f && Mathf.Abs(target.x - pos.x) > 8.0f)
             {
                 // Return south along current side-street / plaza corridor to the North Sidewalk before crossing laterally
                 EnqueueWaypoint(new Vector3(pos.x, 0.24f, NorthSidewalkZ));
@@ -1120,8 +1310,7 @@ namespace MyVirtualCommunity.Npc
             }
 
             walkingToPickUpObject = true;
-            waypointQueue.Clear();
-            EnqueueWaypoint(approach);
+            EnqueueCorridorSafeApproach(approach);
             if (waypointQueue.Count == 0)
             {
                 walkingToPickUpObject = false;
@@ -1136,6 +1325,17 @@ namespace MyVirtualCommunity.Npc
             if (string.IsNullOrEmpty(objectId)) return;
 
             GameObject propObject = FindProbePropObject(objectId);
+            if (propObject != null)
+            {
+                float flatDist = Vector2.Distance(
+                    new Vector2(transform.position.x, transform.position.z),
+                    new Vector2(propObject.transform.position.x, propObject.transform.position.z));
+                if (flatDist > 2.95f)
+                {
+                    ReportPushFailed(objectId, $"Demasiado lejos ({flatDist:F1}m) para recoger {objectId}.");
+                    return;
+                }
+            }
             InteractiveWorldProp prop = propObject != null ? propObject.GetComponent<InteractiveWorldProp>() : null;
             if (prop == null || !prop.PickUp(transform))
             {
@@ -1204,8 +1404,7 @@ namespace MyVirtualCommunity.Npc
                     Vector3 dir = toTarget.normalized;
                     Vector3 standPos = new Vector3(targetPos.x - dir.x * 1.15f, targetPos.y, targetPos.z - dir.z * 1.15f);
                     walkingToDropObject = true;
-                    waypointQueue.Clear();
-                    EnqueueWaypoint(standPos);
+                    EnqueueCorridorSafeApproach(standPos);
                     if (waypointQueue.Count > 0) return;
                 }
             }
@@ -1245,17 +1444,50 @@ namespace MyVirtualCommunity.Npc
             }
 
             Vector3 propPos = propObject.transform.position;
-            Vector3 toProp = new Vector3(propPos.x - transform.position.x, 0f, propPos.z - transform.position.z);
-            Vector3 approach = propPos;
-            if (toProp.sqrMagnitude > 0.04f)
+            Vector3 desiredDir = Vector3.zero;
+            if (!string.IsNullOrEmpty(pendingPushTowardsObjectId))
             {
-                Vector3 away = toProp.normalized;
-                approach = new Vector3(propPos.x - away.x * 0.7f, propPos.y, propPos.z - away.z * 0.7f);
+                if (pendingPushTowardsObjectId == "probe:small-goal")
+                {
+                    desiredDir = new Vector3(68.0f - propPos.x, 0f, 18.45f - propPos.z);
+                }
+                else
+                {
+                    GameObject aimObj = FindProbePropObject(pendingPushTowardsObjectId);
+                    if (aimObj != null)
+                    {
+                        desiredDir = new Vector3(aimObj.transform.position.x - propPos.x, 0f, aimObj.transform.position.z - propPos.z);
+                    }
+                    else if (ProbeObjectAnchors.TryGetValue(pendingPushTowardsObjectId, out Vector3 aimAnchor))
+                    {
+                        desiredDir = new Vector3(aimAnchor.x - propPos.x, 0f, aimAnchor.z - propPos.z);
+                    }
+                }
+            }
+            if (desiredDir.sqrMagnitude < 0.04f && !string.IsNullOrEmpty(pendingPushTowardsPlaceId) &&
+                PlaceAnchors.TryGetValue(pendingPushTowardsPlaceId, out Vector3 placeAim))
+            {
+                desiredDir = new Vector3(placeAim.x - propPos.x, 0f, placeAim.z - propPos.z);
+            }
+
+            Vector3 approach = propPos;
+            if (desiredDir.sqrMagnitude > 0.04f)
+            {
+                Vector3 shotDir = desiredDir.normalized;
+                approach = new Vector3(propPos.x - shotDir.x * 0.72f, propPos.y, propPos.z - shotDir.z * 0.72f);
+            }
+            else
+            {
+                Vector3 toProp = new Vector3(propPos.x - transform.position.x, 0f, propPos.z - transform.position.z);
+                if (toProp.sqrMagnitude > 0.04f)
+                {
+                    Vector3 away = toProp.normalized;
+                    approach = new Vector3(propPos.x - away.x * 0.7f, propPos.y, propPos.z - away.z * 0.7f);
+                }
             }
 
             walkingToPushObject = true;
-            waypointQueue.Clear();
-            EnqueueWaypoint(approach);
+            EnqueueCorridorSafeApproach(approach);
             if (waypointQueue.Count == 0)
             {
                 walkingToPushObject = false;
@@ -1281,6 +1513,17 @@ namespace MyVirtualCommunity.Npc
             if (string.IsNullOrEmpty(objectId)) return;
 
             GameObject propObject = FindProbePropObject(objectId);
+            if (propObject != null)
+            {
+                float flatDist = Vector2.Distance(
+                    new Vector2(transform.position.x, transform.position.z),
+                    new Vector2(propObject.transform.position.x, propObject.transform.position.z));
+                if (flatDist > 2.95f)
+                {
+                    ReportPushFailed(objectId, $"Demasiado lejos ({flatDist:F1}m) para empujar {objectId}.");
+                    return;
+                }
+            }
             InteractiveWorldProp prop = propObject != null
                 ? propObject.GetComponent<InteractiveWorldProp>()
                 : null;
@@ -1293,21 +1536,38 @@ namespace MyVirtualCommunity.Npc
             // Push direction: toward pushTowardsObjectId (live object!), else pushTowardsPlaceId, else away from Camila.
             Vector3 propPos = propObject.transform.position;
             Vector3 dir = Vector3.zero;
+            bool hasExplicitAimTarget = false;
+            Vector3 explicitAimWorldPos = Vector3.zero;
             if (!string.IsNullOrEmpty(towardsObjectId))
             {
-                GameObject targetObj = FindProbePropObject(towardsObjectId);
-                if (targetObj != null)
+                if (towardsObjectId == "probe:small-goal")
                 {
-                    dir = new Vector3(targetObj.transform.position.x - propPos.x, 0f, targetObj.transform.position.z - propPos.z);
+                    explicitAimWorldPos = new Vector3(68.0f, 0.24f, 18.45f);
+                    hasExplicitAimTarget = true;
+                    dir = new Vector3(explicitAimWorldPos.x - propPos.x, 0f, explicitAimWorldPos.z - propPos.z);
                 }
-                else if (ProbeObjectAnchors.TryGetValue(towardsObjectId, out Vector3 objAnchor))
+                else
                 {
-                    dir = new Vector3(objAnchor.x - propPos.x, 0f, objAnchor.z - propPos.z);
+                    GameObject targetObj = FindProbePropObject(towardsObjectId);
+                    if (targetObj != null)
+                    {
+                        explicitAimWorldPos = targetObj.transform.position;
+                        hasExplicitAimTarget = true;
+                        dir = new Vector3(explicitAimWorldPos.x - propPos.x, 0f, explicitAimWorldPos.z - propPos.z);
+                    }
+                    else if (ProbeObjectAnchors.TryGetValue(towardsObjectId, out Vector3 objAnchor))
+                    {
+                        explicitAimWorldPos = objAnchor;
+                        hasExplicitAimTarget = true;
+                        dir = new Vector3(objAnchor.x - propPos.x, 0f, objAnchor.z - propPos.z);
+                    }
                 }
             }
             if (dir.sqrMagnitude < 0.01f && !string.IsNullOrEmpty(towardsPlaceId) &&
                 PlaceAnchors.TryGetValue(towardsPlaceId, out Vector3 anchor))
             {
+                explicitAimWorldPos = anchor;
+                hasExplicitAimTarget = true;
                 dir = new Vector3(anchor.x - propPos.x, 0f, anchor.z - propPos.z);
             }
             if (dir.sqrMagnitude < 0.01f)
@@ -1322,7 +1582,14 @@ namespace MyVirtualCommunity.Npc
             transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
             if (prop.CanKick)
             {
-                prop.Kick(transform);
+                if (hasExplicitAimTarget)
+                {
+                    prop.KickTowards(explicitAimWorldPos);
+                }
+                else
+                {
+                    prop.Kick(transform);
+                }
                 Debug.Log($"[CamilaNpcController] ¡Pateé {objectId} hacia {towardsObjectId ?? towardsPlaceId}!");
             }
             else
@@ -1336,11 +1603,33 @@ namespace MyVirtualCommunity.Npc
         }
 
         /// <summary>
-        /// Lets the prop's physics settle, then reports its real resting position.
+        /// Lets the prop's physics settle (absorbing into the goal net if scored), then reports its real resting position.
         /// </summary>
         private System.Collections.IEnumerator PushSettleAndReport(InteractiveWorldProp prop, string objectId)
         {
-            yield return new WaitForSeconds(1.2f);
+            Rigidbody propRb = prop != null ? prop.GetComponent<Rigidbody>() : null;
+            float elapsed = 0f;
+            bool cushionedInGoal = false;
+            while (elapsed < 1.55f)
+            {
+                yield return new WaitForSeconds(0.08f);
+                elapsed += 0.08f;
+                if (prop == null) break;
+
+                if (objectId == "probe:ball" && !cushionedInGoal)
+                {
+                    Vector3 p = prop.transform.position;
+                    if (p.x >= 66.5f && p.x <= 69.5f && p.z >= 18.0f && p.z <= 18.95f && p.y <= 1.75f)
+                    {
+                        cushionedInGoal = true;
+                        if (propRb != null)
+                        {
+                            propRb.linearVelocity *= 0.15f;
+                            propRb.angularVelocity *= 0.2f;
+                        }
+                    }
+                }
+            }
 
             if (prop == null)
             {
@@ -1531,8 +1820,7 @@ namespace MyVirtualCommunity.Npc
                 {
                     EnsureStandingUp();
                     walkingToSitTarget = true;
-                    waypointQueue.Clear();
-                    EnqueueWaypoint(frontOfBench);
+                    EnqueueCorridorSafeApproach(frontOfBench);
                     if (waypointQueue.Count > 0) return;
                 }
             }
@@ -1547,8 +1835,10 @@ namespace MyVirtualCommunity.Npc
             {
                 GameObject benchObj = FindProbePropObject("probe:bench");
                 Vector3 benchPos = benchObj != null ? benchObj.transform.position : new Vector3(60f, 0.24f, 2.15f);
-                // Seat Camila cleanly on the bench facing south toward the boulevard (seat top = 0.685m; Pelvis at ~0.45m)
-                transform.position = new Vector3(benchPos.x - 0.22f, benchPos.y + 0.25f, benchPos.z - 0.08f);
+                // Seat Camila solidly on the bench facing south toward the boulevard:
+                // bench seat top = benchPos.y + 0.445m (0.685m); seated pelvis underside = rootY + 0.368m
+                // -> rootY = benchPos.y + 0.074m (0.314m) places hips flush on the seat with zero floating gap.
+                transform.position = new Vector3(benchPos.x - 0.22f, benchPos.y + 0.074f, benchPos.z - 0.01f);
                 transform.rotation = Quaternion.Euler(0f, 180f, 0f);
                 isSeatedOnBench = true;
                 bobbleheadAnimator?.SetSitting(true, onBench: true);
@@ -1592,8 +1882,7 @@ namespace MyVirtualCommunity.Npc
                     Vector3 dir = toTarget.normalized;
                     Vector3 approachPos = new Vector3(targetPos.x - dir.x * stopDist, transform.position.y, targetPos.z - dir.z * stopDist);
                     walkingToSubstanceTarget = true;
-                    waypointQueue.Clear();
-                    EnqueueWaypoint(approachPos);
+                    EnqueueCorridorSafeApproach(approachPos);
                     if (waypointQueue.Count > 0) return;
                 }
             }
@@ -1635,7 +1924,7 @@ namespace MyVirtualCommunity.Npc
                 else if (targetId == "probe:puddle")
                 {
                     heldProp.SetContents(PropContentType.Water);
-                    substances?.ScoopWaterFromPothole(0.25f);
+                    substances?.ScoopWaterFromPothole(heldProp.ProbeObjectId == "probe:bucket" ? 0.50f : 0.25f);
                 }
                 else
                 {
@@ -1660,7 +1949,7 @@ namespace MyVirtualCommunity.Npc
                     heldProp.SetContents(PropContentType.None);
                     if (targetId == "probe:puddle")
                     {
-                        substances?.AddWaterToPothole(0.25f);
+                        substances?.AddWaterToPothole(heldId == "probe:bucket" ? 0.50f : 0.25f);
                     }
                     else if (!string.IsNullOrEmpty(targetId))
                     {
@@ -1685,7 +1974,7 @@ namespace MyVirtualCommunity.Npc
                     heldProp.SetContents(PropContentType.None);
                     if (targetId == "probe:puddle")
                     {
-                        substances?.AddSandToPothole(0.34f);
+                        substances?.AddSandToPothole(heldId == "probe:bucket" ? 0.66f : 0.34f);
                     }
                     else if (targetId == "probe:bucket")
                     {

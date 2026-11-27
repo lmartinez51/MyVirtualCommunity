@@ -214,6 +214,34 @@ export class CamilaNotebook {
     };
   }
 
+  /**
+   * Marks specific object IDs as seen/explored at a place without incrementing the visit count.
+   */
+  public recordObjectsSeen(placeId: string, objectIds: readonly string[], timestamp: string): void {
+    if (objectIds.length === 0) return;
+    const existing = this.data.mentalMap.find((m) => m.placeId === placeId);
+    if (!existing) {
+      this.recordVisit(placeId, timestamp, [...objectIds]);
+      return;
+    }
+    const merged = new Set<string>(existing.objectIdsSeen);
+    let added = false;
+    for (const id of objectIds) {
+      if (!merged.has(id)) {
+        merged.add(id);
+        added = true;
+      }
+    }
+    if (!added) return;
+    this.data = {
+      ...this.data,
+      updatedAt: timestamp,
+      mentalMap: this.data.mentalMap.map((m) =>
+        m.placeId === placeId ? { ...m, objectIdsSeen: [...merged] } : m
+      ),
+    };
+  }
+
   public addHypothesis(text: string, timestamp: string): CamilaHypothesis {
     const trimmed = text.trim();
     const existing = this.findDuplicateOpenHypothesis(trimmed);
@@ -236,18 +264,26 @@ export class CamilaNotebook {
   }
 
   /**
-   * Resolves any open hypotheses whose text mentions at least two of the given
-   * keywords (or a direct object keyword pair) once Camila physically tests them.
+   * Resolves open hypotheses whose text matches at least `minMatches` of the given
+   * keywords once Camila physically tests them. Never overwrites already resolved hypotheses.
    */
   public resolveMatchingHypotheses(
     keywords: readonly string[],
     status: 'confirmed' | 'refuted',
-    timestamp: string
+    timestamp: string,
+    minMatches?: number
   ): number {
-    const normalizedKeys = keywords
-      .map((k) => this.normalizeForDedup(k))
-      .filter((k) => k.length >= 3);
+    const normalizedKeys = [
+      ...new Set(keywords.map((k) => this.normalizeForDedup(k)).filter((k) => k.length >= 3)),
+    ];
     if (normalizedKeys.length === 0) return 0;
+
+    const threshold =
+      minMatches !== undefined
+        ? Math.max(1, Math.min(minMatches, normalizedKeys.length))
+        : normalizedKeys.length >= 2
+          ? 2
+          : 1;
 
     let resolvedCount = 0;
     const updated = this.data.hypotheses.map((h) => {
@@ -257,7 +293,6 @@ export class CamilaNotebook {
       for (const kw of normalizedKeys) {
         if (norm.includes(kw)) hits += 1;
       }
-      const threshold = normalizedKeys.length >= 2 ? 2 : 1;
       if (hits >= threshold) {
         resolvedCount += 1;
         return { ...h, status };
@@ -273,6 +308,19 @@ export class CamilaNotebook {
       };
     }
     return resolvedCount;
+  }
+
+  /**
+   * Surgically refutes ONLY open hypotheses that mention ALL required terms
+   * (e.g. both the held tool AND the target AND the failed action concept),
+   * preventing a failed action with one tool from refuting valid hypotheses about another material.
+   */
+  public refuteSpecificHypotheses(requiredTerms: readonly string[], timestamp: string): number {
+    const terms = [
+      ...new Set(requiredTerms.map((k) => this.normalizeForDedup(k)).filter((k) => k.length >= 3)),
+    ];
+    if (terms.length < 2) return 0;
+    return this.resolveMatchingHypotheses(terms, 'refuted', timestamp, terms.length);
   }
 
   private findDuplicateOpenHypothesis(candidateText: string): CamilaHypothesis | null {
