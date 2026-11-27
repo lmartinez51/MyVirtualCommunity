@@ -12,20 +12,34 @@
  * 2. mentalMap — places visited and what was there (incl. probe objects).
  * 3. hypotheses — guesses to test later ("the ball belongs with the goal").
  *
+ * Experiential learning v1 adds two more, factual-only layers:
+ * 4. outcomes — a ledger of counts per (actionType, targetObjectId):
+ *    how many times each action was attempted and how it ended
+ *    (executed / rejected / failed), with the last outcome code.
+ * 5. lessons — one-line history distilled from the ledger: when the same
+ *    (action, target, outcome, code) repeats 3 times, the fact is written
+ *    down once. Lessons are history she can read, never orders: no
+ *    prescriptive language, no destinations, no instructions.
+ *
  * Loading is tolerant: a missing file yields an empty notebook; a corrupt
  * file yields an empty notebook plus `loadError` (never a crash, never a
  * corrupted WorldState). Saving is atomic (temp file + rename), like
- * LocalFilePersistence.
+ * LocalFilePersistence. A v1 file (no outcomes/lessons) migrates on load:
+ * its diary / mentalMap / hypotheses are kept and the new layers start empty.
  */
 
 import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, unlinkSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-export const CAMILA_NOTEBOOK_VERSION = 'camila-notebook-v1';
+export const CAMILA_NOTEBOOK_VERSION = 'camila-notebook-v2';
+export const CAMILA_NOTEBOOK_VERSION_V1 = 'camila-notebook-v1';
 export const DEFAULT_CAMILA_NOTEBOOK_PATH = resolve(process.cwd(), 'data', 'camila-notebook.json');
 
 export const CAMILA_NOTEBOOK_MAX_DIARY = 100;
 export const CAMILA_NOTEBOOK_MAX_HYPOTHESES = 20;
+export const CAMILA_NOTEBOOK_MAX_LESSONS = 20;
+/** Same (action, target, outcome, code) must repeat this many times before a lesson is distilled. */
+export const CAMILA_LESSON_THRESHOLD = 3;
 
 export interface CamilaDiaryEntry {
   readonly timestamp: string;
@@ -49,6 +63,48 @@ export interface CamilaHypothesis {
   readonly status: 'open' | 'confirmed' | 'refuted';
 }
 
+/** Terminal outcome of one recorded attempt (cycle decision or Unity report). */
+export type CamilaOutcome = 'executed' | 'rejected' | 'failed';
+
+/**
+ * Outcome ledger entry for one (actionType, targetObjectId) pair.
+ * `targetObjectId` is '' when the action has no object target (e.g. move_to_place).
+ * `attempted` counts every outcome event recorded for the pair (a dispatched
+ * interaction plus its later Unity report count as two events); the executed /
+ * rejected / failed buckets split those events by terminal outcome.
+ */
+export interface CamilaOutcomeRecord {
+  readonly key: string;
+  readonly actionType: string;
+  readonly targetObjectId: string;
+  readonly attempted: number;
+  readonly executed: number;
+  readonly rejected: number;
+  readonly failed: number;
+  readonly lastOutcome: CamilaOutcome;
+  readonly lastCode: string;
+  readonly lastAt: string;
+  readonly lastPlaceId?: string;
+  /**
+   * Consecutive attempts ending now with the same (outcome, code).
+   * Resets to 1 whenever the outcome or the code changes. Drives lesson
+   * distillation (a lesson is written when this reaches CAMILA_LESSON_THRESHOLD).
+   */
+  readonly sameOutcomeStreak: number;
+}
+
+/**
+ * One distilled lesson: a factual history line, never an instruction.
+ * `sourceKey` is `${actionType}|${targetObjectId}|${outcome}|${code}` and
+ * guarantees the same fact is never written twice.
+ */
+export interface CamilaLesson {
+  readonly id: string;
+  readonly text: string;
+  readonly createdAt: string;
+  readonly sourceKey: string;
+}
+
 export interface CamilaNotebookData {
   readonly version: string;
   readonly agentId: string;
@@ -57,6 +113,8 @@ export interface CamilaNotebookData {
   readonly diary: readonly CamilaDiaryEntry[];
   readonly mentalMap: readonly CamilaMentalMapEntry[];
   readonly hypotheses: readonly CamilaHypothesis[];
+  readonly outcomes: readonly CamilaOutcomeRecord[];
+  readonly lessons: readonly CamilaLesson[];
 }
 
 export function createEmptyCamilaNotebook(now: string = new Date().toISOString()): CamilaNotebookData {
@@ -68,6 +126,8 @@ export function createEmptyCamilaNotebook(now: string = new Date().toISOString()
     diary: [],
     mentalMap: [],
     hypotheses: [],
+    outcomes: [],
+    lessons: [],
   };
 }
 
@@ -75,11 +135,38 @@ export function validateCamilaNotebookData(parsed: unknown): parsed is CamilaNot
   if (typeof parsed !== 'object' || parsed === null) return false;
   const d = parsed as Partial<CamilaNotebookData>;
   return (
-    d.version === CAMILA_NOTEBOOK_VERSION &&
+    (d.version === CAMILA_NOTEBOOK_VERSION || d.version === CAMILA_NOTEBOOK_VERSION_V1) &&
     d.agentId === 'agent:camila-npc' &&
     Array.isArray(d.diary) &&
     Array.isArray(d.mentalMap) &&
     Array.isArray(d.hypotheses)
+  );
+}
+
+function isValidOutcomeRecord(value: unknown): value is CamilaOutcomeRecord {
+  if (typeof value !== 'object' || value === null) return false;
+  const o = value as Partial<CamilaOutcomeRecord>;
+  return (
+    typeof o.key === 'string' &&
+    typeof o.actionType === 'string' &&
+    typeof o.targetObjectId === 'string' &&
+    typeof o.attempted === 'number' &&
+    typeof o.executed === 'number' &&
+    typeof o.rejected === 'number' &&
+    typeof o.failed === 'number' &&
+    (o.lastOutcome === 'executed' || o.lastOutcome === 'rejected' || o.lastOutcome === 'failed') &&
+    typeof o.lastCode === 'string' &&
+    typeof o.lastAt === 'string' &&
+    typeof o.sameOutcomeStreak === 'number'
+  );
+}
+
+function isValidLesson(value: unknown): value is CamilaLesson {
+  if (typeof value !== 'object' || value === null) return false;
+  const l = value as Partial<CamilaLesson>;
+  return (
+    typeof l.id === 'string' && typeof l.text === 'string' &&
+    typeof l.createdAt === 'string' && typeof l.sourceKey === 'string'
   );
 }
 
@@ -115,23 +202,133 @@ export class CamilaNotebook {
         return createEmptyCamilaNotebook();
       }
       this.hypothesisCounter = parsed.hypotheses.length;
-      return parsed;
+      // v1 migration: a v1 file has no outcomes/lessons — keep its diary /
+      // mentalMap / hypotheses and start the new layers empty. Malformed
+      // outcome/lesson entries are dropped, never fatal.
+      const partial = parsed as Partial<CamilaNotebookData>;
+      return {
+        ...parsed,
+        version: CAMILA_NOTEBOOK_VERSION,
+        outcomes: Array.isArray(partial.outcomes)
+          ? partial.outcomes.filter(isValidOutcomeRecord)
+          : [],
+        lessons: Array.isArray(partial.lessons)
+          ? partial.lessons.filter(isValidLesson)
+          : [],
+      };
     } catch (err) {
       this.loadError = `Notebook file could not be parsed (${(err as Error).message}); started fresh (old file untouched).`;
       return createEmptyCamilaNotebook();
     }
   }
 
+  public getOutcomes(): readonly CamilaOutcomeRecord[] {
+    return this.data.outcomes;
+  }
+
+  public getLessons(): readonly CamilaLesson[] {
+    return this.data.lessons;
+  }
+
+  public getOutcome(key: string): CamilaOutcomeRecord | undefined {
+    return this.data.outcomes.find((o) => o.key === key);
+  }
+
+  /**
+   * Records one terminal outcome event for an (actionType, targetObjectId)
+   * pair and distills a lesson when the same (outcome, code) repeats
+   * CAMILA_LESSON_THRESHOLD times in a row. Counts only — adds no diary
+   * line. Callers save afterwards; this method itself never touches disk.
+   */
+  public recordOutcome(input: {
+    actionType: string;
+    targetObjectId?: string;
+    outcome: CamilaOutcome;
+    code: string;
+    at: string;
+    placeId?: string;
+  }): CamilaOutcomeRecord {
+    const target = input.targetObjectId ?? '';
+    const key = `${input.actionType}|${target}`;
+    const existing = this.data.outcomes.find((o) => o.key === key);
+    const streak =
+      existing && existing.lastOutcome === input.outcome && existing.lastCode === input.code
+        ? existing.sameOutcomeStreak + 1
+        : 1;
+    const record: CamilaOutcomeRecord = {
+      key,
+      actionType: input.actionType,
+      targetObjectId: target,
+      attempted: (existing?.attempted ?? 0) + 1,
+      executed: (existing?.executed ?? 0) + (input.outcome === 'executed' ? 1 : 0),
+      rejected: (existing?.rejected ?? 0) + (input.outcome === 'rejected' ? 1 : 0),
+      failed: (existing?.failed ?? 0) + (input.outcome === 'failed' ? 1 : 0),
+      lastOutcome: input.outcome,
+      lastCode: input.code,
+      lastAt: input.at,
+      lastPlaceId: input.placeId ?? existing?.lastPlaceId,
+      sameOutcomeStreak: streak,
+    };
+    this.data = {
+      ...this.data,
+      updatedAt: input.at,
+      outcomes: [...this.data.outcomes.filter((o) => o.key !== key), record],
+    };
+    if (streak === CAMILA_LESSON_THRESHOLD) {
+      this.maybeAddLesson(record, input.at);
+    }
+    return record;
+  }
+
+  /**
+   * Distills one factual lesson from a repeated outcome. The text states
+   * only what happened, 3 times, with the terminal code — never what she
+   * should do next (no "debes", "no hagas", "prefiere", "ve a", no
+   * destinations, no instructions). Deduplicated by sourceKey, so the same
+   * fact is never written twice.
+   */
+  private maybeAddLesson(record: CamilaOutcomeRecord, at: string): void {
+    const sourceKey = `${record.actionType}|${record.targetObjectId}|${record.lastOutcome}|${record.lastCode}`;
+    if (this.data.lessons.some((l) => l.sourceKey === sourceKey)) return;
+    const phrase =
+      record.lastOutcome === 'executed'
+        ? 'se ejecutaron'
+        : record.lastOutcome === 'rejected'
+          ? 'fueron rechazadas'
+          : 'fallaron';
+    // 'cognition' / 'unknown' mean no world action was ever decided (the
+    // provider failed or the proposal was unparseable): say so plainly.
+    const attempted =
+      record.actionType === 'cognition' || record.actionType === 'unknown'
+        ? 'decidir qué hacer'
+        : `${record.actionType}${record.targetObjectId ? ` sobre ${record.targetObjectId}` : ''}`;
+    const text = `Intenté ${attempted} 3 veces y las 3 ${phrase} (${record.lastCode}).`;
+    const lesson: CamilaLesson = {
+      id: `lesson:${sourceKey}`,
+      text,
+      createdAt: at,
+      sourceKey,
+    };
+    this.data = {
+      ...this.data,
+      updatedAt: at,
+      lessons: [...this.data.lessons, lesson].slice(-CAMILA_NOTEBOOK_MAX_LESSONS),
+    };
+  }
+
   /**
    * Short factual excerpt sent to the model each cycle.
    * Compacts diary lines to their first factual action/observation clause so
    * the model remembers WHAT happened without echoing its own verbal catchphrases.
+   * Lessons (up to 5, newest) come after the mental-map line and before the
+   * diary: history she can read, not orders.
    */
-  public toExcerpt(maxDiaryEntries = 8, maxHypotheses = 5): string {
+  public toExcerpt(maxDiaryEntries = 8, maxHypotheses = 5, maxLessons = 5): string {
     const diary = this.data.diary.slice(-maxDiaryEntries);
     const open = this.data.hypotheses.filter((h) => h.status === 'open').slice(-maxHypotheses);
+    const lessons = this.data.lessons.slice(-maxLessons);
     const lines: string[] = [];
-    if (diary.length === 0 && open.length === 0 && this.data.mentalMap.length === 0) {
+    if (diary.length === 0 && open.length === 0 && this.data.mentalMap.length === 0 && lessons.length === 0) {
       return 'Libreta vacía todavía: es tu primera exploración.';
     }
     if (this.data.mentalMap.length > 0) {
@@ -142,6 +339,7 @@ export class CamilaNotebook {
             .join('; ')
       );
     }
+    for (const l of lessons) lines.push(`Lección: ${l.text}`);
     for (const e of diary) {
       const compact = this.compactDiaryLine(e.text);
       lines.push(`- [${e.timestamp}] ${compact}`);

@@ -355,8 +355,26 @@ export class NpcAiRuntime {
 
   /**
    * Executes a single AI cognition cycle for the target agent.
+   * Experiential learning v1: a cycle that reaches a terminal decision
+   * (executed / rejected / invalid_proposal / provider_failed) is recorded
+   * once in Camila's outcome ledger (best effort, counts only, no diary
+   * line). Waiting-for-traversal noop cycles are never recorded as attempts.
    */
   public async runCycle(
+    agentId: string,
+    liveContext?: {
+      playerPosition?: UnityPosition;
+      playerHeldObjectId?: string | null;
+      camilaPosition?: UnityPosition;
+    }
+  ): Promise<NpcAiCycleResult> {
+    const result = await this.runCycleInternal(agentId, liveContext);
+    this.recordCamilaCycleOutcome(agentId, result);
+    return result;
+  }
+
+  /** Inner cycle implementation; see runCycle. */
+  private async runCycleInternal(
     agentId: string,
     liveContext?: {
       playerPosition?: UnityPosition;
@@ -2006,6 +2024,15 @@ export class NpcAiRuntime {
 
     if (status === 'failed') {
       this.pendingPushByAgent.delete(agentId);
+      this.recordCamilaInteractionOutcome(
+        agentId,
+        pending.interactionType,
+        targetObjectId ?? '',
+        'failed',
+        'push-failed-reported',
+        worldTime,
+        this.objectState.getEffectivePlaceId(targetObjectId ?? '') ?? undefined
+      );
       return {
         success: true,
         code: 'push-failed-reported',
@@ -2019,6 +2046,14 @@ export class NpcAiRuntime {
     const object = findProbeObjectById(targetObjectId ?? '');
     if (!object) {
       this.pendingPushByAgent.delete(agentId);
+      this.recordCamilaInteractionOutcome(
+        agentId,
+        pending.interactionType,
+        targetObjectId ?? '',
+        'failed',
+        'unknown-object',
+        worldTime
+      );
       return fail('unknown-object', `Unknown probe object "${targetObjectId ?? ''}".`);
     }
 
@@ -2030,6 +2065,7 @@ export class NpcAiRuntime {
       } catch (err) {
         this.objectState.clearHeldObject(agentId);
         this.pendingPushByAgent.delete(agentId);
+        this.recordCamilaInteractionOutcome(agentId, 'pick_up', object.id, 'failed', 'object-position-persist-failed', worldTime, object.placeId);
         return fail('object-position-persist-failed', `Failed to persist pick_up: ${(err as Error).message}`);
       }
       this.pendingPushByAgent.delete(agentId);
@@ -2059,6 +2095,7 @@ export class NpcAiRuntime {
       } catch {
         // Best-effort notebook
       }
+      this.recordCamilaInteractionOutcome(agentId, 'pick_up', object.id, 'executed', 'pick-up-applied', worldTime, currentPlace);
       return {
         success: true,
         code: 'pick-up-applied',
@@ -2071,6 +2108,7 @@ export class NpcAiRuntime {
 
     if (!reportedPosition || !isValidObjectPosition(reportedPosition)) {
       this.pendingPushByAgent.delete(agentId);
+      this.recordCamilaInteractionOutcome(agentId, pending.interactionType, object.id, 'failed', 'invalid-reported-position', worldTime, object.placeId);
       return fail(
         'invalid-reported-position',
         'An applied push/drop report must carry a finite, in-bounds newPosition {x, y, z}.'
@@ -2080,6 +2118,7 @@ export class NpcAiRuntime {
     const previous = this.objectState.getPosition(object.id);
     if (!previous || !this.objectState.setPosition(object.id, reportedPosition)) {
       this.pendingPushByAgent.delete(agentId);
+      this.recordCamilaInteractionOutcome(agentId, pending.interactionType, object.id, 'failed', 'invalid-reported-position', worldTime, object.placeId);
       return fail('invalid-reported-position', `Could not set a new position for "${object.id}".`);
     }
     if (pending.interactionType === 'drop') {
@@ -2095,6 +2134,7 @@ export class NpcAiRuntime {
         this.objectState.setHeldObject(agentId, object.id);
       }
       this.pendingPushByAgent.delete(agentId);
+      this.recordCamilaInteractionOutcome(agentId, pending.interactionType, object.id, 'failed', 'object-position-persist-failed', worldTime, object.placeId);
       return fail(
         'object-position-persist-failed',
         `Failed to persist the new position of "${object.id}": ${(err as Error).message}`
@@ -2189,6 +2229,15 @@ export class NpcAiRuntime {
       // Notebook/memory failures never fail a committed push/drop.
     }
 
+    this.recordCamilaInteractionOutcome(
+      agentId,
+      pending.interactionType,
+      object.id,
+      'executed',
+      pending.interactionType === 'drop' ? 'drop-applied' : 'push-applied',
+      worldTime,
+      effectivePlace
+    );
     return {
       success: true,
       code: pending.interactionType === 'drop' ? 'drop-applied' : 'push-applied',
@@ -2296,6 +2345,97 @@ export class NpcAiRuntime {
       this.notebook.save();
     } catch {
       // Notebook failures never fail a cycle.
+    }
+  }
+
+  /**
+   * Experiential learning v1: records one ledger entry per Camila cycle
+   * that reaches a terminal decision. `noop` cycles (waiting for a
+   * traversal, deliberate observe, fallback) are not attempts and are never
+   * recorded. The ledger is counts only — this adds no diary line, so the
+   * prose record is not duplicated. Best effort: a notebook save failure
+   * never fails the cycle.
+   */
+  private recordCamilaCycleOutcome(agentId: string, result: NpcAiCycleResult): void {
+    if (agentId !== CAMILA_AGENT_ID || !this.notebook) return;
+    if (result.status === 'noop') return;
+    const proposal = result.proposal;
+    let actionType: string;
+    let targetObjectId = '';
+    let outcome: 'executed' | 'rejected' | 'failed';
+    let code: string;
+    if (result.status === 'executed') {
+      outcome = 'executed';
+      actionType = proposal?.actionType ?? 'unknown';
+      targetObjectId = proposal?.targetObjectId ?? '';
+      code = result.commandDispatched?.commandName ?? 'ok';
+    } else if (result.status === 'rejected') {
+      outcome = 'rejected';
+      actionType = proposal?.actionType ?? 'unknown';
+      targetObjectId = proposal?.targetObjectId ?? '';
+      code = result.error?.code ?? 'rejected';
+    } else if (result.status === 'invalid_proposal') {
+      outcome = 'failed';
+      actionType = typeof proposal?.actionType === 'string' ? proposal.actionType : 'unknown';
+      targetObjectId = proposal?.targetObjectId ?? '';
+      code = result.error?.code ?? 'invalid-proposal-shape';
+    } else {
+      // provider_failed: no proposal ever existed, so the failed attempt is
+      // recorded under 'cognition', not under any world action.
+      outcome = 'failed';
+      actionType = 'cognition';
+      code = result.error?.code ?? 'provider-execution-failed';
+    }
+    try {
+      this.notebook.recordOutcome({
+        actionType,
+        targetObjectId,
+        outcome,
+        code,
+        at: result.worldTime,
+        placeId: result.perception.locationId,
+      });
+      this.notebook.save();
+    } catch {
+      // Best-effort ledger: never fails a cycle.
+    }
+  }
+
+  /**
+   * Experiential learning v1: records the physical Unity report for a
+   * dispatched interaction (applied / failed). This is a second ledger
+   * event for the same attempt — the dispatch was already recorded by the
+   * cycle — because only the report says what physically happened.
+   * Spurious reports with no matching pending interaction are never recorded.
+   */
+  private recordCamilaInteractionOutcome(
+    agentId: string,
+    interactionType: 'push' | 'pick_up' | 'drop',
+    targetObjectId: string,
+    outcome: 'executed' | 'failed',
+    code: string,
+    worldTime: string,
+    placeId?: string
+  ): void {
+    if (agentId !== CAMILA_AGENT_ID || !this.notebook) return;
+    const actionType =
+      interactionType === 'push'
+        ? 'push_object'
+        : interactionType === 'pick_up'
+          ? 'pick_up_object'
+          : 'drop_object';
+    try {
+      this.notebook.recordOutcome({
+        actionType,
+        targetObjectId,
+        outcome,
+        code,
+        at: worldTime,
+        placeId,
+      });
+      this.notebook.save();
+    } catch {
+      // Best-effort ledger: never fails the interaction.
     }
   }
 
